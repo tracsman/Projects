@@ -8,7 +8,20 @@ FEH
 
 
 
+## Filkr Pics
+The Flickr api uses a variety of labels for this image sizes:
 
+s - square 75x75
+q - large square
+t - thumbnail
+m - small
+n - small
+z - 640x 480
+c - medium 800x600
+b - large - 1024 x 768
+o - original 2400x1800
+
+## Minutiae
 https://www.development-cycle.com/2017/04/27/zte-mf823-inside/
 https://packaging.python.org/tutorials/installing-packages/
 https://www.raspberrypi.org/downloads/raspbian/
