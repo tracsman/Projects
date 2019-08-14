@@ -4,6 +4,7 @@ import flickrapi
 import requests
 import os
 import re
+import timestamp
 
 FLICKR_KEY = "7f34f6af087f13a6e9c2a8727a7cf6ee"
 FLICKR_SECRET = "7290584b44a9c8fb"
@@ -30,6 +31,7 @@ def make_url(photo):
     return url, photo['filename']
 
 def main():
+    print("Running at %s" %datetime.datetime.now())
     #get new imaged from flickr
     print(" ---> Requesting photos...")
     count = 0
@@ -72,6 +74,7 @@ def main():
         print(" ---> Restarting slideshow")
         os.system("kill $(ps aux | grep '[f]eh' | awk '{print $2}')")
         os.system("/home/pi/PiFrame/start_slideshow.sh &")
-
+    
+    print("End download_flickr_set.py run")
 if __name__ == '__main__':
     main()

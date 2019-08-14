@@ -57,12 +57,12 @@ Source code for a Flikr based Raspberry PI picture frame based off of the frame 
     ```
 
     To exit from the nano editor first press ctrl+o and then enter to save the file, then ctrl+x to exit back to the console prompt.
+9. Add crontab job to run pic check every minute:
 
-9. Run download script to download photos and kick off screen saver:
-
-    ``` bash
-    download_flickr_set.py
-    ```
+- crontab -e
+- add line after remarks (# lines): ```* * * * * python /home/pi/PiFrame/download_flickr_set.py >> /home/pi/PiFrame/flickr.log```
+- ctrl+o and ctrl+x to save and exit
+- ```crontab -l``` to see that the job is saved correctly
 
 ## Flickr Pic Size Info
 
