@@ -1,10 +1,10 @@
 #!/usr/bin/env python 
 
 import flickrapi
+import timestamp
 import requests
 import os
 import re
-import timestamp
 
 FLICKR_KEY = "7f34f6af087f13a6e9c2a8727a7cf6ee"
 FLICKR_SECRET = "7290584b44a9c8fb"

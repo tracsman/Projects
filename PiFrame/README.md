@@ -34,6 +34,7 @@ Source code for a Flikr based Raspberry PI picture frame based off of the frame 
 
     ``` bash
     mkdir /home/pi/PiFrame
+    mkdir /home/pi/PiFrame/logs
     mkdir /home/pi/PiFrame/photos
 
     cd /home/pi/PiFrame
@@ -50,19 +51,45 @@ Source code for a Flikr based Raspberry PI picture frame based off of the frame 
     ```
 
 7. Get key and account data from Flickr
-8. Update download_flickr_set.py with the Flickr account and key data (script lines 8 - 11), also select the picture size desired (script line 27) based on the [Flickr Pic Size Info](#flickr-pic-size-info) section below (default size is 'z').
+
+    - Create a Flickr account and log in (or log in to your existing account)
+    - You now need to create a new non-commerical API key to access your album, go to [https://www.flickr.com/services/apps/create/noncommercial/?](https://www.flickr.com/services/apps/create/noncommercial/?)
+    - The Owner field should be pre-populated with your user account name
+    - Enter PiFrame for the name of the app
+    - Provide a brief description, something like "Raspberry PI picture frame that pulls from my Flikr"
+    - Read the attestations at the bottom of the form, check both check boxes, and click submit
+    - Open a text editor and paste in the Secret and Key (label which is which so you can easily use them later)
+    - Now that you have the key data you'll need to create a new photo album that the PiFrame will pull from
+    - Create the new album and navigate to it in the browser URL you'll see something like this: ```https://www.flickr.com/photos/1111111@A11/albums/22222222222222222```
+
+        Copy the following items to the text editor with the secret and key:
+        - User ID = "1111111@A11"
+        - Set ID = "22222222222222222"
+
+8. Update download_flickr_set.py with the Flickr account and key data (script lines 8 - 11) with the data values you copied to the text editor, also select the picture size desired (script line 27) based on the [Flickr Pic Size Info](#flickr-pic-size-info) section below (default size is 'z').
 
     ``` bash
     sudo nano download_flickr_set.py
     ```
 
     To exit from the nano editor first press ctrl+o and then enter to save the file, then ctrl+x to exit back to the console prompt.
-9. Add crontab job to run pic check every minute:
+9. Add a cron job to check Flickr for new album pics every minute:
 
 - crontab -e
-- add line after remarks (# lines): ```* * * * * python /home/pi/PiFrame/download_flickr_set.py >> /home/pi/PiFrame/flickr.log```
+- add line after remarks (# lines): ```* * * * * python /home/pi/PiFrame/download_flickr_set.py >> /home/pi/PiFrame/logs/flickr-$(date +\%Y\%m\%d).log```
 - ctrl+o and ctrl+x to save and exit
 - ```crontab -l``` to see that the job is saved correctly
+
+10. In the logs directory (/home/pi/PiFrame/logs) you can see the logs for each run of the download job.
+
+    ``` bash
+    cat flickr-xxxxyyzz.log
+    ```
+
+    Where xxxxyyzz is the Year (xxxx), Month (yy), and Day (zz) you wish to see.
+
+11. (optional) Watchdog and log cleanup jobs
+
 
 ## Flickr Pic Size Info
 
