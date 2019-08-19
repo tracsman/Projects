@@ -90,7 +90,6 @@ Source code for a Flikr based Raspberry PI picture frame based off of the frame 
 
 11. (optional) Watchdog and log cleanup jobs
 
-
 ## Flickr Pic Size Info
 
 The Flickr api uses a variety of labels for image sizes:
