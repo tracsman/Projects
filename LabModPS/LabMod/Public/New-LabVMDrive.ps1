@@ -42,7 +42,7 @@ Function New-LabVMDrive {
     }
     finally {
         Write-Progress -Activity "Copying file" -Status "Ready" -Completed
-        write-host "  " (($from.Split("\") | Select-Object -last 1) + `
+        write-host " " (($from.Split("\") | Select-Object -last 1) + `
                 " copied in " + $secselapsed + " seconds at " + `
                 "{0:n2}" -f [int](($ffile.length / $secselapsed) / 1mb) + " MB/s.");
         $ffile.Close();

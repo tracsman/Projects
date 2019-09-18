@@ -87,8 +87,11 @@ function New-LabVM {
 
     # Lab Environment Variables
     $Lab = ($env:COMPUTERNAME.Split("-"))[0]
-    [int]$VMInstance = (get-vm -Name "$Lab-ER-$TenantID-VM*").Count + 1
-    $VMName = $Lab + "-ER-" + $TenantID + "-VM" + $VMInstance.ToString("00")
+    [int]$VMInstance = 0
+    Do {
+        $VMInstance++
+        $VMName = $Lab + "-ER-" + $TenantID + "-VM" + $VMInstance.ToString("00")
+    } Until ((Get-VM -Name "$VMName*").Count -eq 0)
     Switch ($OS) {
         'Server2019' {$BaseVHDName = "Base2019.vhdx"}
         'Centos' {$BaseVHDName = "BaseCentOS.vhdx"}
