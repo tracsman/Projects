@@ -11,7 +11,7 @@ function Install-LabMod {
     $FileName += 'LabMod.psm1'
     $FileName += 'Public/New-LabVM.ps1'
     $FileName += 'Public/New-LabVMDrive.ps1'
-    $FileName += 'Public/Remove-LabMod.ps1'
+    $FileName += 'Public/Uninstall-LabMod.ps1'
     $FileName += 'Public/Remove-LabVM.ps1'
     
     $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
