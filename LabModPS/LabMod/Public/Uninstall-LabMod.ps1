@@ -1,4 +1,4 @@
-﻿function Remove-LabMod {
+﻿function Uninstall-LabMod {
     $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
     If (Test-Path $Destination) {
         Try {
