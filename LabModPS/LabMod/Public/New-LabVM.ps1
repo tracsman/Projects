@@ -1,14 +1,4 @@
 function New-LabVM {
-    #
-    # Create On Prem VMs
-    # 1. Initialize
-    # 2. Validate
-    # 3. Copy VHDX
-    # 4. Create VM Object
-    # 5a. Do post-deploy build
-    # or
-    # 5b. Do Password Update
-    # 6. End nicely
     <#
     .SYNOPSIS
         This command creates a new VM object, of the requested operatining system, and configures it for use in the physical
@@ -81,6 +71,17 @@ function New-LabVM {
         [switch]$VMCreateOnly = $false,
         [switch]$PostBuildOnly = $false,
         [switch]$PwdUpdateOnly = $false)
+
+    #
+    # Create On Prem VM Execution Path
+    # 1. Initialize
+    # 2. Validate
+    # 3. Copy VHDX
+    # 4. Create VM Object
+    # 5a. Do post-deploy build
+    # or
+    # 5b. Do Password Update
+    # 6. End nicely
 
     # 1. Initialize
     $StartTime = Get-Date
