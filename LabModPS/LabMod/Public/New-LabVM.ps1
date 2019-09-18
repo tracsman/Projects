@@ -162,7 +162,7 @@ function New-LabVM {
     Write-Host "       VMName: " -NoNewline
     Write-Host "$VMName" -ForegroundColor DarkCyan
     Write-Host "           OS: " -NoNewline
-    Write-Host "$LaOSb" -ForegroundColor DarkCyan
+    Write-Host "$OS" -ForegroundColor DarkCyan
     Write-Verbose "      CopyOnly= $CopyOnly"
     Write-Verbose "  VMCreateOnly= $VMCreateOnly"
     Write-Verbose " PostBuildOnly= $PostBuildOnly"
