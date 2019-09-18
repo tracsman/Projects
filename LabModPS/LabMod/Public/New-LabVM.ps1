@@ -155,10 +155,14 @@ function New-LabVM {
     # Send the starting info
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "$Action..." -ForegroundColor Cyan
-    Write-Host "          Lab: $Lab"
-    Write-Host "    Tenant ID: $TenantID"
-    Write-Host "       VMName: $VMName"
-    Write-Host "           OS: $OS"
+    Write-Host "          Lab: " -NoNewline
+    Write-Host "$Lab" -ForegroundColor DarkCyan
+    Write-Host "    Tenant ID: " -NoNewline
+    Write-Host "$TenantID" -ForegroundColor DarkCyan
+    Write-Host "       VMName: " -NoNewline
+    Write-Host "$VMName" -ForegroundColor DarkCyan
+    Write-Host "           OS: " -NoNewline
+    Write-Host "$LaOSb" -ForegroundColor DarkCyan
     Write-Verbose "      CopyOnly= $CopyOnly"
     Write-Verbose "  VMCreateOnly= $VMCreateOnly"
     Write-Verbose " PostBuildOnly= $PostBuildOnly"
@@ -194,7 +198,7 @@ function New-LabVM {
             "Server2019" {
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
-                Write-Host "  obtaining $kvNameUser secrets from Key Vault"
+                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
                 $kvName = $Lab + '-Cust' + $TenantID + '-kv'
                 $VM_UserName = $kvNameUser
                 $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
