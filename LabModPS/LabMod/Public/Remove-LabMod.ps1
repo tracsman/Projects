@@ -15,7 +15,7 @@
         Write-Host "The LabMod PowerShell Module was not found on this machine."
     } # End If
     
-    Remove-Module -Name AzureCT -ErrorAction SilentlyContinue
+    Remove-Module -Name LabMod -ErrorAction SilentlyContinue
     Write-Host "LabMod module unloaded from memory" -ForegroundColor Green
 
     Write-Host "LabMod removed" -ForegroundColor Green
