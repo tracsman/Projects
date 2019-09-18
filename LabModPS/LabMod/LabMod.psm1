@@ -19,4 +19,4 @@ $script:XMLSchemaVersion = ([string]$ModuleManifest.Version.Major) + "." + ([str
 
 Export-ModuleMember -Function New-LabVM
 Export-ModuleMember -Function Remove-LabVM
-Export-ModuleMember -Function Remove-LabMod
+Export-ModuleMember -Function Uninstall-LabMod
