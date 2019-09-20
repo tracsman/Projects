@@ -15,7 +15,8 @@ function Install-LabMod {
     $FileName += 'Public/Remove-LabECX.ps1'
     $FileName += 'Public/Remove-LabVM.ps1'
     $FileName += 'Public/Uninstall-LabMod.ps1'
-    
+    $FileName += 'Public/Update-LabLibrary.ps1'
+
     $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
     New-Item -Path ($Destination) -ItemType Directory -Force | Out-Null
     New-Item -Path ($Destination + "Public") -ItemType Directory -Force | Out-Null
