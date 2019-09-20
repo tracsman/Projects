@@ -71,7 +71,7 @@
     Write-Host "Success" -ForegroundColor Green
 
     # Get REST OAuth Token
-    Write-Host "  Getting OAuth Token..." -NoNewline
+    Write-Host "  Getting OAuth Token...." -NoNewline
     $TokenURI = "https://api.equinix.com/oauth2/v1/token"
     $TokenBody = "{" + 
                 "  ""grant_type"": ""client_credentials""," +
