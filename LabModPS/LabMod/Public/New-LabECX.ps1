@@ -69,11 +69,12 @@
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "Getting ECX OAuth Token" -ForegroundColor Cyan
     Write-Host "  Grabbing ECX secrets..." -NoNewline
-    $ECXClientID = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID
-    $ECXSecret = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret -ErrorAction Stop
+    $ECXClientID = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID).SecretValueText
+    $ECXSecret = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret).SecretValueText
+    Write-Host "Success" -ForegroundColor Green
 
     # Get REST OAuth Token
-    Write-Host "  Getting OAuth Token"
+    Write-Host "  Getting OAuth Token" -NoNewline
     $TokenURI = "https://api.equinix.com/oauth2/v1/token"
     $TokenBody = "{" + 
                 "  ""grant_type"": ""client_credentials""," +
