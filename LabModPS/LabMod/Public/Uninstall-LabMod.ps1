@@ -1,4 +1,10 @@
 ﻿function Uninstall-LabMod {
+    # Admin Session Check
+    If (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Warning "This script must be run elevated as Administrator!"
+        Return
+    }
+
     $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
     If (Test-Path $Destination) {
         Try {
