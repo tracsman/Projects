@@ -25,6 +25,7 @@
     # Script Variables
     $StartTime = Get-Date
     $ProvisionCount = 0
+    $CircuitCount = 0
     Switch ($Subscription) {
         'ExpressRoute-Lab' {$SubID = '4bffbb15-d414-4874-a2e4-c548c6d45e2a'}
         'Pathfinder' {$SubID = '79573dd5-f6ea-4fdc-a3aa-d05586980843'}
@@ -55,11 +56,11 @@
     Write-Host "Checking login and permissions" -ForegroundColor Cyan
     Try {Get-AzResourceGroup -Name "Utilities" -ErrorAction Stop | Out-Null}
     Catch {# Login and set subscription for ARM
-            Write-Host "Logging in to ARM"
+            Write-Host "  Logging in to ARM"
             Try {$Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
             Catch {Connect-AzAccount | Out-Null
                     $Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
-            Write-Host "Current Sub:",$Sub.Name,"(",$Sub.Id,")"
+            Write-Host "  Current Sub:",$Sub.Name,"(",$Sub.Id,")"
             Try {Get-AzResourceGroup -Name "LabInfrastructure" -ErrorAction Stop | Out-Null}
             Catch {Write-Warning "Permission check failed, ensure tenant id is set correctly!"
                     Return}
@@ -74,7 +75,7 @@
     Write-Host "Success" -ForegroundColor Green
 
     # Get REST OAuth Token
-    Write-Host "  Getting OAuth Token" -NoNewline
+    Write-Host "  Getting OAuth Token...." -NoNewline
     $TokenURI = "https://api.equinix.com/oauth2/v1/token"
     $TokenBody = "{" + 
                 "  ""grant_type"": ""client_credentials""," +
@@ -97,6 +98,7 @@
 
     # 5. Loop through Circuit array
     ForEach ($Circuit in $Circuits | Sort-Object ResourceGroupName ) {
+        $CircuitCount++
         If ($Circuit.CircuitProvisioningState -eq "Enabled" -and $Circuit.ServiceProviderProvisioningState -eq "NotProvisioned") {
             # 5.1 If enabled and not provisioned, provision the circuit
             If ($PeeringLocation -eq "Ashburn") {
@@ -113,7 +115,8 @@
             $ConnName = $Circuit.Name
             $ConnNamePri = $ConnName + "-pri"
             $ConnNameSec = $ConnName + "-sec"
-            $ConnSTag = $TenantID
+            If ($CircuitCount -eq 1) {$ConnSTag = "$TenantID"}
+            Else{$ConnSTag = "$TenantID" + "$CircuitCount"}
 
             # Build the Call
             $ConnURI = "https://api.equinix.com/ecx/v3/l2/connections"
