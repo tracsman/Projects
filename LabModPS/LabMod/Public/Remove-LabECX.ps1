@@ -90,12 +90,12 @@
     # 4. Load all ER circuits into an array
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "Pulling ER Circuit(s)" -ForegroundColor Cyan
-    $Circuits = Get-AzExpressRouteCircuit | Where-Object Name -Like "$TenantStub*"
+    $Circuits = Get-AzExpressRouteCircuit -ResourceGroupName $RGName | Where-Object Name -Like "$TenantStub*"
 
     # 5. Load all ECX connections into an array
     $ConnURI = "https://api.equinix.com/ecx/v3/l2/buyer/connections?pageSize=300&status=PROVISIONED"
     Try {$connections = Invoke-RestMethod -Method Get -Uri $ConnURI -Headers $ConnHeader -ErrorAction Stop
-        Write-Host "Pulled (up to) top 300 provisioned ECX Connections"}
+        Write-Host "  Pulled (up to) top 300 provisioned ECX Connections"}
     Catch {Write-Warning "An error occured pulling ECX Connections from Equinix."
         Write-Host
         Write-Host $error[0].ErrorDetails.Message
@@ -103,7 +103,7 @@
     
     # 6. Loop through Circuits array searching connection array
     $ConnURI = "https://api.equinix.com/ecx/v3/l2/connections"
-    ForEach ($Circuit in $Circuits | Sort-Object ResourceGroupName ) {
+    ForEach ($Circuit in $Circuits) {
         # If provisioned, search for ECX Connection in ECX array
         If ($Circuit.CircuitProvisioningState -eq "Enabled" -and $Circuit.ServiceProviderProvisioningState -eq "Provisioned") { 
             $UUIDs = $connections.content | Where-Object authorizationKey -eq $Circuit.ServiceKey | Sort-Object Name | Select-Object uuid, name
