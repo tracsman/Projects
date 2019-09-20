@@ -3,6 +3,11 @@
 # (new-object Net.WebClient).DownloadString("https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/Install-LabMod.ps1") | Invoke-Expression
 
 function Install-LabMod {
+    # Admin Session Check
+    If (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Warning "This script must be run elevated as Administrator!"
+        Return
+    }
 
     $uri = 'https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/'
 
@@ -47,3 +52,4 @@ function Install-LabMod {
 } # End Function
 
 Install-LabMod
+Get-Command -Module LabMod
