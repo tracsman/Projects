@@ -97,7 +97,7 @@
     $Circuits = Get-AzExpressRouteCircuit -ResourceGroupName $RGName | Where-Object Name -Like "$TenantStub*"
 
     # 5. Loop through Circuit array
-    ForEach ($Circuit in $Circuits | Sort-Object ResourceGroupName ) {
+    ForEach ($Circuit in $Circuits) {
         $CircuitCount++
         If ($Circuit.CircuitProvisioningState -eq "Enabled" -and $Circuit.ServiceProviderProvisioningState -eq "NotProvisioned") {
             # 5.1 If enabled and not provisioned, provision the circuit
