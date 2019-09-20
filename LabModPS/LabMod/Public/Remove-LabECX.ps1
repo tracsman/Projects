@@ -52,11 +52,11 @@
     Write-Host "Checking login and permissions" -ForegroundColor Cyan
     Try {Get-AzResourceGroup -Name "Utilities" -ErrorAction Stop | Out-Null}
     Catch {# Login and set subscription for ARM
-            Write-Host "Logging in to ARM"
+            Write-Host "  Logging in to ARM"
             Try {$Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
             Catch {Connect-AzAccount | Out-Null
                     $Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
-            Write-Host "Current Sub:",$Sub.Name,"(",$Sub.Id,")"
+            Write-Host "  Current Sub:",$Sub.Name,"(",$Sub.Id,")"
             Try {Get-AzResourceGroup -Name "LabInfrastructure" -ErrorAction Stop | Out-Null}
             Catch {Write-Warning "Permission check failed, ensure tenant id is set correctly!"
                     Return}
@@ -66,11 +66,12 @@
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "Getting ECX OAuth Token" -ForegroundColor Cyan
     Write-Host "  Grabbing ECX secrets..." -NoNewline
-    $ECXClientID = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID
-    $ECXSecret = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret -ErrorAction Stop
+    $ECXClientID = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID).SecretValueText
+    $ECXSecret = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret).SecretValueText
+    Write-Host "Success" -ForegroundColor Green
 
     # Get REST OAuth Token
-    Write-Host "  Getting OAuth Token"
+    Write-Host "  Getting OAuth Token..." -NoNewline
     $TokenURI = "https://api.equinix.com/oauth2/v1/token"
     $TokenBody = "{" + 
                 "  ""grant_type"": ""client_credentials""," +
@@ -84,7 +85,7 @@
         Write-Host $error[0].ErrorDetails.Message
         Return }
     $ConnHeader =  @{"Authorization" = "Bearer $($token.access_token)"}
-    Write-Host "Sucess" -ForegroundColor Green
+    Write-Host "Success" -ForegroundColor Green
 
     # 4. Load all ER circuits into an array
     Write-Host (Get-Date)' - ' -NoNewline
