@@ -89,7 +89,7 @@
         Write-Host $error[0].ErrorDetails.Message
         Return }
     $ConnHeader =  @{"Authorization" = "Bearer $($token.access_token)"}
-    Write-Host "Sucess" -ForegroundColor Green
+    Write-Host "Success" -ForegroundColor Green
 
     # 4. Load all ER circuits into an array
     Write-Host (Get-Date)' - ' -NoNewline
