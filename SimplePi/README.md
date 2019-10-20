@@ -2,7 +2,7 @@
 
 ## Overview
 
-This instruction set configures a Raspberry Pi to be a very simple web server with a simple web page. Assumes all networking connectivity is DHCP.
+This instruction set configures a Raspberry Pi to be a very simple web server with a simple web page. Assumes all networking connectivity is DHCP. Uses Python3 http.server for the web server and responds on port 80.
 
 ## Installation
 
