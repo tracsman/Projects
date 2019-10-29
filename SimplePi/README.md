@@ -34,9 +34,9 @@ In raspi-config set the following:
 ```bash
 mkdir web
 cd web
-wget -N https://raw.githubusercontent.com/tracsman/Examples/master/SimplePi/index.html
-wget -N https://raw.githubusercontent.com/tracsman/Examples/master/SimplePi/favicon.ico
-wget -N https://raw.githubusercontent.com/tracsman/Examples/master/SimplePi/startsite.sh
+wget -N https://raw.githubusercontent.com/tracsman/Projects/master/SimplePi/index.html
+wget -N https://raw.githubusercontent.com/tracsman/Projects/master/SimplePi/favicon.ico
+wget -N https://raw.githubusercontent.com/tracsman/Projects/master/SimplePi/startsite.sh
 
 chmod +x startsite.sh
 nano index.html # update server name
