@@ -157,13 +157,13 @@ function New-LabVM {
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "$Action..." -ForegroundColor Cyan
     Write-Host "          Lab: " -NoNewline
-    Write-Host "$Lab" -ForegroundColor DarkCyan
+    Write-Host "$Lab" -ForegroundColor Yellow
     Write-Host "    Tenant ID: " -NoNewline
-    Write-Host "$TenantID" -ForegroundColor DarkCyan
+    Write-Host "$TenantID" -ForegroundColor Yellow
     Write-Host "       VMName: " -NoNewline
-    Write-Host "$VMName" -ForegroundColor DarkCyan
+    Write-Host "$VMName" -ForegroundColor Yellow
     Write-Host "           OS: " -NoNewline
-    Write-Host "$OS" -ForegroundColor DarkCyan
+    Write-Host "$OS" -ForegroundColor Yellow
     Write-Verbose "      CopyOnly= $CopyOnly"
     Write-Verbose "  VMCreateOnly= $VMCreateOnly"
     Write-Verbose " PostBuildOnly= $PostBuildOnly"
@@ -190,13 +190,17 @@ function New-LabVM {
         Add-VMNetworkAdapter -VM $VM -Name "PublicNIC" -SwitchName "vs-NIC3" 
         $VMNic = Get-VMNetworkAdapter -VM $VM
         Set-VMNetworkAdapterVlan -VMNetworkAdapter $VMNic -Access -VlanId $VLAN -ErrorAction Stop
-        Start-VM -Name $VM.Name
+        Enable-VMIntegrationService -VMName $VMName -Name "Guest Service Interface"
     }
 
     # 5a. Do post-deploy build
     If ($PostBuildOnly) {
         Switch ($OS) {
             "Server2019" {
+                Write-Host (Get-Date)' - ' -NoNewline
+                Write-Host "Starting VM" -ForegroundColor Cyan
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For Heartbeat
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
                 Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
@@ -244,8 +248,116 @@ function New-LabVM {
 
                 } -ArgumentList $VMName, $TenantID, $Users
             }
-        "CentOS" {}
-        "Ubuntu" {}
+            "CentOS" {
+                If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
+                [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
+                $VMIP = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
+                $VMGW = "10." + $SecondOctet + "." + $TenantID + ".1"
+
+                Write-Host (Get-Date)' - ' -NoNewline
+                Write-Host "Pushing post deploy config" -ForegroundColor Cyan
+                
+                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
+                $kvName = $Lab + '-Cust' + $TenantID + '-kv'
+                $VM_UserName = $kvNameUser
+                $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
+                $VM_UserPwd = $kvs.SecretValueText
+                
+                Write-Host "  Updating SecureBootTemplate"
+                Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
+                                
+                Write-Host "  Starting VM"
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 10
+                
+                Write-Host "  Creating startup script"
+                mkdir "$env:TEMP\LabMod\" -Force | Out-Null
+                Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
+                $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
+                $script  = "cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth0.bak`n"
+                $script += "sed -i 's/IPADDR=10.1.7.45/IPADDR=$VMIP/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "sed -i 's/GATEWAY=10.1.7.1/GATEWAY=$VMGW/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "hostnamectl set-hostname $VMName`n"
+                $script += "#yum update`n"
+                $script += "/usr/sbin/useradd -m $VM_UserName`n"
+                $script += "cat /var/tmp/LabMod/temp.txt | passwd`n"
+                $script += "usermod -aG wheel $VM_UserName`n"
+                $script += "rm /var/tmp/LabMod/temp.txt -f`n"
+                $script | Out-File "$env:TEMP\LabMod\tenant-update.sh" -Force -NoNewline -Encoding ascii
+
+                Write-Host "  Copying startup scripts"
+                Start-Sleep 10
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\temp.txt" -DestinationPath '/var/tmp/LabMod' -FileSource Host -Force
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\tenant-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\TenantScriptNeeded.txt" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
+
+                Write-Host "  Rebooting to kick off scripts"
+                Write-Host "  Waiting on VM..."
+                Stop-VM -Name $VMName
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 10
+            }
+            "Ubuntu" {
+                If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
+                [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
+                $VMIP = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
+                $VMGW = "10." + $SecondOctet + "." + $TenantID + ".1"
+
+                Write-Host (Get-Date)' - ' -NoNewline
+                Write-Host "Pushing post deploy config" -ForegroundColor Cyan
+                
+                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
+                $kvName = $Lab + '-Cust' + $TenantID + '-kv'
+                $VM_UserName = $kvNameUser
+                $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
+                $VM_UserPwd = $kvs.SecretValueText
+                
+                Write-Host "  Updating SecureBootTemplate"
+                Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
+
+                Write-Host "  Starting VM"
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 10
+
+                Write-Host "  Creating startup script"
+                mkdir "$env:TEMP\LabMod\" -Force | Out-Null
+                Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
+                $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
+                $script  = "cp /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak`n"
+                $script += "sed -i 's/10.1.7.45/$VMIP/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/10.1.7.1/$VMGW/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "netplan --debug generate`n"
+				$script += "netplan apply`n"
+                $script += "hostnamectl set-hostname $VMName`n"
+                $script += "#apt-get update`n"
+                $script += "/usr/sbin/useradd -m $VM_UserName`n"
+                $script += "cat /var/tmp/LabMod/temp.txt | /usr/sbin/chpasswd`n"
+                $script += "/usr/sbin/usermod -aG sudo $VM_UserName`n"
+                $script += "rm /var/tmp/LabMod/temp.txt -f`n"
+                $script | Out-File "$env:TEMP\LabMod\tenant-update.sh" -Force -NoNewline -Encoding ascii
+
+                Write-Host "  Copying startup scripts"
+                Start-Sleep 10
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\temp.txt" -DestinationPath '/var/tmp/LabMod' -FileSource Host -Force
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\tenant-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
+                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\TenantScriptNeeded.txt" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
+
+                Write-Host "  Rebooting to kick off scripts"
+                Write-Host "  Waiting on VM..."
+                Stop-VM -Name $VMName
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 10
+                Write-Host "  Rebooting to instantiate new settings"
+                Write-Host "  Waiting on VM..."
+                Stop-VM -Name $VMName
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 10
+            }
         }
     }
 
