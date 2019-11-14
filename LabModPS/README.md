@@ -1,5 +1,15 @@
 # Building a PathLab Base VM VHDX
 
+This README instructs in the creation of a new base VHDX for the following OS:
+
+* [Windows Server 2019](#windows-server-2019)
+* [CentOS](#centos-base-build-centos-8)
+* [Ubuntu](#ubuntu-server-non-gui-base-build-ubuntu-1804)
+
+## Windows Server 2019
+
+Instruction set coming soon (ish)
+
 ## CentOS Base Build (CentOS 8)
 
  **Must be built on a Seattle physical server!!!**
