@@ -69,7 +69,7 @@ Instruction set coming soon (ish)
 * At login prompt, use your local credentials
 
     ````bash
-    sudo -u root sh /tmp/LabMod/base-update.sh
+    sudo -u root sh /var/tmp/LabMod/base-update.sh
     sudo shutdown now
     ````
 
