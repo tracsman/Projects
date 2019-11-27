@@ -25,6 +25,18 @@ or
 
 ## Assembly
 
+1. OWI-535 Assembly
+2. USB Setup
+3. Pi Config
+4. Controller connection
+5. Script selection
+6. Operation
+
 ## Code
 
+* xbox-controller.py
+* tablet-press.py
+
 ## Parva Res (Minutiae)
+
+TBD
