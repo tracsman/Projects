@@ -1,10 +1,10 @@
-# PiRoboArm - A Robotic Arm controlled by a Raspberry PI and XBox controller
+# PiRoboArm - A Robotic Arm controlled by a Raspberry PI and Xbox controller
 
 ## Overview
 
-I play a game on an Android table that I haven't figured out how to macro some repetitive movements, so this is an attempt to make a robot arm to do the repetitive button presses needed to get through some boring, but important, repetition in the game.
+I play a game on an Android table that I haven't figured out how to macro some repetitive movements, so this is an attempt to make a robot arm to do the repetitive button presses needed to get through some boring, but important, repetition in the game (currently over 18,000 presses and increasing daily).
 
-Using a OWI-535 arm with touch screen stylus attached, controlled by a Raspberry PI, I've got a script to bounce between two screen positions repeatedly.
+Using a OWI-535 arm with touch screen stylus attached, controlled by a Raspberry PI, I've got a script to bounce between two screen positions repeatedly. Also for play time, an Xbox controller for manual arm fun.
 
 ## Parts
 
