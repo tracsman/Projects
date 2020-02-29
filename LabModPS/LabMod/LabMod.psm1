@@ -22,4 +22,5 @@ Export-ModuleMember -Function New-LabECX
 Export-ModuleMember -Function Remove-LabVM
 Export-ModuleMember -Function Remove-LabECX
 Export-ModuleMember -Function Uninstall-LabMod
+Export-ModuleMember -Function Update-LabMod
 Export-ModuleMember -Function Update-LabLibrary
