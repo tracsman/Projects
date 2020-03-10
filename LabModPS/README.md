@@ -6,7 +6,7 @@ This README instructs in the creation of a new base VHDX for the following OS:
 * [CentOS](#centos-base-build-centos-8)
 * [Ubuntu](#ubuntu-server-non-gui-base-build-ubuntu-1804)
 
-These are for normal tenant environments, e.g. SEA-Cust14. It is NOT for workshop base images, for workshop images use the specific workshop instructions in the DevOps TCSP repo.
+The instructuions on this page are for normal lab tenant environments, e.g. SEA-Cust14. It is NOT for workshop base images, for workshop images use the specific workshop instructions in the DevOps TCSP repo.
 
 ## Windows Server 2019
 
