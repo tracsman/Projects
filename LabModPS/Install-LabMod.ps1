@@ -22,6 +22,8 @@ function Install-LabMod {
     $FileName += 'Public/Uninstall-LabMod.ps1'
     $FileName += 'Public/Update-LabMod.ps1'
     $FileName += 'Public/Update-LabLibrary.ps1'
+    $FileName += 'Public/Build-LabBaseVHDX.ps1'
+    $FileName += 'Public/Build-LabBaseVM.ps1'
 
     $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
     New-Item -Path ($Destination) -ItemType Directory -Force | Out-Null

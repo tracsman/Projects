@@ -1,4 +1,5 @@
-﻿    $VMName = "CentOSBase"
+﻿# This file has been superceded by the Build-LabBaseVHDX commandlet in the LabMod Module
+    $VMName = "CentOSBase"
     $VMConfig = "C:\Hyper-V\Config"
     $VHDDest = "C:\Hyper-V\Virtual Hard Disks\"
     $VMDisk = $VHDDest + $VMName + ".vhdx"

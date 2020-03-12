@@ -10,14 +10,52 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 
 ## Windows Server 2019
 
-Instruction set coming soon (ish)
+ **Must be built on a Seattle physical server!!!**
+
+* RDP to any physical server in the Seattle Path Lab
+* Open an Admin PS console, run ````Build-LabBaseVHDX```` to create the VM Object
+* Once complete, in Hyper-V Manager, open a connection to VM
+* Start the VM
+* When prompted, press any key to boot from DVD
+* Accept language defaults, click next
+* Click "Install Now"
+* Select Datacenter (Desktop Experience) from the list and click Next
+* Accept license terms, click next
+* Select "Custom" option
+* Select Drive 0 for install and click Next
+* While waiting for windows to install, go to the ExpressRoute-lab key vault and get the Sever-Admin password for Administrator password use
+* After the OS install completes, the OS must be configured, connect to the VM set admin password
+* Using the admin password, log into the VM
+* On the Base VM, open an admin ISE PS session
+  * Switch to the physical server PowerShell run ````Build-LabBaseVM````, this will load the first part of the base VM script into the clipboard and pause.
+  * Switch to the base VM, in the VM connection ensure "Enhanced Session" is **OFF**. To do this, in the Virtual Machine Connection client, click "View", and ensure the "Enhanced Session" is not enabled.
+  * In the Virtual Machine Connection client, click "Clipboard", "Type Clipboard Text" to paste the first half of the script into the PowerShell ISE script window.
+  * Return to the lab server, press Enter to copy the second part of the script to the clipboard.
+  * Paste in the script in the Base VM PowerShell ISE and then run the script (no save required).
+  * The installation of the Edge browser may prompt a patching cycle, allow this, and reboot if needed. If you have to reboot, log back in after reboot and open Admin PowerShell ISE, the script should still be there, run it again. Repeat until Edge installs.
+  * At the conclusion of the script, the VM will reboot.
+* Once rebooted, from the Azure Mgmt jump box RDP to server 10.1.7.120, use the Admin password to log back into the Base VM.
+* Patch OS
+  * Close the PowerShell ISE window if it auto-opens, don't save script if prompted.
+  * Patch, reboot if needed
+  * Repeat until no more updates
+* Shutdown
+  * Right-click start and select "Shutdown or sign-out", then "Shut down"
+  * If prompted, select "Other (Planned)" for shut down reason
+* Once VM is off, close Connect and/or RDP sessions with VM
+* In Hyper-V Manager, navigate to the VM, wait for the VM State to become "Off".
+* Right-click the VM and Delete it
+* In File Explorer, copy the VHDX file (Base2019.vhdx) from the C:\Hyper-V\Virtual Hard Disks to the C:\Hyper-V\ISO\BaseVHDX folder
+* Copy the VHDX to \\10.17.7.7\Binaries\VMImages\BaseVHDX folder to easier disemination to other servers (replace existing file if prompted)
+* Delete the original VHDX file in C:\Hyper-V\Virtual Hard Disks
+* Log on to each physical server to be used as a lab VM Host, and in an elevated PS prompt run Update-LabLibrary to pull the VHDX library (including the new VHDX) down to each server.
 
 ## CentOS Base Build (CentOS 8)
 
  **Must be built on a Seattle physical server!!!**
 
 * RDP to any physical server in the Seattle Path Lab
-* Open an Admin PS console, run Build-LabBaseCentOS.ps1 (<https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/Build-LabBaseCentOS.ps1>)
+* Open an Admin PS console, run ````Build-LabBaseVHDX -OS CentOS````
 * Once complete, in Hyper-V Manager, open a connection to VM
 * Start the VM
 * OS Install Prompt: Install CentOS 8
@@ -96,7 +134,7 @@ New-LabVM 90 -OS CentOS
  **Must be built on a Seattle physical server!!!**
 
 * RDP to any physical server in the Seattle Path Lab
-* Open an Admin PS console, run Build-LabBaseUbuntu.ps1 (<https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/Build-LabBaseUbuntu.ps1>)
+* Open an Admin PS console, run ````Build-LabBaseVHDX -OS Ubuntu````
 * Start the VM
 * OS Install Prompt: Install Ubuntu Server (default option)
 * CGA Setup:
