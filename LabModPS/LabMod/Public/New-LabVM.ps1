@@ -217,19 +217,27 @@ function New-LabVM {
                     Write-Host "*" -NoNewline
                     Start-Sleep -Seconds 1
                 }
-                Write-Host
-                Write-Host " VM online, pushing post deploy config"
+                Write-Host "  VM online, pushing post deploy config"
                 Invoke-Command -VMName $VMName -Credential $AdminCred -ScriptBlock {
                     param ($VMName, $TenantID, $Users)
 
                     If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
+                    If (($VMName.Split("-"))[0] -eq "SEA") { $IPv6Prefix = "2001:5a0:4406" } Else { $IPv6Prefix = "2001:5a0:3c06"}
                     [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
-                    $VMIP = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
-                    $VMGW = "10." + $SecondOctet + "." + $TenantID + ".1"
+                    $VMIPv4 = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
+                    $VMGWv4 = "10." + $SecondOctet + "." + $TenantID + ".1"
+                    $VMIPv6 = $IPv6Prefix + ":" + $TenantID + "::" + $VMHostIP
+                    $VMGWv6 = $IPv6Prefix + ":" + $TenantID + "::1"
 
-                    $nic = Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -InterfaceAlias "Ethernet*"
-                    New-NetIPAddress -InterfaceIndex $nic.InterfaceIndex -IPAddress $VMIP -PrefixLength 25 -DefaultGateway $VMGW | Out-Null
-                    Set-DnsClientServerAddress -InterfaceIndex $nic.InterfaceIndex -ServerAddresses "1.1.1.1", "1.0.0.1" | Out-Null
+                    $nicv4 = Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -InterfaceAlias "Ethernet*"
+                    If ($nicv4.IPv4Address -eq $VMIPv4) {"IPv4 address already set, skipping"}
+                    Else {New-NetIPAddress -InterfaceIndex $nicv4.InterfaceIndex -IPAddress $VMIPv4 -PrefixLength 25 -DefaultGateway $VMGWv4 | Out-Null
+                          Set-DnsClientServerAddress -InterfaceIndex $nicv4.InterfaceIndex -ServerAddresses "1.1.1.1", "1.0.0.1" | Out-Null}
+
+                    $nicv6 = Get-NetIPAddress -AddressFamily IPv6 -AddressState Preferred -InterfaceAlias "Ethernet*"
+                    If ($nicv6.IPv6Address -eq $VMIPv6) {"IPv6 address already set, skipping"}
+                    Else {New-NetIPAddress -InterfaceIndex $nicv6.InterfaceIndex -IPAddress $VMIPv6 -PrefixLength 64 -DefaultGateway $VMGWv6 | Out-Null
+                          Set-DnsClientServerAddress -InterfaceIndex $nicv6.InterfaceIndex -ServerAddresses "2606:4700:4700::1111", "2606:4700:4700::1001" | Out-Null}
 
                     # Turn on remote access and open firewall for it
                     Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
@@ -250,9 +258,12 @@ function New-LabVM {
             }
             "CentOS" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
+                If (($VMName.Split("-"))[0] -eq "SEA") { $IPv6Prefix = "2001:5a0:4406" } Else { $IPv6Prefix = "2001:5a0:3c06"}
                 [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
-                $VMIP = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
-                $VMGW = "10." + $SecondOctet + "." + $TenantID + ".1"
+                $VMIPv4 = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
+                $VMGWv4 = "10." + $SecondOctet + "." + $TenantID + ".1"
+                $VMIPv6 = $IPv6Prefix + ":" + $TenantID + "::" + $VMHostIP
+                $VMGWv6 = $IPv6Prefix + ":" + $TenantID + "::1"
 
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
@@ -276,10 +287,11 @@ function New-LabVM {
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
                 $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
                 $script  = "cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth0.bak`n"
-                $script += "sed -i 's/IPADDR=10.1.7.45/IPADDR=$VMIP/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
-                $script += "sed -i 's/GATEWAY=10.1.7.1/GATEWAY=$VMGW/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "sed -i 's/IPADDR=10.1.7.45/IPADDR=$VMIPv4/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "sed -i 's/GATEWAY=10.1.7.1/GATEWAY=$VMGWv4/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "echo 'IPV6ADDR=$VMIPv6/64' >> /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script += "echo 'IPV6_DEFAULTGW=$VMGWv6' >> /etc/sysconfig/network-scripts/ifcfg-eth0`n"
                 $script += "hostnamectl set-hostname $VMName`n"
-                $script += "#yum update`n"
                 $script += "/usr/sbin/useradd -m $VM_UserName`n"
                 $script += "cat /var/tmp/LabMod/temp.txt | passwd`n"
                 $script += "usermod -aG wheel $VM_UserName`n"
@@ -297,13 +309,21 @@ function New-LabVM {
                 Stop-VM -Name $VMName
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
+                Start-Sleep 15
+                Stop-VM -Name $VMName
+                Start-Sleep 5
+                Start-VM -Name $VMName
+                Wait-VM -Name $VMName -For IPAddress
                 Start-Sleep 10
             }
             "Ubuntu" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
+                If (($VMName.Split("-"))[0] -eq "SEA") { $IPv6Prefix = "2001:5a0:4406" } Else { $IPv6Prefix = "2001:5a0:3c06"}
                 [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
-                $VMIP = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
-                $VMGW = "10." + $SecondOctet + "." + $TenantID + ".1"
+                $VMIPv4 = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
+                $VMGWv4 = "10." + $SecondOctet + "." + $TenantID + ".1"
+                $VMIPv6 = $IPv6Prefix + ":" + $TenantID + "::" + $VMHostIP
+                $VMGWv6 = $IPv6Prefix + ":" + $TenantID + "::1"
 
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
@@ -327,12 +347,14 @@ function New-LabVM {
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
                 $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
                 $script  = "cp /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak`n"
-                $script += "sed -i 's/10.1.7.45/$VMIP/g' /etc/netplan/50-cloud-init.yaml`n"
-                $script += "sed -i 's/10.1.7.1/$VMGW/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/10.1.7.45/$VMIPv4/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/10.1.7.1/$VMGWv4/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/\/25/\/25\n            - $VMIPv6\/64/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/gateway4: $VMGWv4/gateway4: $VMGWv4\n            gateway6: $VMGWv6/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/1.0.0.1/1.0.0.1\n                - 2606:4700:4700::1111\n                - 2606:4700:4700::1001/g' /etc/netplan/50-cloud-init.yaml`n"
                 $script += "netplan --debug generate`n"
 				$script += "netplan apply`n"
                 $script += "hostnamectl set-hostname $VMName`n"
-                $script += "#apt-get update`n"
                 $script += "/usr/sbin/useradd -m $VM_UserName`n"
                 $script += "cat /var/tmp/LabMod/temp.txt | /usr/sbin/chpasswd`n"
                 $script += "/usr/sbin/usermod -aG sudo $VM_UserName`n"
