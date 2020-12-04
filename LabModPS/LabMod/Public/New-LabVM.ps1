@@ -243,6 +243,20 @@ function New-LabVM {
                     Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
+                    # Turn On ICMPv4
+                    Write-Host "Opening ICMPv4 Port"
+                    Try {Get-NetFirewallRule -Name Allow_ICMPv4_in -ErrorAction Stop | Out-Null
+                        Write-Host "Port already open"}
+                    Catch {New-NetFirewallRule -DisplayName "Allow ICMPv4" -Name Allow_ICMPv4_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv4 | Out-Null
+                        Write-Host "Port opened"}
+
+                    # Turn On ICMPv6
+                    Write-Host "Opening ICMPv4 Port"
+                    Try {Get-NetFirewallRule -Name Allow_ICMPv6_in -ErrorAction Stop | Out-Null
+                        Write-Host "Port already open"}
+                    Catch {New-NetFirewallRule -DisplayName "Allow ICMPv6" -Name Allow_ICMPv6_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv6 | Out-Null
+                        Write-Host "Port opened"}
+
                     # Get usernames and passwords
                     $VM_UserName = $Users[0]
                     $VM_UserPass = ConvertTo-SecureString $Users[1] -AsPlainText -Force 
