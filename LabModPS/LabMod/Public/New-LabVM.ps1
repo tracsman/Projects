@@ -207,7 +207,13 @@ function New-LabVM {
                 $kvName = $Lab + '-Cust' + $TenantID + '-kv'
                 $VM_UserName = $kvNameUser
                 $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $VM_UserPwd = $kvs.SecretValueText
+                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+                try {
+                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+                } finally {
+                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+                }
+
                 $Users = @($VM_UserName, $VM_UserPwd)
 
                 If ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
@@ -244,18 +250,18 @@ function New-LabVM {
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
                     # Turn On ICMPv4
-                    Write-Host "Opening ICMPv4 Port"
+                    Write-Host "  Opening ICMPv4 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv4_in -ErrorAction Stop | Out-Null
-                        Write-Host "Port already open"}
+                        Write-Host "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv4" -Name Allow_ICMPv4_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv4 | Out-Null
-                        Write-Host "Port opened"}
+                        Write-Host "    Port opened"}
 
                     # Turn On ICMPv6
-                    Write-Host "Opening ICMPv4 Port"
+                    Write-Host "  Opening ICMPv4 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv6_in -ErrorAction Stop | Out-Null
-                        Write-Host "Port already open"}
+                        Write-Host "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv6" -Name Allow_ICMPv6_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv6 | Out-Null
-                        Write-Host "Port opened"}
+                        Write-Host "    Port opened"}
 
                     # Get usernames and passwords
                     $VM_UserName = $Users[0]
@@ -286,7 +292,12 @@ function New-LabVM {
                 $kvName = $Lab + '-Cust' + $TenantID + '-kv'
                 $VM_UserName = $kvNameUser
                 $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $VM_UserPwd = $kvs.SecretValueText
+                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+                try {
+                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+                } finally {
+                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+                }
                 
                 Write-Host "  Updating SecureBootTemplate"
                 Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
@@ -346,7 +357,12 @@ function New-LabVM {
                 $kvName = $Lab + '-Cust' + $TenantID + '-kv'
                 $VM_UserName = $kvNameUser
                 $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $VM_UserPwd = $kvs.SecretValueText
+                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+                try {
+                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+                } finally {
+                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+                }
                 
                 Write-Host "  Updating SecureBootTemplate"
                 Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
@@ -406,7 +422,12 @@ function New-LabVM {
 
         $VM_UserName = "User01"
         $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-        $VM_UserPWD = $kvs1.SecretValueText
+        $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+        try {
+            $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+        } finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+        }
 
         $Users = @($VM_UserName, $VM_UserPWD)
 

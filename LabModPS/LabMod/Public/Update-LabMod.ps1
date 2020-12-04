@@ -1,32 +1,36 @@
 ﻿function Update-LabMod {
+    [CmdletBinding()]
+    param (
+        [switch]$Force=$false)
+
     # Admin Session Check
     If (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Warning "This script must be run elevated as Administrator!"
         Return
     }
     
-    # Get Online Version
-    [net.httpwebrequest]$httpwebrequest = [net.webrequest]::create('https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/LabMod.psd1')
-    [net.httpWebResponse]$httpwebresponse = $httpwebrequest.getResponse()
-    $reader = new-object IO.StreamReader($httpwebresponse.getResponseStream())
-    $content = $reader.ReadToEnd()
-    $reader.Close()
-    $i=355
-    $OnlineVersion = ""
-    Do {
-        $OnlineVersion = $OnlineVersion + $content[$i]
-        $i=$i+1
+    If (!$Force) {
+        # Get Online Version
+        [net.httpwebrequest]$httpwebrequest = [net.webrequest]::create('https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/LabMod.psd1')
+        [net.httpWebResponse]$httpwebresponse = $httpwebrequest.getResponse()
+        $reader = new-object IO.StreamReader($httpwebresponse.getResponseStream())
+        $content = $reader.ReadToEnd()
+        $reader.Close()
+        $i=355
+        $OnlineVersion = ""
+        Do {
+            $OnlineVersion = $OnlineVersion + $content[$i]
+            $i=$i+1
+        }
+        Until ($content[$i+2] -eq "`n")
+
+        # Get Installed Version
+        Try {$CurrentVersion = (Get-Module LabMod -ListAvailable).Version.ToString()}
+        Catch {$CurrentVersion = "0.0.0.0"}
     }
-    Until ($content[$i+2] -eq "`n")
-
-    
-
-    # Get Installed Version
-    Try {$CurrentVersion = (Get-Module LabMod -ListAvailable).Version.ToString()}
-    Catch {$CurrentVersion = "0.0.0.0"}
 
     # Version Compare
-    If ($OnlineVersion -ne $CurrentVersion) {
+    If ($OnlineVersion -ne $CurrentVersion -or $Force) {
 
         $uri = 'https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/'
 
