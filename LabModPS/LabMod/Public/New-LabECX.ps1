@@ -70,8 +70,20 @@
     Write-Host (Get-Date)' - ' -NoNewline
     Write-Host "Getting ECX OAuth Token" -ForegroundColor Cyan
     Write-Host "  Grabbing ECX secrets..." -NoNewline
-    $ECXClientID = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID).SecretValueText
-    $ECXSecret = (Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret).SecretValueText
+    $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXClientID
+    $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+    try {
+        $ECXClientID = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+    }
+    $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $kvECXSecret
+    $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
+    try {
+        $ECXSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
+    }
     Write-Host "Success" -ForegroundColor Green
 
     # Get REST OAuth Token
