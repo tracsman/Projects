@@ -100,9 +100,9 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Open Admin PowerShell:
 
   ````PowerShell
-    Enable-VMIntegrationService -VMName CentOSBase -Name "Guest Service Interface"
-    Copy-VMFile -Name CentOSBase -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
-    Copy-VMFile -Name CentOSBase -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
+    Enable-VMIntegrationService -VMName BaseCentOS -Name "Guest Service Interface"
+    Copy-VMFile -Name BaseCentOS -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
+    Copy-VMFile -Name BaseCentOS -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
   ````
 
 * Open Putty to *local user*@10.1.7.45
