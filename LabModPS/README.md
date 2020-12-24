@@ -182,8 +182,8 @@ New-LabVM 90 -OS CentOS
 * Back on the physical server, open Admin PowerShell:
 
     ````PowerShell
-  Copy-VMFile -Name ubuntubase -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
-  Copy-VMFile -Name ubuntubase -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
+  Copy-VMFile -Name BaseUbuntu -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
+  Copy-VMFile -Name BaseUbuntu -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
   ````
 
 * Back in Putty:
