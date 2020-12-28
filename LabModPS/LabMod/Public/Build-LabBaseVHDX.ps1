@@ -16,7 +16,7 @@ function Build-LabBaseVHDX{
         }
         "Ubuntu" {
             $VMName = "BaseUbuntu"
-            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-18.04.3-live-server-amd64.iso"
+            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-20.04.1-live-server-amd64.iso"
         }
     }
     $VMConfig = "C:\Hyper-V\Config"
