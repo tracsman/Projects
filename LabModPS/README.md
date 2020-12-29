@@ -129,7 +129,7 @@ in admin ps:
 New-LabVM 90 -OS CentOS
 ````
 
-## Ubuntu Server (non-GUI) Base Build Ubuntu 18.04
+## Ubuntu Server (non-GUI) Base Build Ubuntu 20.04
 
  **Must be built on a Seattle physical server!!!**
 
@@ -152,13 +152,14 @@ New-LabVM 90 -OS CentOS
     * arrow down to Done, Enter to continue
   * Configure proxy: leave blank, Enter to continue
   * Configure Ubuntu mirror: accept default, Enter to continue
+  * Installer Update: if this screen presents, select "Update to the new installer"
   * Filesystem setup: "Use An Entire Disk" (default), Enter to continue
   * Filesystem setup: Accept default local disk, Enter to continue
   * Filesystem setup: Accept default FILE SYSTEM SUMMARY, Enter to bring up pop-up warning
   * Confirm Destructive action: arrow down to Continue, Enter to continue
   * Profile Setup:
     * Your name: Enter your first and last name separated by a space
-    * Your server's name: ubuntubase (all lower case)
+    * Your server's name: baseubuntu (all lower case)
     * Pick a username: Your local account user name
     * Choose a password: Your local account password
     * Confirm password: repeat password
@@ -175,6 +176,7 @@ New-LabVM 90 -OS CentOS
   * Run:
   
    ````bash
+   sudo apt-get update && sudo apt-get upgrade -y && sudo apt-get full-upgrade -y && sudo apt-get autoremove -y
    sudo apt-get install linux-virtual linux-cloud-tools-virtual linux-tools-virtual -y
    ````
 
@@ -196,7 +198,7 @@ New-LabVM 90 -OS CentOS
 * Back in PowerShell
 
     ````PowerShell
-    Copy-Item "C:\Hyper-V\Virtual Hard Disks\UbuntuBase.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseUbuntu.vhdx" -Force
+    Copy-Item "C:\Hyper-V\Virtual Hard Disks\BaseUbuntu.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseUbuntu.vhdx" -Force
     ````
 
 Ubuntu Base image is now complete and copied to the ISO dir, proceed with tenant VM creation
