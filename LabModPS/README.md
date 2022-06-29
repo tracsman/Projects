@@ -50,7 +50,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Delete the original VHDX file in C:\Hyper-V\Virtual Hard Disks
 * Log on to each physical server to be used as a lab VM Host, and in an elevated PS prompt run Update-LabLibrary to pull the VHDX library (including the new VHDX) down to each server.
 
-## CentOS Base Build (CentOS 8)
+## CentOS Base Build (CentOS 9)
 
  **Must be built on a Seattle physical server!!!**
 
@@ -58,7 +58,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Open an Admin PS console, run ````Build-LabBaseVHDX -OS CentOS````
 * Once complete, in Hyper-V Manager, open a connection to VM
 * Start the VM
-* OS Install Prompt: Install CentOS 8
+* OS Install Prompt: Install CentOS 9
 * GUI Setup:
   * English/English (United States), Continue
   * Date & Time: Los Angeles, Set local time, Done
@@ -81,7 +81,6 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
         * DNS Servers: 1.1.1.1,1.0.0.1
       * Save
     * Done
-  * Begin Installation
   * Root Password:
     * Root Password: Get from key vault, you need to type, no paste :(
     * Confirm: repeat above
@@ -94,6 +93,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
     * Password: Your local account password
     * Confirm: repeat password
     * Done
+  * Begin Installation
   * Finish configuration
   * **system installs, takes about 5 minutes**
   * On completion, click the reboot button
@@ -116,7 +116,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Back in PowerShell
 
     ````PowerShell
-    Copy-Item "C:\Hyper-V\Virtual Hard Disks\CentOSBase.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseCentOS.vhdx" -Force
+    Copy-Item "C:\Hyper-V\Virtual Hard Disks\BaseCentOS.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseCentOS.vhdx" -Force
     ````
 
 CentOS base image is now complete and copied to the ISO dir, proceed with tenant VM creation
@@ -129,7 +129,7 @@ in admin ps:
 New-LabVM 90 -OS CentOS
 ````
 
-## Ubuntu Server (non-GUI) Base Build Ubuntu 20.04
+## Ubuntu Server (non-GUI) Base Build Ubuntu 22.04
 
  **Must be built on a Seattle physical server!!!**
 
@@ -145,7 +145,7 @@ New-LabVM 90 -OS CentOS
     * arrow down to select IPv4, enter to bring up menu
     * IPv4 Method: press Enter and select Manual
     * Tab to Subnet: 10.1.7.0/25
-    * Tab to Address: 10.1.7.45
+    * Tab to Address: 10.1.7.46
     * Tab to Gateway: 10.1.7.1
     * Tab to Name servers: 1.1.1.1,1.0.0.1
     * Tab to save, Enter to continue
@@ -171,7 +171,7 @@ New-LabVM 90 -OS CentOS
   * When updates are done, on-screen "button" will flip to "Reboot", select and hit Enter
 * After reboot, you'll get a "remove installation media", ignore it and hit Enter
 * Close Virtual Machine Connection window
-* Open Putty session to 10.1.7.45
+* Open Putty session to 10.1.7.46
   * At login prompt, use your local credentials
   * Run:
   
