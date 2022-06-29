@@ -311,11 +311,14 @@ function New-LabVM {
                 mkdir "$env:TEMP\LabMod\" -Force | Out-Null
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
                 $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
-                $script  = "cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth0.bak`n"
-                $script += "sed -i 's/IPADDR=10.1.7.45/IPADDR=$VMIPv4/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
-                $script += "sed -i 's/GATEWAY=10.1.7.1/GATEWAY=$VMGWv4/g' /etc/sysconfig/network-scripts/ifcfg-eth0`n"
-                $script += "echo 'IPV6ADDR=$VMIPv6/64' >> /etc/sysconfig/network-scripts/ifcfg-eth0`n"
-                $script += "echo 'IPV6_DEFAULTGW=$VMGWv6' >> /etc/sysconfig/network-scripts/ifcfg-eth0`n"
+                $script  = "cp /etc/NetworkManager/system-connections/eth0.nmconnection /etc/NetworkManager/system-connections/eth0.nmconnection.bak`n"
+                $script += "nmcli connection modify eth0 ipv4.address $VMIPv4/25`n"
+                $script += "nmcli connection modify eth0 ipv4.gateway $VMGWv4`n"
+                $script += "nmcli connection modify eth0 ipv6.address $VMIPv6/64`n"
+                $script += "nmcli connection modify eth0 ipv6.gateway $VMGWv6`n"
+                $script += "nmcli connection modify eth0 ipv6.method manual`n"
+                $script += "nmcli connection down eth0`n"
+                $script += "nmcli connection up eth0`n"
                 $script += "hostnamectl set-hostname $VMName`n"
                 $script += "/usr/sbin/useradd -m $VM_UserName`n"
                 $script += "cat /var/tmp/LabMod/temp.txt | passwd`n"
@@ -334,12 +337,6 @@ function New-LabVM {
                 Stop-VM -Name $VMName
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
-                Start-Sleep 15
-                Stop-VM -Name $VMName
-                Start-Sleep 5
-                Start-VM -Name $VMName
-                Wait-VM -Name $VMName -For IPAddress
-                Start-Sleep 10
             }
             "Ubuntu" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
