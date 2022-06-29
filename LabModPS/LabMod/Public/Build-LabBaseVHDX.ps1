@@ -12,11 +12,11 @@ function Build-LabBaseVHDX{
         }
         "CentOS" {
             $VMName = "BaseCentOS"
-            $ISO = "C:\Hyper-V\ISO\Linux\CentOS-8-x86_64-1905-dvd1.iso"
+            $ISO = "C:\Hyper-V\ISO\Linux\CentOS-Stream-9-latest-x86_64-dvd1"
         }
         "Ubuntu" {
             $VMName = "BaseUbuntu"
-            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-20.04.1-live-server-amd64.iso"
+            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-22.04-live-server-amd64"
         }
     }
     $VMConfig = "C:\Hyper-V\Config"
