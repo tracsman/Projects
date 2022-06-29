@@ -374,7 +374,7 @@ function New-LabVM {
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
                 $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
                 $script  = "cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`n"
-                $script += "sed -i 's/10.1.7.45/$VMIPv4/g' /etc/netplan/00-installer-config.yaml`n"
+                $script += "sed -i 's/10.1.7.46/$VMIPv4/g' /etc/netplan/00-installer-config.yaml`n"
                 $script += "sed -i 's/10.1.7.1/$VMGWv4/g' /etc/netplan/00-installer-config.yaml`n"
                 $script += "sed -i 's/\/25/\/25\n      - $VMIPv6\/64/g' /etc/netplan/00-installer-config.yaml`n"
                 $script += "sed -i 's/gateway4: $VMGWv4/gateway4: $VMGWv4\n      gateway6: $VMGWv6/g' /etc/netplan/00-installer-config.yaml`n"
