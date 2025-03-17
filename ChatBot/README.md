@@ -26,7 +26,7 @@ I used the Windows Subsystem for Linux on Windows and Ubuntu, but any OS with th
    2. Clone the github repo containing the scripts (```git clone https://github.com/tracsman/Projects.git```)
    3. Navigate to the ChatBot directory (```cd ./Projects/ChatBot```)
    4. Update the script file, with your specific API Key:
-      1. Open the script in nano (```nano chat.py```)
+      1. Open the script in nano (```nano Chat.py```)
       2. line 5 with the Vault URI
       3. line 7 with the secret name
       4. CTRL-X and save the script with your changes
