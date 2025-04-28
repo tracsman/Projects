@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param (
-    [Parameter(ValueFromPipeline=$true, HelpMessage='Enter Resource Group Name')]
+    [Parameter(Mandatory=$true, ValueFromPipeline=$true, HelpMessage='Enter Resource Group Name')]
     [string]$RGName,
     [switch]$Deprovision=$false)
 
@@ -27,7 +27,8 @@ param (
 function Build-ConnBody {
     param (
         [string]$ConnName,        # e.g. SEA-Cust10-ER-Pri
-        [string]$ConnVlanTag,     # e.g. 100
+        [string]$ConnCTag,        # e.g. 100
+        [string]$ConnSTag,        # e.g. 10
         [string]$LabLocation,     # ASH or SEA
         [string]$CircuitLocation, # Equinix location code e.g. SE or DC, etc
         [string]$SKey,
@@ -65,8 +66,8 @@ function Build-ConnBody {
                 }
                 linkProtocol = [ordered]@{
                     type = "QINQ"
-                    vlanCTag = $ConnVlanTag
-                    vlanSTag = $ConnVlanTag
+                    vlanCTag = $ConnCTag
+                    vlanSTag = $ConnSTag
                 }
             }
         }
@@ -81,7 +82,7 @@ function Build-ConnBody {
                 }
                 linkProtocol = [ordered]@{
                     type = "QINQ"
-                    vlanCTag = $ConnVlanTag
+                    vlanCTag = $ConnCTag
                 }
                 authenticationKey = $SKey
             }
@@ -242,7 +243,8 @@ Else {
                 Write-Warning "Invalid Circuit Location"
                 Continue
             }
-            $ConnSTag = $RGName.Substring($RGName.Length - 2,2) + "0"
+            $ConnSTag = $RGName.Substring($RGName.Length - 2,2)
+            $ConnCTag = $RGName.Substring($RGName.Length - 2,2) + "0"
             $SKey = $Circuit.ServiceKey
             $Mbps = $Circuit.ServiceProviderProperties.BandwidthInMbps
             $ConnNamePri = $Circuit.Name + "-pri"
@@ -252,7 +254,7 @@ Else {
             $StatusCodePri = $null
             $StatusCodeSec = $null
             $ConnURI = "https://api.equinix.com/fabric/v4/connections"
-            $ConnBody = Build-ConnBody -ConnName $ConnNamePri -ConnVlanTag $ConnSTag `
+            $ConnBody = Build-ConnBody -ConnName $ConnNamePri -ConnSTag $ConnSTag -ConnCTag $ConnCTag `
                                        -LabLocation $Lab -CircuitLocation $ConnMetro `
                                        -SKey $SKey -Mbps $Mbps
             #[System.Windows.MessageBox]::Show($ConnBody)
@@ -263,7 +265,7 @@ Else {
                 Write-Host $Circuit.Name'Primary' -NoNewline -ForegroundColor Yellow
                 Write-Host " has been submitted for provisioning"
                 $GroupID = $connection.redundancy.group
-                $ConnBody = Build-ConnBody -ConnName $ConnNameSec -ConnVlanTag $ConnSTag `
+                $ConnBody = Build-ConnBody -ConnName $ConnNameSec -ConnSTag $ConnSTag -ConnCTag $ConnCTag `
                                        -LabLocation $Lab -CircuitLocation $ConnMetro `
                                        -SKey $SKey -Mbps $Mbps -GroupID $GroupID
                 $connection = Invoke-RestMethod -Method Post -Uri $ConnURI -Headers $ConnHeader -Body $ConnBody -ContentType application/json -StatusCodeVariable $StatusCodeSec

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory=$true, ValueFromPipeline=$true, HelpMessage='Enter Resource Group Name (e.g. SEA-Cust10)')]
-    [string]$RGName)
+    [string]$RGName,
+    [string]$templateFile = "C:\Bin\Git\Projects\LabTemplate\Deploy-Lab.bicep")
 
 # 1. Initialize
 # 2. Create Resource group
@@ -44,6 +45,8 @@ If ($null -eq $roleAssignment) {
 }
 
 # Add Secret
+Write-Host (Get-Date)' - ' -NoNewline
+Write-Host "Creating secret in Key Vault" -ForegroundColor Cyan
 $UserName = "PathLabUser"
 $RegEx='^(?=\P{Ll}*\p{Ll})(?=\P{Lu}*\p{Lu})(?=\P{N}*\p{N})(?=[\p{L}\p{N}]*[^\p{L}\p{N}])[\s\S]{12,}$'
 Do {$UserPass = ([char[]](Get-Random -Input $(40..43 + 46..59 + 63..91 + 95..122) -Count 20)) -join ""}
@@ -53,7 +56,7 @@ $UserSecPass = ConvertTo-SecureString $UserPass -AsPlainText -Force
 $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $UserName -ErrorAction Stop 
 If ($null -eq $kvs) {
     Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Adding $UserName to $kvName" -ForegroundColor Cyan
+    Write-Host "  Adding $UserName to $kvName" -ForegroundColor Cyan
     $kvs = Set-AzKeyVaultSecret -VaultName $kvName -Name $UserName -SecretValue $UserSecPass -ErrorAction Stop
 }
 Else {Write-Host "  $UserName exists, skipping"}
@@ -62,7 +65,6 @@ Else {Write-Host "  $UserName exists, skipping"}
 Write-Host (Get-Date)' - ' -NoNewline
 Write-Host "Deploying Bicep" -ForegroundColor Cyan
 $DepList = Get-AzResourceGroupDeployment -ResourceGroupName $RGName -ErrorAction SilentlyContinue
-$templateFile = "C:\Bin\Git\Projects\LabTemplate\Deploy-Lab.bicep"
 $deploymentRoot = "PathLabBase"
 $deploymentName = $deploymentRoot + "-" + ($DepList.Count + 1).ToString("00")
 New-AzResourceGroupDeployment -ResourceGroupName $RGName -TemplateFile $templateFile -Name $deploymentName -adminPwd $UserSecPass -asJob -ErrorAction Stop | Out-Null
@@ -122,18 +124,43 @@ if ($LoopCount -ge 40) {
 }
 
 # 7. Create ER Connection
-# Check if connection already exist, if not, create it
 Write-Host (Get-Date)' - ' -NoNewline
-Write-Host "Creating ExpressRoute Connections" -ForegroundColor Cyan
-try {Get-AzVirtualNetworkGatewayConnection -ResourceGroupName $RGName -Name $RGName'-VNet01-gw-er-conn' -ErrorAction Stop | Out-Null
-        Write-Host "  Connection exists, skipping"}
-catch {$vnet = Get-AzVirtualNetworkGateway -ResourceGroupName $RGName -Name $RGName'-VNet01-gw-er' -ErrorAction Stop
-       $ckt = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName'-ER' -ErrorAction Stop
-       New-AzVirtualNetworkGatewayConnection -ResourceGroupName $RGName -Name $RGName'-VNet01-gw-er-conn' -Location $ShortRegion  -VirtualNetworkGateway1 $vnet -PeerId $ckt.Id -ConnectionType ExpressRoute -ErrorAction Stop | Out-Null
-       Write-Host "  Connection created"} 
+Write-Host 'Connecting Gateway to ExpressRoute' -ForegroundColor Cyan
+Try {Get-AzVirtualNetworkGatewayConnection -Name $RGName'-VNet01-gw-er-conn' -ResourceGroupName $RGName -ErrorAction Stop | Out-Null
+     Write-Host '  resource exists, skipping'}
+Catch {
+    $gw = Get-AzVirtualNetworkGateway -Name $RGName'-VNet01-gw-er' -ResourceGroupName $RGName
+    $circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName'-ER' -ErrorAction Stop
+    $i=0
+    $NeedSpace = $false
+    If ($gw.ProvisioningState -eq 'Updating') {Write-Host '  waiting for ER gateway to finish provisioning: ' -NoNewline
+                                               $NeedSpace = $true 
+                                               Start-Sleep 10}
+    ElseIf ($circuit.ServiceProviderProvisioningState -ne 'Provisioned') {Write-Host '  waiting for ER circuit to finish provisioning: ' -NoNewline
+                                               $NeedSpace = $true 
+                                               Start-Sleep 10}
+    While ($gw.ProvisioningState -eq 'Updating' -or $circuit.ServiceProviderProvisioningState -ne 'Provisioned') {
+        $i++
+        If ($i%6) {Write-Host '*' -NoNewline}
+        Else {Write-Host "$($i/6)" -NoNewline}
+        Start-Sleep 10
+        $gw = Get-AzVirtualNetworkGateway -Name $RGName'-VNet01-gw-er' -ResourceGroupName $RGName
+        $circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName-ER -ErrorAction Stop}
+    If ($NeedSpace) {Write-Host ' '}
+    If ($gw.ProvisioningState -eq 'Succeeded' -and $circuit.ServiceProviderProvisioningState -eq 'Provisioned') {
+        Write-Host '  creating ER gateway connection'
+        New-AzVirtualNetworkGatewayConnection -Name $RGName'-VNet01-gw-er-conn' -ResourceGroupName $RGName `
+                                              -Location $gw.Location -VirtualNetworkGateway1 $gw `
+                                              -PeerId $circuit.Id -ConnectionType ExpressRoute | Out-Null}
+    Else {Write-Warning 'An issue occured with ER gateway or ER Circuit provisioning.'
+          Write-Host 'Current Gateway Provisioning State:' -NoNewLine
+          Write-Host $gw.ProvisioningState -ForegroundColor Yellow
+          Write-Host 'Current Circuit Provisioning State:' -NoNewLine
+          Write-Host $circuit.ServiceProviderProvisioningState -ForegroundColor Yellow}
+    }
 
 # 8. End nicely
-$EndTime = Get-Date
+$EndTime = Get-Date 
 $TimeDiff = New-TimeSpan $StartTime $EndTime
 $Mins = $TimeDiff.Minutes
 $Secs = $TimeDiff.Seconds
