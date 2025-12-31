@@ -22,6 +22,7 @@ function Install-LabMod {
     $FileName += 'LabMod.psm1'
     $FileName += 'Public/Build-LabBaseVHDX.ps1'
     $FileName += 'Public/Build-LabBaseVM.ps1'
+    $FileName += 'Public/Get-LabECX.ps1'
     $FileName += 'Public/New-LabECX.ps1'
     $FileName += 'Public/New-LabVM.ps1'
     $FileName += 'Public/New-LabVMDrive.ps1'
