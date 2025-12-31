@@ -37,6 +37,7 @@
         $FileName = @()
         $FileName += 'LabMod.psd1'
         $FileName += 'LabMod.psm1'
+        $FileName += 'Public/Get-LabECX.ps1'
         $FileName += 'Public/New-LabECX.ps1'
         $FileName += 'Public/New-LabVM.ps1'
         $FileName += 'Public/New-LabVMDrive.ps1'

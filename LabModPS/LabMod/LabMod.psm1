@@ -18,6 +18,7 @@ $ModuleManifest = Test-ModuleManifest -path $PSScriptRoot\LabMod.psd1
 $script:XMLSchemaVersion = ([string]$ModuleManifest.Version.Major) + "." + ([string]$ModuleManifest.Version.Minor)
 
 Export-ModuleMember -Function New-LabVM
+Export-ModuleMember -Function Get-LabECX
 Export-ModuleMember -Function New-LabECX
 Export-ModuleMember -Function Remove-LabVM
 Export-ModuleMember -Function Remove-LabECX
