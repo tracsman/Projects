@@ -1,11 +1,11 @@
 function New-LabVM {
     <#
     .SYNOPSIS
-        This command creates a new VM object, of the requested operatining system, and configures it for use in the physical
+        This command creates a new VM object, of the requested operating system, and configures it for use in the physical
         Pathfinder lab, including network configuration and appropriate username and password for this tenant.
 
     .DESCRIPTION
-        This command creates a new VM object, of the requested operatining system, and configures it for use in the physical
+        This command creates a new VM object, of the requested operating system, and configures it for use in the physical
         Pathfinder lab, including network configuration and appropriate username and password for this tenant.
 
     .PARAMETER TenantID
@@ -32,7 +32,7 @@ function New-LabVM {
         Name and User accounts). The VM Object must already exist and be running.
 
     .PARAMETER PwdUpdateOnly
-        This optional parameter instructs this command to only update the PathLabUser password from the Azure Key Vaule.
+        This optional parameter instructs this command to only update the PathLabUser password from the Azure Key Value.
         The VM must already exist and be running.
 
     .EXAMPLE
@@ -52,8 +52,8 @@ function New-LabVM {
 
     .NOTES
         If this is the first VM tenant on this server the VM name will be suffixed with "01", if this command is run
-        mulitple times for the same tenant the suffix is automatically increamentedted by 1, ie 01, 02, 03, etc. The
-        paramenters of each machine can be different as needed. For instance the 01 VM may be Server2019 and the 02
+        multiple times for the same tenant the suffix is automatically incremented by 1, ie 01, 02, 03, etc. The
+        parameters of each machine can be different as needed. For instance the 01 VM may be Server2019 and the 02
         VM be Centos and VM03 Ubuntu if required for the tenant.
 
     #>
@@ -63,10 +63,8 @@ function New-LabVM {
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, HelpMessage = 'Enter Company ID')]
         [ValidateRange(10, 99)]
         [int]$TenantID,
-        [ValidateSet('ExpressRoute-Lab','Pathfinder')]
-        [string]$Subscription='ExpressRoute-Lab',
-        [ValidateSet("Server2019", "CentOS", "Ubuntu")]
-        [string]$OS="Server2019",
+        [ValidateSet("Server2025", "Ubuntu")]
+        [string]$OS="Server2025",
         [switch]$CopyOnly = $false,
         [switch]$VMCreateOnly = $false,
         [switch]$PostBuildOnly = $false,
@@ -94,23 +92,14 @@ function New-LabVM {
         $VMName = $Lab + "-ER-" + $TenantID + "-VM" + $VMInstance.ToString("00")
     } Until ((Get-VM -Name "$VMName*").Count -eq 0)
     Switch ($OS) {
-        'Server2019' {$BaseVHDName = "Base2019.vhdx"}
-        'Centos' {$BaseVHDName = "BaseCentOS.vhdx"}
+        'Server2025' {$BaseVHDName = "Base2025.vhdx"}
         'Ubuntu' {$BaseVHDName = "BaseUbuntu.vhdx"}
     }
     $VHDSource = "C:\Hyper-V\ISO\BaseVHDX\" + $BaseVHDName
     $VMConfig = "C:\Hyper-V\Config"
     $VHDDest = "C:\Hyper-V\Virtual Hard Disks\"
     $VMDisk = $VHDDest + $VMName + ".vhdx"  
-
-    # Azure Variables
-    Switch ($Subscription) {
-        'ExpressRoute-Lab' {$SubID = '4bffbb15-d414-4874-a2e4-c548c6d45e2a'}
-        'Pathfinder' {$SubID = '79573dd5-f6ea-4fdc-a3aa-d05586980843'}
-    }
-    $kvNameAdmin = "LabSecrets"
-    $kvSecretNameAdmin = "Server-Admin"
-    $kvNameUser = "PathLabUser"
+    $VM_UserName = "PathLabUser"
 
     # Script Variables
     If (-not $CopyOnly -and -not $VMCreateOnly -and -not $PostBuildOnly -and -not $PwdUpdateOnly) {
@@ -130,28 +119,13 @@ function New-LabVM {
         Return
     }
 
-    # Login and permissions check
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Checking login and permissions" -ForegroundColor Cyan
-    # Login and set subscription for ARM
-    Try {$Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
-    Catch {
-        Write-Host "  Logging in to ARM"
-        Connect-AzAccount -UseDeviceAuthentication -Subscription $Subscription | Out-Null
-        $Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription
-    }
-    If ($SubID -ne $Sub.Id) {
-        Write-Warning "  Logging in or setting context on subscription failed, please troubleshoot and retry."
-        Return
-    }
-    Else { Write-Host "  Current Sub:", $Sub.Name, "(", $Sub.Id, ")" }
-
     If (-not (Test-Path $VHDSource)) { Write-Host; Write-Warning "Base .VHDX file ($BaseVHDName) not found"; Write-Host; Return }
 
     # Get admin creds
     Write-Host "  Grabbing admin secrets"
-    $kvsAdmin = Get-AzKeyVaultSecret -VaultName $kvNameAdmin -Name $kvSecretNameAdmin -ErrorAction Stop
-    $AdminCred = New-Object System.Management.Automation.PSCredential ("Administrator", $kvsAdmin.SecretValue)
+    $AdminCred = Get-Credential -UserName Administrator -Message "Enter server Administrator (Server-Admin) password for PathLab"
+    $ServerCred = Get-Credential -UserName $VM_UserName -Message "Enter server Key vault password for company $TenantID"
+    $Users = @($ServerCred.UserName, $($ServerCred.GetNetworkCredential().Password))
 
     # Send the starting info
     Write-Host (Get-Date)' - ' -NoNewline
@@ -196,25 +170,13 @@ function New-LabVM {
     # 5a. Do post-deploy build
     If ($PostBuildOnly) {
         Switch ($OS) {
-            "Server2019" {
+            "Server2025" {
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Starting VM" -ForegroundColor Cyan
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For Heartbeat
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
-                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
-                $kvName = $Lab + '-Cust' + $TenantID + '-kv'
-                $VM_UserName = $kvNameUser
-                $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
-                try {
-                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
-                } finally {
-                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
-                }
-
-                $Users = @($VM_UserName, $VM_UserPwd)
 
                 If ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
                     Write-Host "  Waiting for VM to come online: " -NoNewline
@@ -276,68 +238,6 @@ function New-LabVM {
 
                 } -ArgumentList $VMName, $TenantID, $Users
             }
-            "CentOS" {
-                If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
-                If (($VMName.Split("-"))[0] -eq "SEA") { $IPv6Prefix = "2001:5a0:4406" } Else { $IPv6Prefix = "2001:5a0:3c06"}
-                [int]$VMHostIP = 9 + $VMName.Substring($VMName.Length - 2)
-                $VMIPv4 = "10." + $SecondOctet + "." + $TenantID + "." + $VMHostIP
-                $VMGWv4 = "10." + $SecondOctet + "." + $TenantID + ".1"
-                $VMIPv6 = $IPv6Prefix + ":" + $TenantID + "::" + $VMHostIP
-                $VMGWv6 = $IPv6Prefix + ":" + $TenantID + "::1"
-
-                Write-Host (Get-Date)' - ' -NoNewline
-                Write-Host "Pushing post deploy config" -ForegroundColor Cyan
-                
-                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
-                $kvName = $Lab + '-Cust' + $TenantID + '-kv'
-                $VM_UserName = $kvNameUser
-                $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
-                try {
-                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
-                } finally {
-                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
-                }
-                
-                Write-Host "  Updating SecureBootTemplate"
-                Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
-                                
-                Write-Host "  Starting VM"
-                Start-VM -Name $VMName
-                Wait-VM -Name $VMName -For IPAddress
-                Start-Sleep 10
-                
-                Write-Host "  Creating startup script"
-                mkdir "$env:TEMP\LabMod\" -Force | Out-Null
-                Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
-                $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
-                $script  = "cp /etc/NetworkManager/system-connections/eth0.nmconnection /etc/NetworkManager/system-connections/eth0.nmconnection.bak`n"
-                $script += "nmcli connection modify eth0 ipv4.address $VMIPv4/25`n"
-                $script += "nmcli connection modify eth0 ipv4.gateway $VMGWv4`n"
-                $script += "nmcli connection modify eth0 ipv6.address $VMIPv6/64`n"
-                $script += "nmcli connection modify eth0 ipv6.gateway $VMGWv6`n"
-                $script += "nmcli connection modify eth0 ipv6.method manual`n"
-                $script += "nmcli connection down eth0`n"
-                $script += "nmcli connection up eth0`n"
-                $script += "hostnamectl set-hostname $VMName`n"
-                $script += "/usr/sbin/useradd -m $VM_UserName`n"
-                $script += "cat /var/tmp/LabMod/temp.txt | passwd`n"
-                $script += "usermod -aG wheel $VM_UserName`n"
-                $script += "rm /var/tmp/LabMod/temp.txt -f`n"
-                $script | Out-File "$env:TEMP\LabMod\tenant-update.sh" -Force -NoNewline -Encoding ascii
-
-                Write-Host "  Copying startup scripts"
-                Start-Sleep 10
-                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\temp.txt" -DestinationPath '/var/tmp/LabMod' -FileSource Host -Force
-                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\tenant-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
-                Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\TenantScriptNeeded.txt" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
-
-                Write-Host "  Rebooting to kick off scripts"
-                Write-Host "  Waiting on VM..."
-                Stop-VM -Name $VMName
-                Start-VM -Name $VMName
-                Wait-VM -Name $VMName -For IPAddress
-            }
             "Ubuntu" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
                 If (($VMName.Split("-"))[0] -eq "SEA") { $IPv6Prefix = "2001:5a0:4406" } Else { $IPv6Prefix = "2001:5a0:3c06"}
@@ -350,17 +250,6 @@ function New-LabVM {
                 Write-Host (Get-Date)' - ' -NoNewline
                 Write-Host "Pushing post deploy config" -ForegroundColor Cyan
                 
-                Write-Host "  Obtaining $kvNameUser secrets from Key Vault"
-                $kvName = $Lab + '-Cust' + $TenantID + '-kv'
-                $VM_UserName = $kvNameUser
-                $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-                $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
-                try {
-                    $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
-                } finally {
-                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
-                }
-                
                 Write-Host "  Updating SecureBootTemplate"
                 Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
 
@@ -372,7 +261,11 @@ function New-LabVM {
                 Write-Host "  Creating startup script"
                 mkdir "$env:TEMP\LabMod\" -Force | Out-Null
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
-                $VM_UserName+":"+$VM_UserPwd | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
+                
+                $VM_UserName = $Users[0]
+                $VM_UserPass = $Users[1]
+                
+                $VM_UserName+":"+$VM_UserPass | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
                 $script  = "cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`n"
                 $script += "sed -i 's/10.1.7.46/$VMIPv4/g' /etc/netplan/00-installer-config.yaml`n"
                 $script += "sed -i 's/10.1.7.1/$VMGWv4/g' /etc/netplan/00-installer-config.yaml`n"
@@ -414,19 +307,6 @@ function New-LabVM {
     If ($PwdUpdateOnly) {
         Write-Host (Get-Date)' - ' -NoNewline
         Write-Host "Updating Lab VM Passwords" -ForegroundColor Cyan
-        Write-Host "  obtaining secrets from Key Vault"
-        $kvName = $Lab + '-Cust' + $TenantID + '-kv'
-
-        $VM_UserName = "User01"
-        $kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $VM_UserName -ErrorAction Stop
-        $ssPtr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($kvs.SecretValue)
-        try {
-            $VM_UserPwd = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ssPtr)
-        } finally {
-            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ssPtr)
-        }
-
-        $Users = @($VM_UserName, $VM_UserPWD)
 
         If ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
             Write-Host "  Waiting for VM to come online: " -NoNewline

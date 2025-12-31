@@ -3,7 +3,7 @@ function Build-LabBaseVM{
     New-Alias Out-Clipboard $env:SystemRoot\System32\Clip.exe -ErrorAction SilentlyContinue
 
     $ScriptText = @'
-$VMName='Base2019'
+$VMName='Base2025'
 
 Write-Host "Building..........." -NoNewline
 Write-Host $VMName -ForegroundColor Yellow
@@ -17,7 +17,7 @@ Write-Host "Good" -ForegroundColor Green
 Write-Host "Validating Server.." -NoNewline
 $Lab = ($env:COMPUTERNAME.Split("-"))[0]
 If (-Not $Lab -eq "SEA" -and -Not $Lab -eq "ASH") {
-    Write-Warning "This script must be run on a pysical lab server, e.g. SEA-ER-01"
+    Write-Warning "This script must be run on a physical lab server, e.g. SEA-ER-01"
     Return
 }
 ElseIf ($Lab -eq "ASH") {$SecondOctet=2}

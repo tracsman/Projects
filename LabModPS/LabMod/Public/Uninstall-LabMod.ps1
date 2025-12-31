@@ -5,7 +5,9 @@
         Return
     }
 
-    $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
+    #$Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
+    $Destination = 'C:\Program Files\PowerShell\7\Modules\LabMod\'
+
     If (Test-Path $Destination) {
         Try {
             Remove-Item $Destination -Recurse
