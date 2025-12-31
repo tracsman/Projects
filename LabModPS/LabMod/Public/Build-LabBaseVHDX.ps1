@@ -2,21 +2,17 @@ function Build-LabBaseVHDX{
     [CmdletBinding()]
     param (
         [Parameter(ValueFromPipeline = $true, HelpMessage = 'Enter OS')]
-        [ValidateSet("Server2019", "CentOS", "Ubuntu")]
-        [string]$OS="Server2019")
+        [ValidateSet("Server2025", "Ubuntu")]
+        [string]$OS="Server2025")
 
     switch ($OS) {
-        "Server2019" {
-            $VMName = "Base2019"
-            $ISO = "C:\Hyper-V\ISO\Microsoft\17763.379.190312-0539.rs5_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso"
-        }
-        "CentOS" {
-            $VMName = "BaseCentOS"
-            $ISO = "C:\Hyper-V\ISO\Linux\CentOS-Stream-9-latest-x86_64-dvd1"
+        "Server2025" {
+            $VMName = "Base2025"
+            $ISO = "C:\Hyper-V\ISO\Microsoft\26100.1742.240906-0331.ge_release_svc_refresh_SERVER_EVAL_x64FRE_en-us.iso"
         }
         "Ubuntu" {
             $VMName = "BaseUbuntu"
-            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-22.04-live-server-amd64"
+            $ISO = "C:\Hyper-V\ISO\Linux\ubuntu-24.04.3-live-server-amd64.iso"
         }
     }
     $VMConfig = "C:\Hyper-V\Config"
@@ -39,7 +35,7 @@ function Build-LabBaseVHDX{
     Add-VMDvdDrive -VMName $VMName -Path $ISO
     $MyDVD = Get-VMDvdDrive -VMName $VMName
     switch ($OS) {
-        "Server2019" {Set-VMFirmware -VMName $VMName -EnableSecureBoot On -FirstBootDevice $MyDVD}
+        "Server2025" {Set-VMFirmware -VMName $VMName -EnableSecureBoot On -FirstBootDevice $MyDVD}
         default {Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority" -FirstBootDevice $MyDVD}
     }
     Write-Host (Get-Date)' - ' -NoNewline

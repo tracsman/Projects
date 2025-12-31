@@ -9,23 +9,30 @@ function Install-LabMod {
         Return
     }
 
+    # PowerShell Version Check
+    If ($PSVersionTable.PSVersion.Major -lt 7) {
+        Write-Warning "This script requires PowerShell 7 or later."
+        Return
+    }
+
     $uri = 'https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/'
 
     $FileName = @()
     $FileName += 'LabMod.psd1'
     $FileName += 'LabMod.psm1'
+    $FileName += 'Public/Build-LabBaseVHDX.ps1'
+    $FileName += 'Public/Build-LabBaseVM.ps1'
     $FileName += 'Public/New-LabECX.ps1'
     $FileName += 'Public/New-LabVM.ps1'
     $FileName += 'Public/New-LabVMDrive.ps1'
     $FileName += 'Public/Remove-LabECX.ps1'
     $FileName += 'Public/Remove-LabVM.ps1'
     $FileName += 'Public/Uninstall-LabMod.ps1'
-    $FileName += 'Public/Update-LabMod.ps1'
     $FileName += 'Public/Update-LabLibrary.ps1'
-    $FileName += 'Public/Build-LabBaseVHDX.ps1'
-    $FileName += 'Public/Build-LabBaseVM.ps1'
+    $FileName += 'Public/Update-LabMod.ps1'
 
-    $Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
+
+    $Destination = 'C:\Program Files\PowerShell\7\Modules\LabMod\'
     New-Item -Path ($Destination) -ItemType Directory -Force | Out-Null
     New-Item -Path ($Destination + "Public") -ItemType Directory -Force | Out-Null
 
