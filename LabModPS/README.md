@@ -17,15 +17,16 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Start the VM
 * When prompted, press any key to boot from DVD
 * Accept language defaults, click next
-* Click "Install Now"
+* Accept US keyboard default, click next
+* Select "Install Windows Server", select the "I agree everything..." checkbox, click Next
 * Select Datacenter (Desktop Experience) from the list and click Next
 * Accept license terms, click next
-* Select "Custom" option
 * Select Drive 0 for install and click Next
+* At the "Ready to Install" screen, click Install
 * While waiting for windows to install, go to the ExpressRoute-lab key vault and get the Sever-Admin password for Administrator password use
 * After the OS install completes, the OS must be configured, connect to the VM set admin password
-* Using the admin password, log into the VM
-* On the Base VM, open an admin ISE PS session
+* Using the admin password, log into the VM (you may have to down grade to a non-Enhanced Session on the View menu)
+* On the Base VM, open an admin ISE PS session (admin Terminal, then run ISE)
   * Switch to the physical server PowerShell run ````Build-LabBaseVM````, this will load the first part of the base VM script into the clipboard and pause.
   * Switch to the base VM, in the VM connection ensure "Enhanced Session" is **OFF**. To do this, in the Virtual Machine Connection client, click "View", and ensure the "Enhanced Session" is not enabled.
   * In the Virtual Machine Connection client, click "Clipboard", "Type Clipboard Text" to paste the first half of the script into the PowerShell ISE script window.
@@ -33,6 +34,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
   * Paste in the script in the Base VM PowerShell ISE and then run the script (no save required).
   * The installation of the Edge browser may prompt a patching cycle, allow this, and reboot if needed. If you have to reboot, log back in after reboot and open Admin PowerShell ISE, the script should still be there, run it again. Repeat until Edge installs.
   * At the conclusion of the script, the VM will reboot.
+  * (Optional) add your local account and add to admin group
 * Once rebooted, from the Azure Management jump box RDP to server 10.1.7.120, use the Admin password to log back into the Base VM.
 * Patch OS
   * Close the PowerShell ISE window if it auto-opens, don't save script if prompted.
@@ -56,10 +58,11 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * RDP to any physical server in the Seattle Path Lab
 * Open an Admin PS console, run ````Build-LabBaseVHDX -OS Ubuntu````
 * Start the VM
-* OS Install Prompt: Install Ubuntu Server (default option)
+* At the GNU GRUB screen, select: Try or Install Ubuntu Server (default option)
 * CGA Setup:
   * Preferred Language: English, Enter to Continue
   * Keyboard Config: English (US) / English (US), Enter to continue
+  * Instalation Type: Accept "Ubuntu Server", enter to continue
   * Network Connections:
     * arrow up to eth0, Enter to bring up menu
     * arrow down to select IPv4, enter to bring up menu
@@ -73,9 +76,8 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
   * Configure proxy: leave blank, Enter to continue
   * Configure Ubuntu mirror: accept default, Enter to continue
   * Installer Update: if this screen presents, select "Update to the new installer"
-  * Filesystem setup: "Use An Entire Disk" (default), Enter to continue
-  * Filesystem setup: Accept default local disk, Enter to continue
-  * Filesystem setup: Accept default FILE SYSTEM SUMMARY, Enter to bring up pop-up warning
+  * Storage Configuration setup: "Use An Entire Disk" (default), tab to Done, Enter to continue
+  * Storage Configuration setup: Accept all defaults, Enter to continue to bring up pop-up warning
   * Confirm Destructive action: arrow down to Continue, Enter to continue
   * Profile Setup:
     * Your name: Enter your first and last name separated by a space
@@ -84,6 +86,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
     * Choose a password: Your local account password
     * Confirm password: repeat password
     * tab to "Done", Enter to continue
+  * Ubuntu Pro: accept default "skip for now", enter to continue
   * SSH Setup: Enter to check "Install OpenSSH server", tab to "Done", Enter to continue
   * Featured Server Snaps: arrow to "Done" (leaving all unchecked), Enter to continue
   * **system installs, takes about 5 - 10 minutes**
@@ -91,7 +94,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
   * When updates are done, on-screen "button" will flip to "Reboot", select and hit Enter
 * After reboot, you'll get a "remove installation media", ignore it and hit Enter
 * Close Virtual Machine Connection window
-* Open Putty session to 10.1.7.46
+* Open SSH session to 10.1.7.46
   * At login prompt, use your local credentials
   * Run:
   
@@ -104,11 +107,14 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Back on the physical server, open Admin PowerShell:
 
     ````PowerShell
-  Copy-VMFile -Name BaseUbuntu -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
-  Copy-VMFile -Name BaseUbuntu -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
+    This is all messed up here!
+    ssh tracsman@10.1.7.46 "mkdir -p ~/LabMod" && scp base-update.sh tracsman@10.1.7.46:~/LabMod/
+    ssh tracsman@10.1.7.46 "sudo mkdir -p /var/tmp/LabMod" && scp base-update.sh ubuntu@<ip>:/var/tmp/LabMod/
+    scp C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh tracsman@10.1.7.46:/var/tmp/LabMod/
+    scp C:\Hyper-V\ISO\BaseVHDX\base-update.sh tracsman@10.1.7.46:/var/tmp/LabMod/
   ````
 
-* Back in Putty:
+* Back in SSH:
 
     ````bash
     sudo -u root sh /var/tmp/LabMod/base-update.sh
