@@ -3,7 +3,7 @@
 This README instructs in the creation of a new base VHDX for the following OS:
 
 * [Windows Server 2025](#windows-server-2025)
-* [Ubuntu](#ubuntu-server-non-gui-base-build-ubuntu-2004)
+* [Ubuntu](#ubuntu-server-non-gui-base-build-ubuntu-2404)
 
 The instructions on this page are for normal lab tenant environments, e.g. SEA-Cust14. It is NOT for workshop base images, for workshop images use the specific workshop instructions in the DevOps TCSP repo.
 
