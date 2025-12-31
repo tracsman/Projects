@@ -2,13 +2,12 @@
 
 This README instructs in the creation of a new base VHDX for the following OS:
 
-* [Windows Server 2019](#windows-server-2019)
-* [CentOS](#centos-base-build-centos-8)
+* [Windows Server 2025](#windows-server-2025)
 * [Ubuntu](#ubuntu-server-non-gui-base-build-ubuntu-2004)
 
 The instructions on this page are for normal lab tenant environments, e.g. SEA-Cust14. It is NOT for workshop base images, for workshop images use the specific workshop instructions in the DevOps TCSP repo.
 
-## Windows Server 2019
+## Windows Server 2025
 
  **Must be built on a Seattle physical server!!!**
 
@@ -34,7 +33,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
   * Paste in the script in the Base VM PowerShell ISE and then run the script (no save required).
   * The installation of the Edge browser may prompt a patching cycle, allow this, and reboot if needed. If you have to reboot, log back in after reboot and open Admin PowerShell ISE, the script should still be there, run it again. Repeat until Edge installs.
   * At the conclusion of the script, the VM will reboot.
-* Once rebooted, from the Azure Mgmt jump box RDP to server 10.1.7.120, use the Admin password to log back into the Base VM.
+* Once rebooted, from the Azure Management jump box RDP to server 10.1.7.120, use the Admin password to log back into the Base VM.
 * Patch OS
   * Close the PowerShell ISE window if it auto-opens, don't save script if prompted.
   * Patch, reboot if needed
@@ -46,90 +45,11 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * In Hyper-V Manager, navigate to the VM, wait for the VM State to become "Off".
 * Right-click the VM and Delete it
 * In File Explorer, copy the VHDX file (Base2019.vhdx) from the C:\Hyper-V\Virtual Hard Disks to the C:\Hyper-V\ISO\BaseVHDX folder
-* Copy the VHDX to \\10.17.7.7\Binaries\VMImages\BaseVHDX folder to easier disemination to other servers (replace existing file if prompted)
+* Copy the VHDX to \\10.17.7.7\Binaries\VMImages\BaseVHDX folder to easier dissemination to other servers (replace existing file if prompted)
 * Delete the original VHDX file in C:\Hyper-V\Virtual Hard Disks
 * Log on to each physical server to be used as a lab VM Host, and in an elevated PS prompt run Update-LabLibrary to pull the VHDX library (including the new VHDX) down to each server.
 
-## CentOS Base Build (CentOS 9)
-
- **Must be built on a Seattle physical server!!!**
-
-* RDP to any physical server in the Seattle Path Lab
-* Open an Admin PS console, run ````Build-LabBaseVHDX -OS CentOS````
-* Once complete, in Hyper-V Manager, open a connection to VM
-* Start the VM
-* OS Install Prompt: Install CentOS 9
-* GUI Setup:
-  * English/English (United States), Continue
-  * Date & Time: Los Angeles, Set local time, Done
-  * Software Selection:
-    * Base Environment: "Minimal Install"
-    * Add-Ons: "Guest Agents"
-    * Done
-  * Installation Destination: Select "Msft Virtual Disk", Done
-    * Network & HostName:
-      * Host name: CentOSBase, Apply
-      * Ethernet (eth0): Configure...
-        * General Tab:
-          * Check "automatically connect to this network..."
-        * IPv4 Settings Tab:
-          * Method: Manual
-          * Address: Add
-          * Address: 10.1.7.45
-          * Netmask: 25
-          * Gateway: 10.1.7.1
-        * DNS Servers: 1.1.1.1,1.0.0.1
-      * Save
-    * Done
-  * Root Password:
-    * Root Password: Get from key vault, you need to type, no paste :(
-    * Confirm: repeat above
-    * Done
-  * Create User:
-    * Full Name: Your name
-    * User Name: Your local account user name
-    * Make administrator: Check
-    * Require Password: Check
-    * Password: Your local account password
-    * Confirm: repeat password
-    * Done
-  * Begin Installation
-  * Finish configuration
-  * **system installs, takes about 5 minutes**
-  * On completion, click the reboot button
-* Open Admin PowerShell:
-
-  ````PowerShell
-    Enable-VMIntegrationService -VMName BaseCentOS -Name "Guest Service Interface"
-    Copy-VMFile -Name BaseCentOS -SourcePath "C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
-    Copy-VMFile -Name BaseCentOS -SourcePath "C:\Hyper-V\ISO\BaseVHDX\base-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -CreateFullPath -Force
-  ````
-
-* Open Putty to *local user*@10.1.7.45
-* At login prompt, use your local credentials
-
-    ````bash
-    sudo -u root sh /var/tmp/LabMod/base-update.sh
-    sudo shutdown now
-    ````
-
-* Back in PowerShell
-
-    ````PowerShell
-    Copy-Item "C:\Hyper-V\Virtual Hard Disks\BaseCentOS.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseCentOS.vhdx" -Force
-    ````
-
-CentOS base image is now complete and copied to the ISO dir, proceed with tenant VM creation
-
-### CentOS Tenant VM Build
-
-in admin ps:
-
-````PowerShell
-New-LabVM 90 -OS CentOS
-````
-
-## Ubuntu Server (non-GUI) Base Build Ubuntu 22.04
+## Ubuntu Server (non-GUI) Base Build Ubuntu 24.04
 
  **Must be built on a Seattle physical server!!!**
 
