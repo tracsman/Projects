@@ -37,6 +37,7 @@
         $FileName = @()
         $FileName += 'LabMod.psd1'
         $FileName += 'LabMod.psm1'
+        $FileName += 'Public/Copy-ToUbuntu.ps1'
         $FileName += 'Public/Get-LabECX.ps1'
         $FileName += 'Public/New-LabECX.ps1'
         $FileName += 'Public/New-LabVM.ps1'
@@ -49,7 +50,6 @@
         $FileName += 'Public/Build-LabBaseVHDX.ps1'
         $FileName += 'Public/Build-LabBaseVM.ps1'
 
-        #$Destination = 'C:\Program Files\WindowsPowerShell\Modules\LabMod\'
         $Destination = 'C:\Program Files\PowerShell\7\Modules\LabMod\'
 
         Write-Host
