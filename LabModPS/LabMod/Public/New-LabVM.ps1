@@ -266,12 +266,13 @@ function New-LabVM {
                 $VM_UserPass = $Users[1]
                 
                 $VM_UserName+":"+$VM_UserPass | Out-File "$env:TEMP\LabMod\temp.txt" -Force -NoNewline -Encoding ascii
-                $script  = "cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`n"
-                $script += "sed -i 's/10.1.7.46/$VMIPv4/g' /etc/netplan/00-installer-config.yaml`n"
-                $script += "sed -i 's/10.1.7.1/$VMGWv4/g' /etc/netplan/00-installer-config.yaml`n"
-                $script += "sed -i 's/\/25/\/25\n      - $VMIPv6\/64/g' /etc/netplan/00-installer-config.yaml`n"
-                $script += "sed -i 's/gateway4: $VMGWv4/gateway4: $VMGWv4\n      gateway6: $VMGWv6/g' /etc/netplan/00-installer-config.yaml`n"
-                $script += "sed -i 's/1.0.0.1/1.0.0.1\n        - 2606:4700:4700::1111\n        - 2606:4700:4700::1001/g' /etc/netplan/00-installer-config.yaml`n"
+                #$script  = "cp /etc/netplan/00-installer-config.yaml /etc/netplan/00-installer-config.yaml.bak`n"
+                $script  = "cp /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak`n"
+                $script += "sed -i 's/10.1.7.46/$VMIPv4/g' /etc/netplan/50-cloud-init.yaml`n"
+                $script += "sed -i 's/10.1.7.1/$VMGWv4/g' /etc/netplan/50-cloud-init.yaml`n"
+                #$script += "sed -i 's/\/25/\/25\n      - $VMIPv6\/64/g' /etc/netplan/50-cloud-init.yaml`n"
+                #$script += "sed -i 's/gateway4: $VMGWv4/gateway4: $VMGWv4\n      gateway6: $VMGWv6/g' /etc/netplan/50-cloud-init.yaml`n"
+                #$script += "sed -i 's/1.0.0.1/1.0.0.1\n        - 2606:4700:4700::1111\n        - 2606:4700:4700::1001/g' /etc/netplan/50-cloud-init.yaml`n"
                 $script += "netplan --debug generate`n"
 				$script += "netplan apply`n"
                 $script += "hostnamectl set-hostname $VMName`n"
