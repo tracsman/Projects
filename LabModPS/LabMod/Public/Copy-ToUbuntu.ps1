@@ -12,16 +12,18 @@ function Copy-ToUbuntu {
     $ip = "10.1.7.46"
 
     # Local file to copy
-    $localFile = "base-update.sh"
+    $localFile1 = "Z:\Binaries\VMImages\BaseVHDX\base-update.sh"
+    $localFile2 = "Z:\Binaries\VMImages\BaseVHDX\tenant-shell.sh"
 
     Write-Host "Creating directory on Ubuntu VM..."
     echo $pw | ssh $user@$ip "sudo -S mkdir -p /var/tmp/LabMod"
 
     Write-Host "Fixing ownership..."
-    echo $pw | ssh $user@$ip "sudo -S chown $user:$user /var/tmp/LabMod"
+    echo $pw | ssh $user@$ip "sudo -S chown $user`:$user /var/tmp/LabMod"
 
-    Write-Host "Copying file..."
-    scp $localFile "$user@$ip:/var/tmp/LabMod/"
+    Write-Host "Copying files..."
+    scp $localFile1 "$user@${ip}:/var/tmp/LabMod/"
+    scp $localFile2 "$user@${ip}:/var/tmp/LabMod/"
 
     Write-Host "Done."
 }
