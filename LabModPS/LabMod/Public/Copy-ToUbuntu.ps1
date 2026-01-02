@@ -16,14 +16,14 @@ function Copy-ToUbuntu {
     $localFile2 = "\\10.17.7.7\Binaries\VMImages\BaseVHDX\tenant-shell.sh"
 
     Write-Host "Creating directory on Ubuntu VM..."
-    echo $pw | ssh $user@$ip "sudo -S mkdir -p /var/tmp/LabMod"
+    Write-Output $pw | ssh $user@$ip "sudo -S mkdir -p /var/tmp/LabMod"
 
     Write-Host "Fixing ownership..."
-    echo $pw | ssh $user@$ip "sudo -S chown $user`:$user /var/tmp/LabMod"
+    Write-Output $pw | ssh $user@$ip "sudo -S chown $user`:$user /var/tmp/LabMod"
 
     Write-Host "Copying files..."
-    scp $localFile1 "$user@${ip}:/var/tmp/LabMod/"
-    scp $localFile2 "$user@${ip}:/var/tmp/LabMod/"
+    scp "$localFile1" "$user@$ip`:/var/tmp/LabMod/"
+    scp "$localFile2" "$user@$ip`:/var/tmp/LabMod/"
 
     Write-Host "Done."
 }
