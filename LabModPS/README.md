@@ -46,7 +46,7 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
 * Once VM is off, close Connect and/or RDP sessions with VM
 * In Hyper-V Manager, navigate to the VM, wait for the VM State to become "Off".
 * Right-click the VM and Delete it
-* In File Explorer, copy the VHDX file (Base2019.vhdx) from the C:\Hyper-V\Virtual Hard Disks to the C:\Hyper-V\ISO\BaseVHDX folder
+* In File Explorer, copy the VHDX file (Base2025.vhdx) from the C:\Hyper-V\Virtual Hard Disks to the C:\Hyper-V\ISO\BaseVHDX folder
 * Copy the VHDX to \\10.17.7.7\Binaries\VMImages\BaseVHDX folder to easier dissemination to other servers (replace existing file if prompted)
 * Delete the original VHDX file in C:\Hyper-V\Virtual Hard Disks
 * Log on to each physical server to be used as a lab VM Host, and in an elevated PS prompt run Update-LabLibrary to pull the VHDX library (including the new VHDX) down to each server.
@@ -106,26 +106,25 @@ The instructions on this page are for normal lab tenant environments, e.g. SEA-C
   * Wait for install to complete
 * Back on the physical server, open Admin PowerShell:
 
-    ````PowerShell
-    This is all messed up here!
-    ssh tracsman@10.1.7.46 "mkdir -p ~/LabMod" && scp base-update.sh tracsman@10.1.7.46:~/LabMod/
-    ssh tracsman@10.1.7.46 "sudo mkdir -p /var/tmp/LabMod" && scp base-update.sh ubuntu@<ip>:/var/tmp/LabMod/
-    scp C:\Hyper-V\ISO\BaseVHDX\tenant-shell.sh tracsman@10.1.7.46:/var/tmp/LabMod/
-    scp C:\Hyper-V\ISO\BaseVHDX\base-update.sh tracsman@10.1.7.46:/var/tmp/LabMod/
+  ````PowerShell
+  Copy-ToUbuntu
   ````
-
+  * This will ask for your username and password
+  * it will then ask for your password four more times for each sudo step, I'll figure out how to avoid this in the future but it's needed for now.
 * Back in SSH:
-
     ````bash
     sudo -u root sh /var/tmp/LabMod/base-update.sh
-    sudo shutdown now
     ````
-
-* Back in PowerShell
+* In Hyper-V Manager, select BaseUbuntu and "Shut Down..."
+* Then delete the VM
+* Back in PowerShell - copy the VHDX and then delete:
 
     ````PowerShell
     Copy-Item "C:\Hyper-V\Virtual Hard Disks\BaseUbuntu.vhdx" "C:\Hyper-V\ISO\BaseVHDX\BaseUbuntu.vhdx" -Force
+    Copy-Item "C:\Hyper-V\Virtual Hard Disks\BaseUbuntu.vhdx" "\\10.17.7.7\Binaries\VMImages\BaseVHDX\BaseUbuntu.vhdx" -Force
+    Remove-Item "C:\Hyper-V\Virtual Hard Disks\BaseUbuntu.vhdx"
     ````
+* Log on to each physical server to be used as a lab VM Host, and in an elevated PS prompt run Update-LabLibrary to pull the VHDX library (including the new VHDX) down to each server.
 
 Ubuntu Base image is now complete and copied to the ISO dir, proceed with tenant VM creation
 
