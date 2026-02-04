@@ -5,7 +5,7 @@
 
 param(
     [Parameter(Mandatory = $false)]
-    [string]$ResourceGroupName = "MCCert-RG",
+    [string]$ResourceGroupName = "VPN-jonor",
 
     [Parameter(Mandatory = $false)]
     [string]$Location = "chinanorth3",
@@ -143,26 +143,14 @@ Write-Host ""
 $deploymentName = "MCCert-Deployment-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 
 try {
-    # Convert secure strings to plain text for deployment (required by New-AzResourceGroupDeployment)
-    $adminPasswordPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($adminPassword)
-    )
-    $vpnSharedKeyPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($vpnSharedKey)
-    )
-
     $deployment = New-AzResourceGroupDeployment `
         -Name $deploymentName `
         -ResourceGroupName $ResourceGroupName `
         -TemplateFile $TemplateFile `
-        -adminPassword $adminPasswordPlain `
+        -adminPassword $adminPassword `
         -aadTenantId $aadTenantId `
-        -vpnSharedKey $vpnSharedKeyPlain `
+        -vpnSharedKey $vpnSharedKey `
         -Verbose
-
-    # Clear sensitive variables
-    $adminPasswordPlain = $null
-    $vpnSharedKeyPlain = $null
 
     if ($deployment.ProvisioningState -eq "Succeeded") {
         Write-Host ""
@@ -172,14 +160,14 @@ try {
         Write-Host ""
         Write-Host "Outputs:" -ForegroundColor Cyan
         Write-Host "  VPN Gateway Public IP: $($deployment.Outputs.vnet01VpnGatewayPublicIp.Value)" -ForegroundColor White
-        Write-Host "  Cisco CSR Public IP: $($deployment.Outputs.vnet03CiscoPublicIp.Value)" -ForegroundColor White
+        Write-Host "  Linux Router Public IP: $($deployment.Outputs.vnet03RouterPublicIp.Value)" -ForegroundColor White
         Write-Host "  Bastion Host: $($deployment.Outputs.vnet02BastionName.Value)" -ForegroundColor White
         Write-Host "  P2S Client Pool: $($deployment.Outputs.p2sClientPool.Value)" -ForegroundColor White
         Write-Host "  P2S NAT Pool: $($deployment.Outputs.p2sNatPoolOutput.Value)" -ForegroundColor White
         Write-Host ""
         Write-Host "Next Steps:" -ForegroundColor Yellow
         Write-Host "  1. Download VPN client from Azure Portal (VNet01-gw-vpn)" -ForegroundColor White
-        Write-Host "  2. Configure Cisco CSR with S2S VPN settings (use the PSK you provided)" -ForegroundColor White
+        Write-Host "  2. Configure strongSwan on VNet03-router01 (see /etc/ipsec.conf)" -ForegroundColor White
         Write-Host "  3. Access Windows VM via Bastion (VNet02-bastion)" -ForegroundColor White
         Write-Host ""
     }
