@@ -212,8 +212,8 @@ resource vnet01Vm01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-noble'
-        sku: '24_04-lts-gen2'
+        offer: '0001-com-ubuntu-server-jammy'
+        sku: '22_04-lts-gen2'
         version: 'latest'
       }
       osDisk: {
@@ -433,8 +433,8 @@ resource vnet03Vm01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     storageProfile: {
       imageReference: {
         publisher: 'Canonical'
-        offer: '0001-com-ubuntu-server-noble'
-        sku: '24_04-lts-gen2'
+        offer: '0001-com-ubuntu-server-jammy'
+        sku: '22_04-lts-gen2'
         version: 'latest'
       }
       osDisk: {
@@ -460,9 +460,9 @@ resource vnet03Vm01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   }
 }
 
-// VNet03 Cisco CSR 1000v Public IP (required for S2S VPN)
-resource vnet03CsrPip 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
-  name: '${vnet03Name}-csr01-pip'
+// VNet03 Linux Router (Ubuntu with strongSwan) Public IP (required for S2S VPN)
+resource vnet03RouterPip 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
+  name: '${vnet03Name}-router01-pip'
   location: location
   sku: {
     name: 'Standard'
@@ -472,9 +472,9 @@ resource vnet03CsrPip 'Microsoft.Network/publicIPAddresses@2024-01-01' = {
   }
 }
 
-// VNet03 Cisco CSR 1000v NIC
-resource vnet03Csr01Nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
-  name: '${vnet03Name}-csr01-nic'
+// VNet03 Linux Router NIC
+resource vnet03Router01Nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
+  name: '${vnet03Name}-router01-nic'
   location: location
   properties: {
     enableIPForwarding: true
@@ -487,7 +487,7 @@ resource vnet03Csr01Nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
             id: '${vnet03.id}/subnets/${vnet03TenantSubnetName}'
           }
           publicIPAddress: {
-            id: vnet03CsrPip.id
+            id: vnet03RouterPip.id
           }
         }
       }
@@ -495,33 +495,45 @@ resource vnet03Csr01Nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
   }
 }
 
-// VNet03 Cisco CSR 1000v
-resource vnet03Csr01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
-  name: '${vnet03Name}-csr01'
+// VNet03 Linux Router (Ubuntu with strongSwan for S2S VPN)
+resource vnet03Router01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
+  name: '${vnet03Name}-router01'
   location: location
-  plan: {
-    name: '17_03_08a-byol'
-    publisher: 'cisco'
-    product: 'cisco-csr-1000v'
-  }
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_DS2_v2'
+      vmSize: 'Standard_B2s'
     }
     osProfile: {
-      computerName: 'VNet03-csr01'
+      computerName: 'VNet03-router01'
       adminUsername: adminUsername
       adminPassword: adminPassword
+      linuxConfiguration: {
+        disablePasswordAuthentication: false
+      }
+      customData: base64('''#!/bin/bash
+# Install strongSwan for IPsec VPN
+apt-get update
+apt-get install -y strongswan strongswan-pki libcharon-extra-plugins
+
+# Enable IP forwarding
+echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+echo "net.ipv4.conf.all.accept_redirects = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.all.send_redirects = 0" >> /etc/sysctl.conf
+sysctl -p
+
+# strongSwan config will need to be completed manually with VPN Gateway details
+echo "strongSwan installed. Configure /etc/ipsec.conf and /etc/ipsec.secrets with VPN Gateway details."
+''')
     }
     storageProfile: {
       imageReference: {
-        publisher: 'cisco'
-        offer: 'cisco-csr-1000v'
-        sku: '17_03_08a-byol'
+        publisher: 'Canonical'
+        offer: '0001-com-ubuntu-server-jammy'
+        sku: '22_04-lts-gen2'
         version: 'latest'
       }
       osDisk: {
-        name: '${vnet03Name}-csr01-osdisk'
+        name: '${vnet03Name}-router01-osdisk'
         createOption: 'FromImage'
         managedDisk: {
           storageAccountType: 'Standard_LRS'
@@ -531,7 +543,7 @@ resource vnet03Csr01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
     networkProfile: {
       networkInterfaces: [
         {
-          id: vnet03Csr01Nic.id
+          id: vnet03Router01Nic.id
         }
       ]
     }
@@ -547,12 +559,12 @@ resource vnet03Csr01 'Microsoft.Compute/virtualMachines@2024-03-01' = {
 // S2S VPN Connection - VNet01 Gateway to Cisco CSR in VNet03
 // ============================================================================
 
-// Local Network Gateway representing the Cisco CSR
+// Local Network Gateway representing the Linux Router
 resource localNetworkGateway 'Microsoft.Network/localNetworkGateways@2024-01-01' = {
-  name: '${vnet01Name}-lng-vnet03-csr'
+  name: '${vnet01Name}-lng-vnet03-router'
   location: location
   properties: {
-    gatewayIpAddress: vnet03CsrPip.properties.ipAddress
+    gatewayIpAddress: vnet03RouterPip.properties.ipAddress
     localNetworkAddressSpace: {
       addressPrefixes: [
         vnet03AddressSpace
@@ -560,7 +572,7 @@ resource localNetworkGateway 'Microsoft.Network/localNetworkGateways@2024-01-01'
     }
   }
   dependsOn: [
-    vnet03Csr01
+    vnet03Router01
   ]
 }
 
@@ -591,8 +603,8 @@ resource s2sConnection 'Microsoft.Network/connections@2024-01-01' = {
 @description('VNet01 VPN Gateway Public IP')
 output vnet01VpnGatewayPublicIp string = vnet01GwPip.properties.ipAddress
 
-@description('VNet03 Cisco CSR Public IP')
-output vnet03CiscoPublicIp string = vnet03CsrPip.properties.ipAddress
+@description('VNet03 Linux Router Public IP')
+output vnet03RouterPublicIp string = vnet03RouterPip.properties.ipAddress
 
 @description('VNet01 VPN Gateway Resource ID')
 output vnet01VpnGatewayId string = vnet01VpnGateway.id
