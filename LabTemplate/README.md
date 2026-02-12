@@ -42,11 +42,9 @@ Validate this numbers isn't orphaned in the physical lab:
 Deploy the complete Azure infrastructure for a customer:
 
 ```powershell
-# Example: Deploy infrastructure for Customer 44 in SEA region
-.\Deploy-CustomerLab.ps1 -CustomerNumber 44 -Location SEA
+# Example: Deploy infrastructure for Customer 44 in Seattle lab
 
-# Or using defaults (SEA location)
-.\Deploy-CustomerLab.ps1 -CustomerNumber 44
+.\Deploy-CustomerLab.ps1 -CustomerNumber 44 
 ```
 
 This script will:
@@ -77,13 +75,15 @@ Deploy to **SEA-SRX42-01**, a Juniper SRX4200 firewall. Note this is actually tw
 ```powershell
 # Seattle location with ECX interface (default) for the primary router
 .\Create-RouterConfig.ps1 -CustomerNumber 44
+```
 
+```powershell
 # Seattle location with ECX interface (default) for the secondary router
 .\Create-RouterConfig.ps1 -CustomerNumber 44 -Peer Secondary
 ```
 
-The routers are MX10003 Juniper routers, same SKU and components as our MSEEs.
-Primary router is **SEA-MX03-01**
+The routers are MX10003 Juniper routers, same SKU and components as our MSEEs.<br/>
+Primary router is **SEA-MX03-01**<br/>
 Secondary router is **SEA-MX03-02**
 
 **Important** make sure you're putting the right config on the right router (ie don't mix up primary and secondary config and routers)
@@ -106,12 +106,41 @@ This config should be deployed to **SEA-NX9K-01** and **SEA-NX9K-01**.
 - Open an Admin PowerShell prompt (must be PS 7)
 
 ```powershell
-New-LabVM 40 -OS Ubuntu
+New-LabVM 44 -OS Ubuntu
 ```
 
 - You'll be prompted for the Admin Password and the PathLabUser password.
   - Admin Password: ([Server-Admin](https://ms.portal.azure.com/?feature.enableIPv6VpnGateway=true#view/Microsoft_Azure_KeyVault/ListObjectVersionsRBACBlade/~/overview/objectType/secrets/objectId/https%3A%2F%2Flabsecrets.vault.azure.net%2Fsecrets%2FServer-Admin/vaultResourceUri/%2Fsubscriptions%2F4bffbb15-d414-4874-a2e4-c548c6d45e2a%2FresourceGroups%2FLabInfrastructure%2Fproviders%2FMicrosoft.KeyVault%2Fvaults%2FLabSecrets/vaultId/%2Fsubscriptions%2F4bffbb15-d414-4874-a2e4-c548c6d45e2a%2FresourceGroups%2FLabInfrastructure%2Fproviders%2FMicrosoft.KeyVault%2Fvaults%2FLabSecrets/lifecycleState~/null))
   - PathLabUser password: Go to the Secrets in the Key Vault for this Customer (e.g. SEA-Cust44-kv)
+
+### 5. Lab Validation
+
+Once everything is complete, you can SSH to the On-Prem VM over the internet, and then ping the Azure VM over ExpressRoute.
+
+To this:
+
+- SSH to the On-prem VM:
+
+```bash
+ssh PathLabUser@sea.pathlab.xyz -p 4410
+```
+
+Where 4410 is the Customer NUmber (44) and IP of the VM (10 is always the first IP on-prem)
+
+- Use the PathLabUser password from the Key Vault. Note: when you paste in the password you won't see ***'s or anything, just trust the right-click pastes.
+- Say yes to save the VM thumbprint
+- on the VM now ping the Azure VM
+
+```bash
+ping 10.17.44.4
+```
+
+Where the third octet (44 in this example) is the customer number.
+
+The first two pings may fail, but after that should work. If not, something screwed up. If ping works, you're done and you can sent the information to the requestor to access the lab.
+
+### 6. Notify users of access instructions and details
+
 
 ## Detailed Deployment Process
 
