@@ -1,15 +1,24 @@
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory=$true, ValueFromPipeline=$true, HelpMessage='Enter Resource Group Name (e.g. SEA-Cust10)')]
-    [string]$RGName,
-    [string]$templateFile = "C:\Bin\Git\Projects\LabTemplate\Deploy-Lab.bicep")
+    [Parameter(Mandatory=$true, HelpMessage='Enter Customer Number (10-99)')]
+    [ValidateRange(10, 99)]
+    [int]$CustomerNumber,
+    
+    [Parameter(Mandatory=$false, HelpMessage='Enter Location (SEA or ASH)')]
+    [ValidateSet("SEA", "ASH")]
+    [string]$Location = "SEA",
+    
+    [string]$templateFile = "C:\Bin\Git\Projects\LabTemplate\Deploy-CustomerLab.bicep")
+
+# Construct Resource Group Name from Customer Number and Location
+$RGName = "$Location-Cust$CustomerNumber"
 
 # 1. Initialize
 # 2. Create Resource group
 # 3. Create Key Vault, Secret, and set permissions
 # 4. Push Bicep deployment to Azure
 # 5. Wait for circuits to be created
-# 6. Provision Circutis at Equinix
+# 6. Provision Circuits at Equinix
 # 6.1 Proceed only if all circuits are provisioned
 # 7. Create ER Connections
 # 8. End nicely
@@ -98,7 +107,7 @@ if (-not $OkToProceed) {
     Return
 }
 
-# 6. Provision Circutis at Equinix
+# 6. Provision Circuits at Equinix
 .\ECX-Action.ps1 -RGName $RGName
 
 # 6.1 Proceed only if all circuits are provisioned
@@ -152,7 +161,7 @@ Catch {
         New-AzVirtualNetworkGatewayConnection -Name $RGName'-VNet01-gw-er-conn' -ResourceGroupName $RGName `
                                               -Location $gw.Location -VirtualNetworkGateway1 $gw `
                                               -PeerId $circuit.Id -ConnectionType ExpressRoute | Out-Null}
-    Else {Write-Warning 'An issue occured with ER gateway or ER Circuit provisioning.'
+    Else {Write-Warning 'An issue occurred with ER gateway or ER Circuit provisioning.'
           Write-Host 'Current Gateway Provisioning State:' -NoNewLine
           Write-Host $gw.ProvisioningState -ForegroundColor Yellow
           Write-Host 'Current Circuit Provisioning State:' -NoNewLine

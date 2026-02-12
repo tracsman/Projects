@@ -11,7 +11,7 @@ param SecondOctet string = Location == 'WestUS2' ? '17' : '10'
 param PeerASN string = Location == 'WestUS2' ? '65020' : '65021'
 @secure()
 param adminPwd string
-param adminUser string = 'User01'
+param adminUser string = 'PathLabUser'
 
 //
 // Base Lab Build Out

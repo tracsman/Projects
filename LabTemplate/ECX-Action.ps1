@@ -6,7 +6,7 @@ param (
 
 # Equinix Provisioning Script for PathLab Customers
 #
-# To ensure you are in the right subscrition run
+# To ensure you are in the right subscription run
 # Get-AzContext
 #
 # 1. Get ECX Token
@@ -149,7 +149,7 @@ $TokenBody = "{" +
              "  ""client_secret"": ""$kvClientSecret""" +
              "}"
 Try {$token = Invoke-RestMethod -Method Post -Uri $TokenURI -Body $TokenBody -ContentType application/json}
-Catch {Write-Warning "An error occured getting an OAuth certificate from Equinix."
+Catch {Write-Warning "An error occurred getting an OAuth certificate from Equinix."
        Write-Host
        Write-Host $error[0].ErrorDetails.Message
        Return}
@@ -191,7 +191,7 @@ If ($Deprovision) {
     $ConnURI = "https://api.equinix.com/fabric/v4/connections/search"
     Try {$connections = Invoke-RestMethod -Method Post -Uri $ConnURI -Headers $ConnHeader -Body $searchBody -ContentType application/json -ErrorAction Stop
         Write-Host "Pulled (up to) top 300 provisioned ECX Connections"}
-    Catch {Write-Warning "An error occured pulling ECX Connections from Equinix."
+    Catch {Write-Warning "An error occurred pulling ECX Connections from Equinix."
         Write-Host
         Write-Host $error[0].ErrorDetails.Message
         Return }
@@ -209,7 +209,7 @@ If ($Deprovision) {
                     Write-Host (Get-Date)' - ' -NoNewline
                     Write-Host $UUID.Name -NoNewline -ForegroundColor Yellow
                     Write-Host " has been deprovisioned"}
-                Else {Write-Warning "$($Circuit.Name) deprovisioing has failed on $($UUID.Name)"}
+                Else {Write-Warning "$($Circuit.Name) deprovisioning has failed on $($UUID.Name)"}
                 }
         }
         elseif ($Circuit.ServiceProviderProvisioningState -eq "NotProvisioned") {
