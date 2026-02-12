@@ -35,7 +35,7 @@ Validate this numbers isn't orphaned in the physical lab:
  show configuration | grep Cust44
  ```
 
-- Also RDP to the physical server you're going to place the on-prem VM on. Make sure the server is running and available and that that customer number isn't in use.
+- Also RDP to the physical server you're going to place the on-prem VM on. Make sure the server is running and available and that that customer number isn't in use. Customer 44 VMs should be on Server 4 (ie the first digit of the customer number is usually the physical server number)
 
 ### 2. Deploy Azure Infrastructure
 
