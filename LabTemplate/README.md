@@ -54,11 +54,13 @@ This script will:
 - Create the resource group
 - Deploy Azure resources using the Bicep template
 - Create Key Vault and store credentials
-- Provision ExpressRoute circuits
+- Create ExpressRoute circuits
 - Wait for circuit provisioning at Equinix
-- Create ExpressRoute connections
+- Kick off ER Gateway creation
+- Create a VNET and VM (Ubuntu)
+- Create ExpressRoute connections (when GW deployment created)
 
-### 2. Generate Network Device Configurations
+### 3. Generate Network Device Configurations
 
 Generate and deploy configurations for all network devices using the customer number:
 
@@ -67,6 +69,8 @@ Generate and deploy configurations for all network devices using the customer nu
 ```powershell
 .\Create-FWConfig.ps1 -CustomerNumber 44
 ```
+
+Deploy to **SEA-SRX42-01**, a Juniper SRX4200 firewall. Note this is actually two firewalls but they are clustered so updating one, updates both.
 
 #### Router Configuration (Junos)
 
@@ -78,19 +82,36 @@ Generate and deploy configurations for all network devices using the customer nu
 .\Create-RouterConfig.ps1 -CustomerNumber 44 -Peer Secondary
 ```
 
+The routers are MX10003 Juniper routers, same SKU and components as our MSEEs.
+Primary router is **SEA-MX03-01**
+Secondary router is **SEA-MX03-02**
+
+**Important** make sure you're putting the right config on the right router (ie don't mix up primary and secondary config and routers)
+
 #### Switch Configuration (Cisco Nexus)
 
 ```powershell
 .\Create-SwitchConfig.ps1 -CustomerNumber 44
 ```
 
-### 3. Apply Network Configurations
+The switches are Cisco Nexus 9k switches, and although they are L3 switches we treat them as L2 "dumb" switches, so the config is only adding VLANs with no IP addresses so the config is exactly the same for both devices.
 
-Each configuration script copies the generated configuration to your clipboard. Apply them to the respective devices:
+This config should be deployed to **SEA-NX9K-01** and **SEA-NX9K-01**.
 
-1. **Firewall**: Paste configuration into Junos firewall console
-2. **Router**: Paste configuration into Junos router console  
-3. **Switches**: Apply the same VLAN configuration to both Cisco Nexus switches
+### 4. Create On-Prem VM
+
+**NOTE**: The Azure build, at least the Key Vault, must be complete before starting this step. The Key Vault is needed to get the VM Password.
+
+- RDP to the physical server you want to create the VM
+- Open an Admin PowerShell prompt (must be PS 7)
+
+```powershell
+New-LabVM 40 -OS Ubuntu
+```
+
+- You'll be prompted for the Admin Password and the PathLabUser password.
+  - Admin Password: ([Server-Admin](https://ms.portal.azure.com/?feature.enableIPv6VpnGateway=true#view/Microsoft_Azure_KeyVault/ListObjectVersionsRBACBlade/~/overview/objectType/secrets/objectId/https%3A%2F%2Flabsecrets.vault.azure.net%2Fsecrets%2FServer-Admin/vaultResourceUri/%2Fsubscriptions%2F4bffbb15-d414-4874-a2e4-c548c6d45e2a%2FresourceGroups%2FLabInfrastructure%2Fproviders%2FMicrosoft.KeyVault%2Fvaults%2FLabSecrets/vaultId/%2Fsubscriptions%2F4bffbb15-d414-4874-a2e4-c548c6d45e2a%2FresourceGroups%2FLabInfrastructure%2Fproviders%2FMicrosoft.KeyVault%2Fvaults%2FLabSecrets/lifecycleState~/null))
+  - PathLabUser password: Go to the Secrets in the Key Vault for this Customer (e.g. SEA-Cust44-kv)
 
 ## Detailed Deployment Process
 
