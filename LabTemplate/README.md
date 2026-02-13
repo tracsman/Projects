@@ -141,6 +141,7 @@ The first two pings may fail, but after that should work. If not, something scre
 
 ### 6. Notify users of access instructions and details
 
+TBD
 
 ## Detailed Deployment Process
 
@@ -223,12 +224,13 @@ LabTemplate/
 
 The lab uses a structured IP addressing scheme based on the customer number:
 
-- **Azure VNet**: 10.17.XX.0/24 (XX = customer number)
+- **Azure VNet**: 10.17.XX.0/24 (XX = Customer number)
+- **On-prem VNet**: 10.1.XX.0/25
 - **Firewall BGP**: 192.168.XX.0, 192.168.XX.2
 - **Router Primary Peer**: 192.168.XX.17/30
 - **Router Secondary Peer**: 192.168.XX.21/30  
-- **VLAN Tags**:
-    Customer number × 10 for C-Tag
+- **VLAN Tags**:<br/>
+    Customer number × 10 for C-Tag<br/>
     Customer number for S-Tag
 - **Switch VLAN**: Customer number
 
@@ -238,7 +240,7 @@ The lab uses a structured IP addressing scheme based on the customer number:
 
 1. **Azure Login**: Ensure you're logged in with `Connect-AzAccount`
 2. **Resource Group Naming**: Use format "SEA-CustXX" or "ASH-CustXX"
-3. **Customer Number Range**: Must be between 10-99
+3. **Customer Number Range**: Must be between 10-59 (techincally up to 99, but we only use Servers 1 - 5 for Lab Envinronments, 6 - 10 are for Workshops)
 4. **Clipboard Issues**: Configurations are automatically copied to clipboard for easy pasting
 
 ### Verification Steps
