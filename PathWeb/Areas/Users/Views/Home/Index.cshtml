@@ -1,0 +1,126 @@
+@model IEnumerable<PathWeb.Models.User>
+@{
+    ViewData["Title"] = "Active User List";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>This is a list of active users in the Pathfinders Lab Configuration database.</p>
+    <p>Depending on your AuthLevel, you can add, edit, or delete users as needed with the links on this page.</p>
+    <p>The AuthLevel defines the level of visibility and actions a user can take, see the chart at the bottom of this page for more information about the specific AuthLevels.</p>
+    <p>If a user is set to AuthLevel == 0 or is not in the database, they will only see a Permission Error page.</p>
+    <p>As the AuthLevel increases that user would see additional sections, pages, and actions appear on the site.</p>
+    <p>An AuthLevel automatically has rights to all (numerically) lower AuthLevel privileges.</p>
+    <p>For troubleshooting, the logged in User Name (email address) and AuthLevel, are visible in the upper right hand corner of every page on this site.</p>
+    <p>For example; with AuthLevel 15, a user would see this page with "Create New", "Edit", and "Delete" options for the user list. With AuthLevel 14, the user would only be able to see the list of users and the detail view, but would not have access to create, update, or delete any user data.</p>
+</div>
+
+@if (authLevel >= 15)
+{
+    <p><a asp-action="Create" class="btn btn-primary">Create New User</a></p>
+}
+
+<table class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>User Name</th>
+            <th>Name</th>
+            <th>Auth Level</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in Model)
+        {
+            <tr>
+                <td>@user.UserName</td>
+                <td>@user.Name</td>
+                <td>@user.AuthLevel</td>
+                <td>
+                    @if (authLevel >= 15)
+                    {
+                        <a asp-action="Edit" asp-route-id="@user.UserId">Edit</a>
+                        <span>|</span>
+                    }
+                    <a asp-action="Details" asp-route-id="@user.UserId">Details</a>
+                    @if (authLevel >= 15)
+                    {
+                        <span>|</span>
+                        <a asp-action="Delete" asp-route-id="@user.UserId">Delete</a>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<hr />
+
+<p>User Authorization Levels are as follows:</p>
+<table class="table table-bordered">
+    <tr><th colspan="2">Non-Standard Access</th></tr>
+    <tr><td>&nbsp;&nbsp;0 - Reject, no access</td><td>&nbsp;&nbsp;1 - Workshop Registration</td></tr>
+    <tr><th>Read Access</th><th>Write Access</th></tr>
+    <tr><td>&nbsp;&nbsp;3 - Workshop Read Only</td><td>&nbsp;&nbsp;5 - Workshop Admin</td></tr>
+    <tr><td>&nbsp;&nbsp;6 - Tenant Read Only</td><td>&nbsp;&nbsp;8 - Tenant Admin</td></tr>
+    <tr><td>&nbsp;&nbsp;11 - Data Admin Read Only</td><td>&nbsp;&nbsp;12 - Data Admin</td></tr>
+    <tr><td>&nbsp;&nbsp;14 - Site Admin Read Only</td><td>&nbsp;&nbsp;15 - Site Admin</td></tr>
+</table>
+
+<table class="table table-bordered table-hover">
+    <tr>
+        <th>Auth Level</th>
+        <th>Description</th>
+        <th>Home</th>
+        <th>Workshop Registration</th>
+        <th>Workshop Read</th>
+        <th>Workshop Write</th>
+        <th>Tenant Read</th>
+        <th>Tenant Write</th>
+        <th>Address Read</th>
+        <th>Address Write</th>
+        <th>User Read</th>
+        <th>User Write</th>
+    </tr>
+    <tr>
+        <td class="text-center">0</td><td>Reject (No Access)</td>
+        <td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">1</td><td>Workshop Registration</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">3</td><td>Workshop Read Only</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">5</td><td>Workshop Admin</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">6</td><td>Tenant Read Only</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">8</td><td>Tenant Admin</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">11</td><td>Data Admin Read Only</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">12</td><td>Data Admin</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">14</td><td>Site Admin Read Only</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-danger text-center">N</td>
+    </tr>
+    <tr>
+        <td class="text-center">15</td><td>Site Admin</td>
+        <td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td><td class="bg-success text-center">Y</td>
+    </tr>
+</table>

@@ -1,0 +1,31 @@
+@model PathWeb.Models.User
+@{
+    ViewData["Title"] = "User Details";
+}
+
+<div class="container">
+    <h1>User Details</h1>
+    <hr />
+
+    <div class="card" style="max-width: 400px;">
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-5">User Name</dt>
+                <dd class="col-sm-7">@Model.UserName</dd>
+
+                <dt class="col-sm-5">Name</dt>
+                <dd class="col-sm-7">@Model.Name</dd>
+
+                <dt class="col-sm-5">Auth Level</dt>
+                <dd class="col-sm-7">@Model.AuthLevel</dd>
+
+                <dt class="col-sm-5">User ID</dt>
+                <dd class="col-sm-7">@Model.UserId</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a asp-action="Index" class="btn btn-secondary">Back to List</a>
+    </div>
+</div>

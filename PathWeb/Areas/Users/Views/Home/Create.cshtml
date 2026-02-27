@@ -1,0 +1,49 @@
+@model PathWeb.Models.User
+@{
+    ViewData["Title"] = "Add User";
+}
+
+<div class="container">
+    <h1>Add User</h1>
+    <hr />
+
+    <div class="row">
+        <div class="col-md-6">
+            <form asp-action="Create">
+                <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                <div class="mb-3">
+                    <label asp-for="UserName" class="form-label"></label>
+                    <input asp-for="UserName" class="form-control" placeholder="alias@microsoft.com" />
+                    <span asp-validation-for="UserName" class="text-danger"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="Name" class="form-label"></label>
+                    <input asp-for="Name" class="form-control" placeholder="First Last" />
+                    <span asp-validation-for="Name" class="text-danger"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="AuthLevel" class="form-label">Auth Level</label>
+                    <select asp-for="AuthLevel" class="form-select">
+                        <option value="0">0 - Reject (No Access)</option>
+                        <option value="1">1 - Workshop Registration</option>
+                        <option value="3">3 - Workshop Read Only</option>
+                        <option value="5">5 - Workshop Admin</option>
+                        <option value="6">6 - Tenant Read Only</option>
+                        <option value="8">8 - Tenant Admin</option>
+                        <option value="11">11 - Data Admin Read Only</option>
+                        <option value="12">12 - Data Admin</option>
+                        <option value="14">14 - Site Admin Read Only</option>
+                        <option value="15">15 - Site Admin</option>
+                    </select>
+                    <span asp-validation-for="AuthLevel" class="text-danger"></span>
+                </div>
+                <button type="submit" class="btn btn-primary">Create</button>
+                <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

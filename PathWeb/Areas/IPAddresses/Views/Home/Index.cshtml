@@ -1,0 +1,61 @@
+@model IEnumerable<PathWeb.Models.PublicIp>
+@{
+    ViewData["Title"] = "Public IP Address Lists";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>This is a list of all Public IPv4 Address Prefixes in our database.</p>
+    <p>With this list, you can see if and where each range is used.</p>
+    <p>With the appropriate permission level, you can update the assignment or release the prefixes back into the pool.</p>
+    <p>Most prefixes should be assigned and released via the Tenant Management process, but this page can be used if you need additional addresses for your tenant or need to reserve prefixes for other reasons.</p>
+    <p>Once a prefix is assigned to a purpose here, it is no longer available for Tenant use.</p>
+    <p><strong>Note:</strong> If a prefix is already in use and it is reassigned here without removing the Tenant first, IP reuse will occur in the lab and the results will be unpredictable.</p>
+    <p><strong>Note:</strong> This is a fixed list, you can't add or delete rows or update the prefixes themselves, only update how the prefixes are assigned.</p>
+</div>
+
+<table class="table table-bordered">
+    <thead class="table-dark">
+        <tr>
+            <th class="text-center">Lab</th>
+            <th>Range</th>
+            <th class="text-center">Range Type</th>
+            <th>Purpose</th>
+            <th class="text-center">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr class="@(string.IsNullOrEmpty(item.Purpose) ? "table-success" : "")">
+                <td class="text-center">@item.Lab</td>
+                <td>@item.Range</td>
+                <td class="text-center">@item.RangeType</td>
+                <td>@item.Purpose</td>
+                @if (!item.RangeType.Contains("Reserved"))
+                {
+                    <td class="text-center">
+                        @if (authLevel >= 12)
+                        {
+                            <a asp-action="Edit" asp-route-id="@item.RangeId">Edit</a>
+                            <span>|</span>
+                        }
+                        <a asp-action="Details" asp-route-id="@item.RangeId">Details</a>
+                        @if (authLevel >= 12)
+                        {
+                            <span>|</span>
+                            <a asp-action="Release" asp-route-id="@item.RangeId">Release</a>
+                        }
+                    </td>
+                }
+                else
+                {
+                    <td class="text-center">
+                        <a asp-action="Details" asp-route-id="@item.RangeId">Details</a>
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>

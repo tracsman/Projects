@@ -1,0 +1,65 @@
+@{
+    ViewData["Title"] = "About this Site";
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="container">
+    <h4>History</h4>
+    <p>
+        In June of 2016, the Pathfinder team, a subset of the ExpressRoute PM team, started building two
+        physical customer repro labs at Equinix in Seattle, WA (SE3) and Ashburn, VA (DC2). Creating,
+        maintaining, and removing individual tenant environments, ensuring they were isolated, secure,
+        and usable was a labor and time intensive, manual effort.
+    </p>
+    <p>
+        To ease the burden of multiple configurations (Juniper, Cisco, PowerShell, Hyper-V, etc) a
+        spreadsheet was created. Called the "Configuration Generator" it was a macro-based (vba) Excel
+        spreadsheet.
+    </p>
+    <p>
+        The spreadsheet was used to generate the Azure PowerShell and on-premises network device config
+        and VM config needed to run multiple concurrent customer environments, called "Tenants". This
+        worked well for a few years, until a more robust conversation was needed between Azure and the
+        configuration generator. Things like dynamic IP addresses, or ER Direct Port S-Tags which are
+        generated in Azure when the environments are created, were needed in the on-premises configuration.
+        Given these addresses and tags are dynamically assigned at creation, a multi-step back and forth
+        was needed to utilize this information. To avoid building REST handlers in VBA in Excel, it was
+        decided to move this tool to a web based application where interacting with online services can
+        happen natively from the Configuration Generation tool.
+    </p>
+    <p>
+        This site is the web evolution of that spreadsheet.
+    </p>
+
+    <h4>Site Construction</h4>
+    <p>
+        This site is built on ASP.NET Core (.NET 10) using Razor views with Bootstrap styling,
+        Entity Framework Core for data access, and is hosted as an Azure App Service in West US 2.
+        It uses an Azure SQL Server backend for data storage with Entra ID (Azure AD) authentication
+        via Easy Auth and Managed Identity — no passwords or connection strings with secrets.
+        Authorization is provided by a Users table in the database with per-user, manually assigned
+        permission levels (AuthLevels 0-15).
+    </p>
+
+    <h4>Roadmap</h4>
+    <ul>
+        <li>Full tenant CRUD and configuration generation</li>
+        <li>IP address management and assignment</li>
+        <li>Workshop registration and management</li>
+        <li>Automated Azure deployment orchestration</li>
+        <li>On-prem automation of VM creation and network device configuration</li>
+    </ul>
+
+    <h4>Known Issues</h4>
+    <ul>
+        <li>None, Jon don't write no bugs! (that make it into production)</li>
+    </ul>
+</div>
+
+<address class="mt-4">
+    <strong>For support or more information:</strong>
+    <a href="mailto:netpath@@microsoft.com?subject=PathWeb site inquiry">netpath@@microsoft.com</a>
+</address>

@@ -1,0 +1,44 @@
+@using System.Security.Principal
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+
+@{
+    var isEasyAuth = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME")) && 
+                     Configuration.GetValue<bool>("AzureAd:UseEasyAuth", true);
+}
+
+<ul class="navbar-nav align-items-center">
+@if (User.Identity?.IsAuthenticated == true)
+{
+    var authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+    <li class="nav-item">
+        <span class="nav-link text-dark">Hello @User.Identity?.Name! (AuthLevel: @authLevel)</span>
+    </li>
+    @if (isEasyAuth)
+    {
+        <li class="nav-item">
+            <a class="nav-link text-dark" href="/.auth/logout">Sign out</a>
+        </li>
+    }
+    else
+    {
+        <li class="nav-item">
+            <a class="nav-link text-dark" asp-area="MicrosoftIdentity" asp-controller="Account" asp-action="SignOut">Sign out</a>
+        </li>
+    }
+}
+else
+{
+    @if (isEasyAuth)
+    {
+        <li class="nav-item">
+            <a class="nav-link text-dark" href="/.auth/login/aad">Sign in</a>
+        </li>
+    }
+    else
+    {
+        <li class="nav-item">
+            <a class="nav-link text-dark" asp-area="MicrosoftIdentity" asp-controller="Account" asp-action="SignIn">Sign in</a>
+        </li>
+    }
+}
+</ul>

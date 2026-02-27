@@ -1,0 +1,60 @@
+@model PathWeb.Models.PublicIp
+@{
+    ViewData["Title"] = "Release Prefix Assignment";
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <h4 class="text-danger">Are you sure you want to remove the reservation of this Address Prefix?</h4>
+    <p>Don't use this page to release a prefix assigned to a Tenant Environment, even if a Tenant environment has multiple or non-standard Prefix assignments, when the Tenant environment is released, all Prefixes assigned to the Tenant will also be released.</p>
+    <p>Clicking the "Release" button below will clear the Device, Purpose, Tenant GUID, Tenant Number, Date Assigned, and Assigned By fields. Thus putting this range back into the available pool for reassignment.</p>
+</div>
+
+<table class="table table-hover">
+    <tr>
+        <th style="width: 150px;">Range ID</th>
+        <td>@Model.RangeId</td>
+    </tr>
+    <tr>
+        <th>Range</th>
+        <td>@Model.Range</td>
+    </tr>
+    <tr>
+        <th>Range Type</th>
+        <td>@Model.RangeType</td>
+    </tr>
+    <tr>
+        <th>Lab</th>
+        <td>@Model.Lab</td>
+    </tr>
+    <tr>
+        <th>Device</th>
+        <td>@(string.IsNullOrEmpty(Model.Device) ? Html.Raw("<i>empty</i>") : Model.Device)</td>
+    </tr>
+    <tr>
+        <th>Purpose</th>
+        <td>@(string.IsNullOrEmpty(Model.Purpose) ? Html.Raw("<i>empty</i>") : Model.Purpose)</td>
+    </tr>
+    <tr>
+        <th>Tenant GUID</th>
+        <td>@(Model.TenantGuid.HasValue ? Model.TenantGuid.ToString() : Html.Raw("<i>empty</i>"))</td>
+    </tr>
+    <tr>
+        <th>Tenant Number</th>
+        <td>@(Model.TenantId.HasValue ? Model.TenantId.ToString() : Html.Raw("<i>empty</i>"))</td>
+    </tr>
+    <tr>
+        <th>Date Assigned</th>
+        <td>@(Model.AssignedDate.HasValue ? Model.AssignedDate.Value.ToString("u") : Html.Raw("<i>empty</i>"))</td>
+    </tr>
+    <tr>
+        <th>Assigned By</th>
+        <td>@(string.IsNullOrEmpty(Model.AssignedBy) ? Html.Raw("<i>empty</i>") : Model.AssignedBy)</td>
+    </tr>
+</table>
+<hr />
+<form asp-action="Release" method="post">
+    <input type="hidden" asp-for="RangeId" />
+    <button type="submit" class="btn btn-danger">Release</button>
+    <a asp-action="Index" class="btn btn-secondary">Back to List</a>
+</form>

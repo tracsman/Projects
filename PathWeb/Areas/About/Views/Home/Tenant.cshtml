@@ -1,0 +1,49 @@
+@{
+    ViewData["Title"] = "About the Logical Tenant";
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="container">
+    <img src="~/images/LogicalTenant.png" alt="Logical Tenant Diagram" class="float-start me-3 mb-3" style="max-width: 100%;" />
+</div>
+<div class="container">
+    <p>
+        Each Tenant environment starts out with a Resource Group and KeyVault, these are the starting elements
+        of pretty much every possible combination of deployments. The Resource Group is also tagged with relevant
+        information such as who created the environment, the people(s) requesting the environment, and the
+        expiration date - when the environment should be removed.
+    </p>
+    <p>
+        The KeyVault contains a secret, a password for the PathLabUser account, which will be used in Azure or
+        On-Prem if any VM resources are created.
+    </p>
+    <p>
+        If either a VM or Gateway is requested, a VNet will be created with addressing appropriate for the region
+        of the Resource Group.
+    </p>
+    <p>
+        If requested, one to four Azure VMs will be built of either Linux or Windows.
+    </p>
+    <p>
+        Either an ExpressRoute or VPN gateway (or both) can be deployed.
+    </p>
+    <p>
+        Depending on the hybrid connection type, either Private Peering on ER or an IPSec tunnel to a Local
+        Network Gateway will be brought up. On ExpressRoute, Microsoft Peering can also be enabled.
+    </p>
+    <p>
+        On-prem, in the lab requested, all the environment config is created to enable an isolated (from all other
+        tenants) data path to the VMs created in the Lab.
+    </p>
+    <p>
+        As in Azure, one to four VMs on-prem can be deployed as either Linux or Windows machines.
+    </p>
+    <p>
+        As built, the VMs in Azure have a dedicated and isolated path to the VMs on premises. If any additional
+        configuration is needed, it is up to the Pathfinder Owner of this environment to either modify the
+        scripts/configs before deployments or modify the basic environment after it's built.
+    </p>
+</div>

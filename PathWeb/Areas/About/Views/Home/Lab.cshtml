@@ -1,0 +1,66 @@
+@{
+    ViewData["Title"] = "About the Physical Lab";
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="container">
+    <img src="~/images/PhysicalLab.png" alt="Physical Lab Diagram" class="float-start me-3 mb-3" style="max-width: 100%;" />
+</div>
+<div class="container">
+    <p>
+        The physical layout for the Pathfinder lab is similar in both Seattle and Ashburn,
+        differences where they exist are called out below.
+    </p>
+    <p>
+        At the upper most U-stop of the rack is the patch panel, the front side belongs to
+        us and connects down to the edge routers, the back side to Equinix. Equinix runs
+        all patch fibers out of our rack. These cross-connects go to the Internet (Tata
+        Communications is our provider) and ECX. In Seattle there are a few extra
+        cross-connects; to a Juniper MSEE direct, a Cisco MSEE direct, and to AWS direct.
+    </p>
+    <p>
+        Next are the edge routers, they are a pair, and all links up to the patch panel are
+        pairs one for each router (except for the AWS Direct Connect that is single legged).
+        The routers in Seattle are Juniper MX-10003, and in Ashburn are Cisco ASR-1009X, both
+        are capable of 100Gb uplinks. The routers are then down-linked to the Firewall.
+    </p>
+    <p>
+        The Firewall in both labs are Juniper SRX-4200, there are two devices clustered together
+        to act as a single firewall, although in the event of failure the two physical devices
+        share state and config, they are also redundantly linked both up to the routers and
+        to the switches.
+    </p>
+    <p>
+        The switches are Nexus 9000 series switches, in our lab we run only layer-2 protocols
+        on the switches, leaving the firewalls and routers to contain all layer-3 configuration.
+    </p>
+    <p>
+        At the bottom of the stack, logically and physically, are the servers. Each lab contains
+        10 Dell R630 1U Servers, each server 88 logical cores, 128Gb of memory, and on average
+        5Tb of storage. The servers also have a QLogic NIC with 4 x 10Gbps ports. Ports 1
+        and 2 land on Switch 01, and ports 3 and 4 land on Switch 02. The servers also contain
+        an Integrated Lights Out (iLO) card to allow for remote console access to the server,
+        this allows for firmware patching and power-cycling even if the server is non-responsive.
+        The iLO port is connected to Switch 01 for servers 01 - 05 and Switch 02 for servers
+        06 - 10.
+    </p>
+    <p>
+        On each server, we run multiple VMs. These VMs are for the tenant environments. They
+        are assigned a unique VLAN tag at the hyper-visor, with that VLAN landing in a unique
+        VRF (aka Routing Instance) in the Firewalls and Routers. Thus allowing an isolated
+        data path for each Tenant.
+    </p>
+    <p>
+        All routing is done via BGP, no other interior routing protocols are used (e.g. OSPF
+        or IS-IS). The VMs are layer-2 to the Firewalls, then iBGP to the Routers and then
+        eBGP to the outside world.
+        All NATing, route leaking (e.g. Internet) is done at the Firewall Layer.
+    </p>
+    <p>
+        Not shown in the diagram is a Cisco ISR 4300 series access router for emergency
+        access in the event of total communications failure to the rest of the gear.
+    </p>
+</div>
