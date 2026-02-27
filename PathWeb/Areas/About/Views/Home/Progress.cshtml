@@ -1,0 +1,74 @@
+@{
+    ViewData["Title"] = "Development Status";
+}
+
+<div class="container bg-light rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="container">
+    <strong>Current Active Bug List: </strong>
+    <a href="https://dev.azure.com/jonor/PathWeb/_queries/query/1ce6db91-ef4a-44fc-b91e-8714dca33d25/">Azure DevOps - Bugs</a>
+    <br /><br />
+    <strong>Site Backlog Items (PBI): </strong>
+    <a href="https://dev.azure.com/jonor/PathWeb/_queries/query/0a8b7a1c-da24-4a1a-9696-6955ad13fb7d/">Azure DevOps - Backlog</a>
+    <br /><br />
+
+    <h4>Dev Cycle Sprints</h4>
+    <table class="table table-borderless table-sm">
+        <tr>
+            <td class="text-nowrap" style="width: 220px;">
+                <strong>v3 - The Vibe Coding Edition!</strong><br />
+                [In Development]
+            </td>
+            <td>
+                Full rewrite using AI from scratch using .NET 10<br />
+                Entra ID Easy Auth (replaces OWIN/ADAL)<br />
+                EF Core with Managed Identity (no passwords)<br />
+                Azure App Service on Linux
+            </td>
+        </tr>
+        <tr><td colspan="2">&nbsp;</td></tr>
+        <tr>
+            <td class="text-nowrap">
+                <mark><strong>Sprint 12</strong> (Last V1 Release)</mark><br />
+                [Sprint Complete]
+            </td>
+            <td>
+                14 Bugs fixed<br />
+                Reduce lab lease times to one week<br />
+                ER Direct in Ashburn<br />
+                IPv6 Internet
+            </td>
+        </tr>
+        <tr><td colspan="2">&nbsp;</td></tr>
+        <tr>
+            <td class="text-nowrap">
+                Sprint 7 - 11<br />
+                [Sprints Complete]
+            </td>
+            <td>
+                Design and Implement logging to Log Analytics<br />
+                TenantGeneration Model<br />
+                TenantController (Tenant Create, Edit, and Release views)<br />
+                TenantValidation Model<br />
+                TenantController (Config Edit view)
+            </td>
+        </tr>
+        <tr><td colspan="2">&nbsp;</td></tr>
+        <tr>
+            <td class="text-nowrap">
+                Sprint 1 - 6<br />
+                [Sprints Complete]
+            </td>
+            <td>
+                UserController<br />
+                HomeController<br />
+                AddressController<br />
+                TenantController (List and Details views)<br />
+                TenantController (Config view)<br />
+                HomeController - AboutLab, AboutTenant, AboutProgress views
+            </td>
+        </tr>
+    </table>
+</div>

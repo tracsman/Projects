@@ -1,0 +1,86 @@
+﻿@{
+    ViewData["Title"] = "Pathfinder Lab Configuration Manager";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+    }
+
+    <div class="container bg-light rounded p-4 mb-4">
+        <h2>@ViewData["Title"]</h2>
+        <p class="lead">The easiest way to manage tenants, workshops, and IP addresses in the Pathfinder labs.</p>
+        <p>This site is divided up into multiple sections, read more about them below.</p>
+        <p>Click on the Navbar above or the tile below to enter the section you need.</p>
+    </div>
+
+<div class="container">
+    <div class="row">
+        @if (authLevel >= 6)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="Tenants" asp-controller="Home" asp-action="Index" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">Tenant Management</span><br />
+                    The section allows the creation, updates, and release of the tenant environment.
+                    Here you can see the config and PowerShell for all aspects of each tenant environment.
+                </div>
+            </a>
+        </div>
+        }
+        @if (authLevel >= 11)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="IPAddresses" asp-controller="Home" asp-action="Index" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">IP Address Management</span><br />
+                    This section allows for the view, assignment, and release of the public IP addresses
+                    used in the lab. Normally done as part of Tenant Management, this section allows for
+                    the reservation of addresses for other uses.
+                </div>
+            </a>
+        </div>
+        }
+        @if (authLevel >= 14)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="Users" asp-controller="Home" asp-action="Index" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">User Management</span><br />
+                    This section is to add, update, and delete users for this site. This section also has
+                    AuthLevel information and how it is used to provide user authorization.
+                </div>
+            </a>
+        </div>
+        }
+        @if (authLevel >= 1)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="" asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">Workshop Registration</span><br />
+                    This section is used for the participant registration of upcoming workshops.
+                </div>
+            </a>
+        </div>
+        }
+        @if (authLevel >= 3)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="" asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">Workshop Management</span><br />
+                    This section is for the creation, management, and deletion of workshops.
+                </div>
+            </a>
+        </div>
+        }
+        @if (authLevel >= 1)
+        {
+        <div class="col-md-4 mb-3">
+            <a asp-area="About" asp-controller="Home" asp-action="Index" class="text-decoration-none text-dark">
+                <div class="border rounded p-3 h-100 tile-hover">
+                    <span class="h4">About</span><br />
+                    Learn more about this site, the physical lab, the logical tenant, and site development progress.
+                </div>
+            </a>
+        </div>
+        }
+    </div>
+</div>

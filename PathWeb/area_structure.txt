@@ -1,0 +1,47 @@
+Folder PATH listing for volume DevDrive
+Volume serial number is 50F8-AFDB
+Q:\BIN\GIT\PROJECTS\ENTRAIDMVCAPP\ENTRAIDMVCAPP\AREAS
++---About
+¦   +---Controllers
+¦   ¦       HomeController.cs
+¦   ¦       
+¦   +---Views
+¦       ¦   _ViewImports.cshtml
+¦       ¦   _ViewStart.cshtml
+¦       ¦   
+¦       +---Home
+¦               Index.cshtml
+¦               
++---IPAddresses
+¦   +---Controllers
+¦   ¦       HomeController.cs
+¦   ¦       
+¦   +---Views
+¦       ¦   _ViewImports.cshtml
+¦       ¦   _ViewStart.cshtml
+¦       ¦   
+¦       +---Home
+¦               Index.cshtml
+¦               
++---Tenants
+¦   +---Controllers
+¦   ¦       HomeController.cs
+¦   ¦       
+¦   +---Views
+¦       ¦   _ViewImports.cshtml
+¦       ¦   _ViewStart.cshtml
+¦       ¦   
+¦       +---Home
+¦               Index.cshtml
+¦               
++---Users
+    +---Controllers
+    ¦       HomeController.cs
+    ¦       
+    +---Views
+        ¦   _ViewImports.cshtml
+        ¦   _ViewStart.cshtml
+        ¦   
+        +---Home
+                Index.cshtml
+                
