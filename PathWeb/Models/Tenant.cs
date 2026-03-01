@@ -11,6 +11,8 @@ public partial class Tenant
 
     public short TenantId { get; set; }
 
+    public string TenantName => $"{Lab}-Cust{TenantId}";
+
     public short TenantVersion { get; set; }
 
     public string NinjaOwner { get; set; } = null!;

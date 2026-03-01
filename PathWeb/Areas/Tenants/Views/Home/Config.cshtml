@@ -1,0 +1,167 @@
+@model IEnumerable<PathWeb.Models.Config>
+@{
+    ViewData["Title"] = $"Tenant Configuration: {ViewData["TenantName"]}";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+    var contacts = ViewData["Contacts"]?.ToString() ?? "";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>Here are all the configuration components for this tenant.</p>
+</div>
+
+@if (!Model.Any())
+{
+    <div class="alert alert-warning">
+        <h5>There is no config on record for this tenant.</h5>
+    </div>
+    <div class="d-flex gap-2">
+        @if (authLevel >= 8)
+        {
+            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Create Config</a>
+        }
+        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
+    </div>
+}
+else
+{
+    <div class="d-flex gap-2 mb-3">
+        @if (authLevel >= 8)
+        {
+            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Regenerate Config</a>
+        }
+        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
+    </div>
+
+    var configOrder = new Dictionary<string, (int Order, string Label)>
+    {
+        ["CreateERPowerShell"]          = (1,  "Create ER PowerShell"),
+        ["ServiceProviderInstructions"] = (2,  "Service Provider Instructions"),
+        ["CreateAzurePowerShell"]       = (3,  "Create Azure PowerShell"),
+        ["LabVMPowerShell"]             = (4,  "On-prem VM PowerShell"),
+        ["ASH-SRX42-01"]               = (5,  "Firewall Config (ASH-SRX42-01)"),
+        ["SEA-SRX42-01"]               = (5,  "Firewall Config (SEA-SRX42-01)"),
+        ["ASH-ASR06X-01"]              = (6,  "Primary Router Config (ASH-ASR06X-01)"),
+        ["SEA-MX03-01"]                = (6,  "Primary Router Config (SEA-MX03-01)"),
+        ["ASH-ASR06X-02"]              = (7,  "Secondary Router Config (ASH-ASR06X-02)"),
+        ["SEA-MX03-02"]                = (7,  "Secondary Router Config (SEA-MX03-02)"),
+        ["ASH-NX9K-01"]                = (8,  "Primary Switch Config (ASH-NX9K-01)"),
+        ["SEA-NX9K-01"]                = (8,  "Primary Switch Config (SEA-NX9K-01)"),
+        ["ASH-NX9K-02"]                = (9,  "Secondary Switch Config (ASH-NX9K-02)"),
+        ["SEA-NX9K-02"]                = (9,  "Secondary Switch Config (SEA-NX9K-02)"),
+        ["BackoutConfig"]              = (10, "Backout Config"),
+        ["eMailHTML"]                   = (11, "Notification eMail"),
+    };
+
+    string GetLabel(string configType) =>
+        configOrder.TryGetValue(configType, out var info) ? info.Label : configType;
+
+    int GetOrder(string configType) =>
+        configOrder.TryGetValue(configType, out var info) ? info.Order : 99;
+
+    var orderedConfigs = Model.OrderBy(c => GetOrder(c.ConfigType)).ToList();
+
+    @foreach (var item in orderedConfigs)
+    {
+        var configType = item.ConfigType;
+        var label = GetLabel(configType);
+        var isEmail = configType == "eMailHTML";
+        var configContent = item.Config1;
+
+        // For email, swap embedded image references for SharePoint links
+        if (isEmail)
+        {
+            configContent = configContent.Replace("cid:", "https://microsoft.sharepoint.com/teams/Pathfinders/SiteAssets/");
+        }
+
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>@label</strong>
+                <div class="d-flex gap-1">
+                    @if (isEmail)
+                    {
+                        <button class="btn btn-sm btn-primary" onclick="downloadMail()">Download eMail</button>
+                    }
+                    else if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
+                    {
+                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Azure</button>
+                    }
+                    else if (configType == "LabVMPowerShell")
+                    {
+                        <button disabled class="btn btn-sm btn-outline-primary">Create Lab VMs</button>
+                    }
+                    else if (configType == "ServiceProviderInstructions")
+                    {
+                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Provider</button>
+                    }
+                    else if (configType.Contains("SRX") || configType.Contains("MX03") || configType.Contains("ASR") || configType.Contains("NX9K"))
+                    {
+                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Device</button>
+                    }
+                    else if (configType == "BackoutConfig")
+                    {
+                        <button disabled class="btn btn-sm btn-outline-primary">TBD</button>
+                    }
+                    <button class="btn btn-sm btn-primary" onclick="copyToClipboard('@configType', this)">Copy to Clipboard</button>
+                </div>
+            </div>
+            <textarea readonly rows="10" class="form-control border-0 rounded-0" id="@configType">@configContent</textarea>
+        </div>
+    }
+
+    <div class="d-flex gap-2 mt-3">
+        @if (authLevel >= 8)
+        {
+            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Regenerate Config</a>
+        }
+        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        function copyToClipboard(configType, btn) {
+            var textarea = document.getElementById(configType);
+            if (textarea) {
+                navigator.clipboard.writeText(textarea.value).then(function () {
+                    var original = btn.textContent;
+                    btn.textContent = '\u2714 Copied!';
+                    btn.classList.replace('btn-primary', 'btn-success');
+                    setTimeout(function () {
+                        btn.textContent = original;
+                        btn.classList.replace('btn-success', 'btn-primary');
+                    }, 1500);
+                });
+            }
+        }
+
+        function downloadMail() {
+            var mailBody = document.getElementById('eMailHTML');
+            if (!mailBody) return;
+
+            var emailTo = '@Html.Raw(contacts)';
+            var emailSubject = 'Your PathLab Environment is Ready!';
+            var emailCont = 'To: ' + emailTo + '\n'
+                + 'Subject: ' + emailSubject + '\n'
+                + 'X-Unsent: 1\n'
+                + 'Content-Type: text/html\n'
+                + '\n'
+                + mailBody.value
+                + '\n';
+
+            var blob = new Blob([emailCont], { type: 'text/plain' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = emailSubject + '.eml';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+}

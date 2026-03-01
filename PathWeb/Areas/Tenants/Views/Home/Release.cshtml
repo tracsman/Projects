@@ -1,0 +1,40 @@
+@model PathWeb.Models.Tenant
+@{
+    ViewData["Title"] = $"Release Tenant: {Model.TenantName}";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="alert alert-warning">
+    <strong>Warning!</strong> You are about to release this tenant environment. This will:
+    <ul class="mt-2">
+        <li>Mark the tenant as released (deleted)</li>
+        <li>Release all public IP addresses assigned to this tenant</li>
+        <li>Remove this tenant from the active tenant list</li>
+    </ul>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header fw-bold">Tenant Summary</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">Tenant Name</th><td>@Model.TenantName</td></tr>
+            <tr><th>Ninja Owner</th>
+            <tr><th>Contact(s)</th><td>@Model.Contacts</td></tr>
+            <tr><th>Usage</th><td>@Model.Usage</td></tr>
+            <tr><th>Azure Region</th><td>@Model.AzureRegion</td></tr>
+            <tr><th>Assigned Date</th><td>@Model.AssignedDate.ToString("u")</td></tr>
+            <tr><th>Assigned By</th><td>@Model.AssignedBy</td></tr>
+        </table>
+    </div>
+</div>
+
+<form asp-action="Release" method="post">
+    <input type="hidden" asp-for="TenantGuid" />
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-danger">Confirm Release</button>
+        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>

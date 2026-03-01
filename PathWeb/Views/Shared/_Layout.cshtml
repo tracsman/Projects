@@ -7,10 +7,19 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/PathWeb.styles.css" asp-append-version="true" />
+    <script>
+        // Apply theme immediately to prevent flash of wrong theme
+        (function() {
+            var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
+            if (m && m[1] === 'dark') {
+                document.documentElement.setAttribute('data-bs-theme', 'dark');
+            }
+        })();
+    </script>
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav class="navbar navbar-expand-sm border-bottom box-shadow mb-3">
             <div class="container-fluid">
                 <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">PathWeb</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
@@ -23,30 +32,30 @@
                     }
                     <ul class="navbar-nav flex-grow-1">
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                            <a class="nav-link" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
                         @if (navAuthLevel >= 6)
                         {
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="Tenants" asp-controller="Home" asp-action="Index">Tenants</a>
+                            <a class="nav-link" asp-area="Tenants" asp-controller="Home" asp-action="Index">Tenants</a>
                         </li>
                         }
                         @if (navAuthLevel >= 11)
                         {
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="IPAddresses" asp-controller="Home" asp-action="Index">IP Addresses</a>
+                            <a class="nav-link" asp-area="IPAddresses" asp-controller="Home" asp-action="Index">IP Addresses</a>
                         </li>
                         }
                         @if (navAuthLevel >= 14)
                         {
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="Users" asp-controller="Home" asp-action="Index">Users</a>
+                            <a class="nav-link" asp-area="Users" asp-controller="Home" asp-action="Index">Users</a>
                         </li>
                         }
                         @if (navAuthLevel >= 1)
                         {
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle text-dark" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 About
                             </a>
                             <ul class="dropdown-menu">
@@ -59,6 +68,7 @@
                         }
                     </ul>
                     <partial name="_LoginPartial" />
+                    <button id="theme-toggle" class="theme-toggle" title="Toggle dark mode">🌙</button>
                 </div>
             </div>
         </nav>

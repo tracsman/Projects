@@ -4,7 +4,7 @@
     byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
 }
 
-<div class="container bg-light rounded p-4 mb-4">
+<div class="container bg-body-tertiary rounded p-4 mb-4">
     <h2>@ViewData["Title"]</h2>
     <p>This is a list of active users in the Pathfinders Lab Configuration database.</p>
     <p>Depending on your AuthLevel, you can add, edit, or delete users as needed with the links on this page.</p>
@@ -27,6 +27,7 @@
             <th>User Name</th>
             <th>Name</th>
             <th>Auth Level</th>
+            <th>Ninja</th>
             <th></th>
         </tr>
     </thead>
@@ -37,6 +38,7 @@
                 <td>@user.UserName</td>
                 <td>@user.Name</td>
                 <td>@user.AuthLevel</td>
+                <td>@(user.Ninja ? "✓" : "")</td>
                 <td>
                     @if (authLevel >= 15)
                     {

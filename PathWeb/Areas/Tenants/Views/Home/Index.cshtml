@@ -1,10 +1,63 @@
+@model IEnumerable<PathWeb.Models.Tenant>
 @{
-    ViewData["Title"] = "Tenants";
+    ViewData["Title"] = "Active Tenant List";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
 }
 
-<div class="container">
-    <h1>Tenants</h1>
-    <p class="lead">Manage your tenant information and configurations.</p>
-    <hr />
-    <p>This is a placeholder for the Tenants management section.</p>
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>Click the "Details" link next to a tenant to see environment details and configurations.</p>
+    <p>If you have sufficient permissions, the Details view will also allow you to edit, release, and generate config for a tenant record.</p>
+    <p>Many of the table column headers are clickable, this will sort or reverse sort the table on that column value.</p>
+    <p>The search field will search for any matches in the Lab, Tenant ID, Owner, Contacts, and Usage fields.</p>
 </div>
+
+<div class="container d-flex justify-content-between align-items-center mb-3">
+    <div>
+        @if (authLevel >= 8)
+        {
+            <a asp-action="Create" class="btn btn-primary">Create New Tenant</a>
+        }
+    </div>
+    <form method="get" class="d-flex">
+        <input class="form-control me-2" name="searchString" type="search" placeholder="Search" value="@ViewData["CurrentSearch"]" />
+        <button class="btn btn-primary me-1" type="submit">Search</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">Reset</a>
+    </form>
+</div>
+
+<table class="table table-striped table-sm">
+    <thead class="table-dark">
+        <tr>
+            <th class="text-center" style="width:10%">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["LabSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Lab and Tenant Number">Tenant Name</a>
+            </th>
+            <th class="text-center" style="width:8%">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["NinjaSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Owner">Owner</a>
+            </th>
+            <th style="width:22%">Contacts</th>
+            <th style="width:8%">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["DateSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Environment Expiration Date">Expires</a>
+            </th>
+            <th style="width:44%">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["UsageSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Usage field">Usage</a>
+            </th>
+            <th class="text-center" style="width:8%">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td class="text-center">@item.TenantName</td>
+                <td class="text-center">@item.NinjaOwner</td>
+                <td class="text-break">@item.Contacts</td>
+                <td>@item.ReturnDate.ToString("d")</td>
+                <td>@item.Usage</td>
+                <td class="text-center">
+                    <a asp-action="Details" asp-route-id="@item.TenantGuid">Details</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
