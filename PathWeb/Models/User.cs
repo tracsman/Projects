@@ -12,4 +12,6 @@ public partial class User
     public string Name { get; set; } = null!;
 
     public byte AuthLevel { get; set; }
+
+    public bool Ninja { get; set; }
 }

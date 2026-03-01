@@ -441,7 +441,7 @@ Write-Host "  Start app    : Start-AzWebApp -ResourceGroupName $ResourceGroup -N
 Write-Host "  Restart app  : Restart-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName"
 Write-Host "  Get app info : Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName"
 Write-Host "  Delete all   : Remove-AzResourceGroup -Name $ResourceGroup -Force"
-Write-Host "Azure Portal:"
+Write-Info "Azure Portal:"
 Write-Host "  View logs    : Azure Portal → App Service → Log stream"
 Write-Host ""
 
