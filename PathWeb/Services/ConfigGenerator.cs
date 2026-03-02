@@ -18,6 +18,31 @@ public class ConfigGenerator
         _logger = logger;
     }
 
+    /// <param name="Asn">BGP ASN for the on-premises lab (e.g. 65020)</param>
+    /// <param name="Octet">Second octet / IPv6 hextet indicating lab location (SEA=1, ASH=2)</param>
+    /// <param name="VpnIP">Public IP advertised from the lab for VPN tunnels</param>
+    /// <param name="INetNAT">Public IP advertised from the lab for static NAT (VM remote access)</param>
+    /// <param name="IPv6Prefix">Provider-assigned /48 prefix used for lab VMs</param>
+    private record LabConstants(string Asn, string Octet, string VpnIP, string INetNAT, string IPv6Prefix);
+
+    private static LabConstants GetLabConstants(string lab) => lab switch
+    {
+        "SEA" => new("65020", "1", "63.243.229.124", "63.243.229.125", "2001:5a0:4406:"),
+        "ASH" => new("65021", "2", "66.198.12.124", "66.198.12.125", "2001:5a0:3c06:"),
+        _ => throw new ArgumentException($"Invalid lab value: {lab}")
+    };
+
+    private static string ResolveVpnEndPoint(Tenant tenant)
+    {
+        if (tenant.VpnendPoint != null)
+        {
+            if (tenant.VpnendPoint == "TBD,N/A" || tenant.VpnendPoint == "Active-Passive")
+                return tenant.Vpnconfig == "Active-Active" ? "TBD,TBD" : "TBD,N/A";
+            return tenant.VpnendPoint;
+        }
+        return tenant.Vpnconfig == "Active-Active" ? "TBD,TBD" : "TBD,N/A";
+    }
+
         public async Task<List<string>> GenerateConfigAsync(Guid id, string userEmail)
         {
             // 1. Initialize variables
@@ -29,7 +54,20 @@ public class ConfigGenerator
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateConfig", "Pulling Tenant from SQL");
             Tenant tenant = await _context.Tenants.FindAsync(id);
             tenant.TenantVersion = (short)(tenant.TenantVersion + 1);
-            //tenant.TenantVersion + 1;
+
+            // Assign or release public IPs for Microsoft peering before generating config
+            string p2pResult = await AssignPublicIp(tenant, true);
+            if (p2pResult == "No Available P2P")
+            {
+                strMessages.Add("[AssignPublicIP] No available P2P ranges");
+                return strMessages;
+            }
+            string natResult = await AssignPublicIp(tenant, false);
+            if (natResult == "No Available NAT")
+            {
+                strMessages.Add("[AssignPublicIP] No available NAT ranges");
+                return strMessages;
+            }
 
             // 2. Generate Config
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateConfig", "Calling GenerateSPConfig()");
@@ -153,15 +191,16 @@ public class ConfigGenerator
             }
             else if (tenant.EruplinkPort == "ECX")
             {
+                string labCity = tenant.Lab == "SEA" ? "Seattle" : "Ashburn";
                 strDB = "# ECX Provisioning Information\r\n" +
                         "# Run this script on any machine with the LabMod module installed.\r\n" +
                         "#\r\n\r\n" +
-                        "New-LabECX " + tenant.TenantId + " " + (tenant.Lab == "SEA" ? "Seattle" : "Ashburn") + "\r\n";
+                        $"New-LabECX {tenant.TenantId} {labCity}\r\n";
                _strDelete += "#######\r\n" +
                              "### Deprovision at ECX\r\n" +
                              "#######\r\n" +
                              "# Run this PowerShell script on any lab physical server.\r\n" +
-                             "Remove-LabECX " + tenant.TenantId + " " + (tenant.Lab == "SEA" ? "Seattle" : "Ashburn") + "\r\n\r\n\r\n";
+                             $"Remove-LabECX {tenant.TenantId} {labCity}\r\n\r\n\r\n";
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSPConfig", "ECX ExpressRoute requested, Provision and Deprovision instructions set");
             }
             else
@@ -187,24 +226,24 @@ public class ConfigGenerator
             if (HasER)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateERConfig", "ER Requested, defining variables");
-                string strRGName = tenant.Lab + "-Cust" + tenant.TenantId;
+                string strRGName = $"{tenant.Lab}-Cust{tenant.TenantId}";
                 string strLocation = (tenant.Lab == "ASH") ? "Washington DC" : "Seattle";
                 string strCircuitRegion = (tenant.Lab == "ASH") ? "East US" : "West US 2";
                 string strProvider = (tenant.EruplinkPort == "ECX") ? "Equinix" : "";
 
                 // Set Variables
                 strDB = "# Initialize\r\n" +
-                         "$RGName = '" + strRGName + "'\r\n" +
-                         "$Region = '" + tenant.AzureRegion + "'\r\n" +
-                         (!IsERDirect ? "$ERProvider = '" + strProvider + "'\r\n" : "") +
-                         "$ERLocation = '" + strLocation + "'\r\n" +
-                         "$ERRegion = '" + strCircuitRegion + "'\r\n" +
-                         "$ERSku = '" + tenant.Ersku + "'\r\n" +
-                         "$ERBandwidth = " + (IsERDirect ? tenant.Erspeed / 1000 : tenant.Erspeed) + "\r\n" +
-                         "$RGTagExpireDate = '" + tenant.ReturnDate.ToString("MM/dd/yy") + "'\r\n" +
-                         "$RGTagContact = '" + tenant.Contacts + "'\r\n" +
-                         "$RGTagNinja = '" + tenant.NinjaOwner + "'\r\n" +
-                         "$RGTagUsage = '" + SqlClean(tenant.Usage).Substring(0, Math.Min(SqlClean(tenant.Usage).Length, 253)) + "'\r\n\r\n";
+                         $"$RGName = '{strRGName}'\r\n" +
+                         $"$Region = '{tenant.AzureRegion}'\r\n" +
+                         (!IsERDirect ? $"$ERProvider = '{strProvider}'\r\n" : "") +
+                         $"$ERLocation = '{strLocation}'\r\n" +
+                         $"$ERRegion = '{strCircuitRegion}'\r\n" +
+                         $"$ERSku = '{tenant.Ersku}'\r\n" +
+                         $"$ERBandwidth = {(IsERDirect ? tenant.Erspeed / 1000 : tenant.Erspeed)}\r\n" +
+                         $"$RGTagExpireDate = '{tenant.ReturnDate.ToString("MM/dd/yy")}'\r\n" +
+                         $"$RGTagContact = '{tenant.Contacts}'\r\n" +
+                         $"$RGTagNinja = '{tenant.NinjaOwner}'\r\n" +
+                         $"$RGTagUsage = '{tenant.Usage.Substring(0, Math.Min(tenant.Usage.Length, 253))}'\r\n\r\n";
 
                 // Login Check
                 strDB += "# Login Check\r\n" +
@@ -304,10 +343,10 @@ public class ConfigGenerator
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Defining variables");
             
             string strDB;
-            string strRGName = tenant.Lab + "-Cust" + tenant.TenantId;
+            string strRGName = $"{tenant.Lab}-Cust{tenant.TenantId}";
             List<string> lstRawContacts = tenant.Contacts?.Split(',').ToList();
             List<string> lstContacts = new List<string> { };
-            foreach (string contact in lstRawContacts) { lstContacts.Add("'" + contact.Trim() + "'"); }
+            foreach (string contact in lstRawContacts) { lstContacts.Add($"'{contact.Trim()}'"); }
             bool HasER = tenant.Ersku != "None";
             bool HasPrivate = (Boolean)tenant.PvtPeering;
             bool HasMicrosoft = (Boolean)tenant.Msftpeering;
@@ -318,26 +357,10 @@ public class ConfigGenerator
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
             bool HasERDirect = tenant.EruplinkPort != "ECX"; ;
 
-            string strASN;
-            string strLabOctet;
-            string strLabVpnIP;
-            if (tenant.Lab == "SEA")
-            {
-                strASN = "65020";
-                strLabOctet = "1";
-                strLabVpnIP = "63.243.229.124";
-            }
-            else if (tenant.Lab == "ASH")
-            {
-                strASN = "65021";
-                strLabOctet = "2";
-                strLabVpnIP = "66.198.12.124";
-            }
-            else
-            {
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Bad Lab value detected");
-                throw new ArgumentException("[GenerateAzureConfig] ");
-            }
+            var lab = GetLabConstants(tenant.Lab);
+            string strASN = lab.Asn;
+            string strLabOctet = lab.Octet;
+            string strLabVpnIP = lab.VpnIP;
 
             // For IPv4: First Octet = 10. (RFC1918), Second Octet = Azure Region, Third Octet = Tenant Number
             // eg "10.11.12" note, no forth octet, this will be assigned at time of use
@@ -345,20 +368,21 @@ public class ConfigGenerator
             // eg "fd:1:2:31FF"; fd=private, 1=Azure to Lab, 2=Ashburn lab, 31FF=Tenant number 31, FF indicates a P2P prefix remaining hextets are for the host segment
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Pulling Azure Region data from SQL");
             Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion);
-            string strVNetPrefix = "10." + region.Ipv4 + "." + tenant.TenantId;
-            string strVNet6Prefix = "fd:0:" + region.Ipv6 + ":" + tenant.TenantId;
-            string strP2P6Prefix = "fd:1:" + strLabOctet + ":" + tenant.TenantId + "FF::";
+            string strVNetPrefix = $"10.{region.Ipv4}.{tenant.TenantId}";
+            string strVNet6Prefix = $"fd:0:{region.Ipv6}:{tenant.TenantId}";
+            string strP2P6Prefix = $"fd:1:{strLabOctet}:{tenant.TenantId}FF::";
 
+            string[] azVms = [tenant.AzVm1, tenant.AzVm2, tenant.AzVm3, tenant.AzVm4];
             int intVMCount = 0;
             bool HasAzureVM = false;
             string strVMOS = "$VMOS = @()\r\n";
-            for (int i = 1; i <= 4; i++)
+            foreach (string vm in azVms)
             {
-                if (tenant.GetType().GetProperty("AzVm" + i.ToString()).GetValue(tenant).ToString() != "None")
+                if (vm != "None")
                 {
                     HasAzureVM = true;
                     intVMCount += 1;
-                    strVMOS += "$VMOS += '" + tenant.GetType().GetProperty("AzVm" + i.ToString()).GetValue(tenant).ToString() + "'\r\n";
+                    strVMOS += $"$VMOS += '{vm}'\r\n";
                 }
             }
 
@@ -367,57 +391,57 @@ public class ConfigGenerator
             // Set Variables
             strDB = "# Initialize\r\n" +
                     "$StartTime = Get-Date\r\n" +
-                    "$TenantID = '" + tenant.TenantId + "'\r\n" +
-                    "$RGName = '" + strRGName + "'\r\n" +
-                    "$Region = '" + tenant.AzureRegion + "'\r\n" +
-                    "$RGTagExpireDate = '" + tenant.ReturnDate.ToString("MM/dd/yy") + "'\r\n" +
-                    "$RGTagContact = '" + tenant.Contacts + "'\r\n" +
-                    "$RGTagNinja = '" + tenant.NinjaOwner + "'\r\n" +
-                    "$RGTagUsage = '" + SqlClean(tenant.Usage).Substring(0, Math.Min(SqlClean(tenant.Usage).Length, 253)) + "'\r\n";
+                    $"$TenantID = '{tenant.TenantId}'\r\n" +
+                    $"$RGName = '{strRGName}'\r\n" +
+                    $"$Region = '{tenant.AzureRegion}'\r\n" +
+                    $"$RGTagExpireDate = '{tenant.ReturnDate.ToString("MM/dd/yy")}'\r\n" +
+                    $"$RGTagContact = '{tenant.Contacts}'\r\n" +
+                    $"$RGTagNinja = '{tenant.NinjaOwner}'\r\n" +
+                    $"$RGTagUsage = '{tenant.Usage.Substring(0, Math.Min(tenant.Usage.Length, 253))}'\r\n";
            _strDelete += "#######\r\n### Remove Azure Resources\r\n#######\r\n";
 
             if (HasPrivate || HasAzureVM || HasVPNGateway)
             {
                 strDB += "$VNetName = $RGName + '-VNet01'\r\n" +
-                         "$VNetAddress = '" + strVNetPrefix + ".0/24'\r\n" +
-                         "$VNetTenant = '" + strVNetPrefix + ".0/25'\r\n" +
-                         "$VNetGateway = '" + strVNetPrefix + ".128/25'\r\n";
+                         $"$VNetAddress = '{strVNetPrefix}.0/24'\r\n" +
+                         $"$VNetTenant = '{strVNetPrefix}.0/25'\r\n" +
+                         $"$VNetGateway = '{strVNetPrefix}.128/25'\r\n";
                 if (HasIPv6)
                 {
-                    strDB += "$VNet6Address = '" + strVNet6Prefix + "00::/56'\r\n" +
-                             "$VNet6Tenant = '" + strVNet6Prefix + "00::/64'\r\n" +
-                             "$VNet6Gateway = '" + strVNet6Prefix + "FE::/64'\r\n";
+                    strDB += $"$VNet6Address = '{strVNet6Prefix}00::/56'\r\n" +
+                             $"$VNet6Tenant = '{strVNet6Prefix}00::/64'\r\n" +
+                             $"$VNet6Gateway = '{strVNet6Prefix}FE::/64'\r\n";
                 }
             }
             if (HasPrivate || HasVPNGateway)
             {
-                strDB += "$PvtASN = '" + strASN + "'\r\n";
+                strDB += $"$PvtASN = '{strASN}'\r\n";
             }
             if (HasPrivate)
             {
-                strDB += "$PvtP2PA = '192.168." + tenant.TenantId + ".16/30'\r\n" +
-                         "$PvtP2PB = '192.168." + tenant.TenantId + ".20/30'\r\n" +
-                         "$PvtVLAN = " + tenant.TenantId + "0\r\n";
+                strDB += $"$PvtP2PA = '192.168.{tenant.TenantId}.16/30'\r\n" +
+                         $"$PvtP2PB = '192.168.{tenant.TenantId}.20/30'\r\n" +
+                         $"$PvtVLAN = {tenant.TenantId}0\r\n";
                 if (HasIPv6)
                 {
-                    strDB += "$Pvt6P2PA = '" + strP2P6Prefix + "/126'\r\n" +
-                             "$Pvt6P2PB = '" + strP2P6Prefix + "4/126'\r\n";
+                    strDB += $"$Pvt6P2PA = '{strP2P6Prefix}/126'\r\n" +
+                             $"$Pvt6P2PB = '{strP2P6Prefix}4/126'\r\n";
                 }
             }
             if (HasMicrosoft)
             {
-                strDB += "$MsftTags = '" + tenant.Msfttags + "'\r\n" +
-                         "$MsftP2PA = '" + GetP2P(tenant.Msftp2p, true, tenant.TenantGuid) + "'\r\n" +
-                         "$MsftP2PB = '" + GetP2P(tenant.Msftp2p, false, tenant.TenantGuid) + "'\r\n" +
-                         "$MsftASN = '" + strASN + "'\r\n" +
-                         "$MsftVLAN = " + tenant.TenantId + "1\r\n" +
-                         "$MsftNAT ='" + tenant.Msftadv + "'\r\n";
+                strDB += $"$MsftTags = '{tenant.Msfttags}'\r\n" +
+                         $"$MsftP2PA = '{GetP2P(tenant.Msftp2p, true)}'\r\n" +
+                         $"$MsftP2PB = '{GetP2P(tenant.Msftp2p, false)}'\r\n" +
+                         $"$MsftASN = '{strASN}'\r\n" +
+                         $"$MsftVLAN = {tenant.TenantId}1\r\n" +
+                         $"$MsftNAT ='{tenant.Msftadv}'\r\n";
             }
             if (HasVPNGateway)
             {
                 strDB += "$LabSharedKey = (Get-AzKeyVaultSecret -VaultName LabSecrets -Name AzureVPNSecret -ErrorAction Stop).SecretValueText\r\n" +
-                         "$LabPIP = '" + strLabVpnIP + "'\r\n" +
-                         "$LabBGPIP = '192.168." + tenant.TenantId + ".88'\r\n";
+                         $"$LabPIP = '{strLabVpnIP}'\r\n" +
+                         $"$LabBGPIP = '192.168.{tenant.TenantId}.88'\r\n";
             }
             if (HasAzureVM)
             {
@@ -445,7 +469,7 @@ public class ConfigGenerator
 
             // Check/Create Resource Group
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create Resource Group");
-            strDB += "# Create Resource Group " + strRGName + "\r\n" +
+            strDB += $"# Create Resource Group {strRGName}\r\n" +
                      "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
                      "Write-Host \"Creating Resource Group $RGName\" -ForegroundColor Cyan\r\n" +
                      "Try {$rg = Get-AzResourceGroup -Name $RGName -ErrorAction Stop\r\n" +
@@ -845,9 +869,9 @@ public class ConfigGenerator
 
             // Back out script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding backout script for Azure resources");
-           _strDelete += "$RGName='" + strRGName + "'\r\n" +
-                         "$UserName='" + _userEmail.Split('@')[0] + "'\r\n" +
-                         "$TenantGUID='" + tenant.TenantGuid.ToString() + "'\r\n";
+           _strDelete += $"$RGName='{strRGName}'\r\n" +
+                         $"$UserName='{_userEmail.Split('@')[0]}'\r\n" +
+                         $"$TenantGUID='{tenant.TenantGuid}'\r\n";
             if (HasERDirect)
             {
                _strDelete += "$OkToDelete = $true\r\n\r\n";
@@ -914,47 +938,29 @@ public class ConfigGenerator
             bool HasVPNAA = tenant.Vpnconfig == "Active-Active";
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
 
-            bool HasLabVM = false;
-            for (int i = 1; i <= 4; i++)
-            {
-                if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "None") { HasLabVM = true; }
-            }
+            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            bool HasLabVM = labVms.Any(vm => vm != "None");
 
             if (HasVPNGateway || HasLabVM || HasMicrosoft)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Firewall config required");
-                string strLabOctet;                                                                 // Second octet of lab IP addresses indicating the location of the lab
-                string strINetNAT;                                                                  // Public IP advertised to Internet from the Lab to accept static NAT requests
-                string strLabVpnIP;                                                                 // Public IP advertised to Internet from the Lab for VPN Tunnels
-                string strLabPrefix;                                                                // /48 from the provider used for VMs in the lab
-                string strASN;                                                                      // ASN for On-premises Lab
-                if (tenant.Lab == "ASH")
-                {
-                    strLabOctet = "2";
-                    strINetNAT = "66.198.12.125";
-                    strLabVpnIP = "66.198.12.124";
-                    strLabPrefix = "2001:5a0:3c06:";
-                    strASN = "65021";
-                }
-                else
-                {
-                    strLabOctet = "1";
-                    strINetNAT = "63.243.229.125";
-                    strLabVpnIP = "63.243.229.124";
-                    strASN = "65020";
-                    strLabPrefix = "2001:5a0:4406:";
-                }
+                var lab = GetLabConstants(tenant.Lab);
+                string strLabOctet = lab.Octet;
+                string strINetNAT = lab.INetNAT;
+                string strLabVpnIP = lab.VpnIP;
+                string strLabPrefix = lab.IPv6Prefix;
+                string strASN = lab.Asn;
 
-                string strREth1IntIP = "192.168." + tenant.TenantId + "." + "1";                    // IP of REth 1 Interface facing Router 1
-                string strREth1NIP = "192.168." + tenant.TenantId + "." + "0";                      // IP of REth 1 Neighbor (Router 1)
-                string strREth1IntIPv6 = "fd:2:" + strLabOctet + ":" + tenant.TenantId + "FF::1";   // IPv6 of REth 1 Interface facing Router 1
-                string strREth1NIPv6 = "fd:2:" + strLabOctet + ":" + tenant.TenantId + "FF::";      // IPv6 of REth 1 Neighbor (Router 1)
-                string strREth2IntIP = "192.168." + tenant.TenantId + "." + "3";                    // IP of REth 2 Interface facing Router 1
-                string strREth2NIP = "192.168." + tenant.TenantId + "." + "2";                      // IP of REth 2 Neighbor (Router 1)
-                string strREth2IntIPv6 = "fd:2:" + strLabOctet + ":" + tenant.TenantId + "FF::3";   // IPv6 of REth 2 Interface facing Router 1
-                string strREth2NIPv6 = "fd:2:" + strLabOctet + ":" + tenant.TenantId + "FF::2";     // IPv6 of REth 2 Neighbor (Router 1)
-                string strREth3IntIP = "10." + strLabOctet + "." + tenant.TenantId + ".1";          // IP of REth 3 Interface facing both switches, default gateway for Lab VMs
-                string strREth3IntIPv6 = strLabPrefix + tenant.TenantId + "::1";                    // IPv6 of REth 3 Interface facing both switches, default gateway for Lab VMs
+                string strREth1IntIP = $"192.168.{tenant.TenantId}.1";                    // IP of REth 1 Interface facing Router 1
+                string strREth1NIP = $"192.168.{tenant.TenantId}.0";                      // IP of REth 1 Neighbor (Router 1)
+                string strREth1IntIPv6 = $"fd:2:{strLabOctet}:{tenant.TenantId}FF::1";   // IPv6 of REth 1 Interface facing Router 1
+                string strREth1NIPv6 = $"fd:2:{strLabOctet}:{tenant.TenantId}FF::";      // IPv6 of REth 1 Neighbor (Router 1)
+                string strREth2IntIP = $"192.168.{tenant.TenantId}.3";                    // IP of REth 2 Interface facing Router 1
+                string strREth2NIP = $"192.168.{tenant.TenantId}.2";                      // IP of REth 2 Neighbor (Router 1)
+                string strREth2IntIPv6 = $"fd:2:{strLabOctet}:{tenant.TenantId}FF::3";   // IPv6 of REth 2 Interface facing Router 1
+                string strREth2NIPv6 = $"fd:2:{strLabOctet}:{tenant.TenantId}FF::2";     // IPv6 of REth 2 Neighbor (Router 1)
+                string strREth3IntIP = $"10.{strLabOctet}.{tenant.TenantId}.1";          // IP of REth 3 Interface facing both switches, default gateway for Lab VMs
+                string strREth3IntIPv6 = $"{strLabPrefix}{tenant.TenantId}::1";                    // IPv6 of REth 3 Interface facing both switches, default gateway for Lab VMs
                 string strAzASN = "65515";                                                          // ASN for Azure
 
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Pulling Azure Region data from SQL");
@@ -963,49 +969,23 @@ public class ConfigGenerator
                 string strVpnBgpSecNIP;                                                             // Private IP BGP Neighbor in the Azure for secondary BGP session
                 if (HasVPNAA && HasERGateway)
                 {
-                    strVpnBgpPriNIP = "10." + region.Ipv4 + "." + tenant.TenantId + ".142";
-                    strVpnBgpSecNIP = "10." + region.Ipv4 + "." + tenant.TenantId + ".143";
+                    strVpnBgpPriNIP = $"10.{region.Ipv4}.{tenant.TenantId}.142";
+                    strVpnBgpSecNIP = $"10.{region.Ipv4}.{tenant.TenantId}.143";
                 }
                 else if (HasVPNAA)
                 {
-                    strVpnBgpPriNIP = "10." + region.Ipv4 + "." + tenant.TenantId + ".132";
-                    strVpnBgpSecNIP = "10." + region.Ipv4 + "." + tenant.TenantId + ".133";
+                    strVpnBgpPriNIP = $"10.{region.Ipv4}.{tenant.TenantId}.132";
+                    strVpnBgpSecNIP = $"10.{region.Ipv4}.{tenant.TenantId}.133";
                 }
                 else
                 {
-                    strVpnBgpPriNIP = "10." + region.Ipv4 + "." + tenant.TenantId + ".254";
+                    strVpnBgpPriNIP = $"10.{region.Ipv4}.{tenant.TenantId}.254";
                     strVpnBgpSecNIP = "";
                 }
-                string strLabVpnBgpIP = "192.168." + tenant.TenantId + ".88";                       // Private IP local BGP endpoint for both tunnels to Azure
+                string strLabVpnBgpIP = $"192.168.{tenant.TenantId}.88";
                 string strERNATIP = tenant.Msftadv;                                                 // Public IP advertised to 8075 via ER Microsoft peering
 
-                string strVPNEndPoint;
-                if (tenant.VpnendPoint != null)
-                {
-                    if (tenant.VpnendPoint == "TBD,N/A" || tenant.VpnendPoint == "Active-Passive")
-                    {
-                        if (tenant.Vpnconfig == "Active-Active")
-                        {
-                            strVPNEndPoint = "TBD,TBD";
-                        }
-                        else
-                        {
-                            strVPNEndPoint = "TBD,N/A";
-                        }
-                    }
-                    else
-                    {
-                        strVPNEndPoint = tenant.VpnendPoint;
-                    }
-                }
-                else if (tenant.Vpnconfig == "Active-Active")
-                {
-                    strVPNEndPoint = "TBD,TBD";
-                }
-                else
-                {
-                    strVPNEndPoint = "TBD,N/A";
-                }
+                string strVPNEndPoint = ResolveVpnEndPoint(tenant);
 
                 // Add banner
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Starting Firewall Config");
@@ -1014,52 +994,52 @@ public class ConfigGenerator
 
                 // Routing Options
                 strDB += "# Define Routing Options\r\n" +
-                         "set routing-options rib-groups to-Cust" + tenant.TenantId + "-instance import-rib inet.0\r\n" +
-                         "set routing-options rib-groups to-Cust" + tenant.TenantId + "-instance import-rib Cust" + tenant.TenantId + ".inet.0\r\n" +
-                         "set routing-options rib-groups to-Cust" + tenant.TenantId + "-instance-v6 import-rib inet6.0\r\n" +
-                         "set routing-options rib-groups to-Cust" + tenant.TenantId + "-instance-v6 import-rib Cust" + tenant.TenantId + ".inet6.0\r\n" +
-                         "set routing-options rib-groups import-internet-routes import-rib Cust" + tenant.TenantId + ".inet.0\r\n" +
-                         "set routing-options rib-groups import-internet-routes-v6 import-rib Cust" + tenant.TenantId + ".inet6.0\r\n\r\n";
-               _strDelete += "delete routing-options rib-groups to-Cust" + tenant.TenantId + "-instance\r\n" +
-                             "delete routing-options rib-groups import-internet-routes import-rib Cust" + tenant.TenantId + ".inet.0\r\n" +
-                             "delete routing-options rib-groups to-Cust" + tenant.TenantId + "-instance-v6\r\n" +
-                             "delete routing-options rib-groups import-internet-routes-v6 import-rib Cust" + tenant.TenantId + ".inet6.0\r\n";
+                         $"set routing-options rib-groups to-Cust{tenant.TenantId}-instance import-rib inet.0\r\n" +
+                         $"set routing-options rib-groups to-Cust{tenant.TenantId}-instance import-rib Cust{tenant.TenantId}.inet.0\r\n" +
+                         $"set routing-options rib-groups to-Cust{tenant.TenantId}-instance-v6 import-rib inet6.0\r\n" +
+                         $"set routing-options rib-groups to-Cust{tenant.TenantId}-instance-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n" +
+                         $"set routing-options rib-groups import-internet-routes import-rib Cust{tenant.TenantId}.inet.0\r\n" +
+                         $"set routing-options rib-groups import-internet-routes-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n\r\n";
+               _strDelete += $"delete routing-options rib-groups to-Cust{tenant.TenantId}-instance\r\n" +
+                             $"delete routing-options rib-groups import-internet-routes import-rib Cust{tenant.TenantId}.inet.0\r\n" +
+                             $"delete routing-options rib-groups to-Cust{tenant.TenantId}-instance-v6\r\n" +
+                             $"delete routing-options rib-groups import-internet-routes-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n";
 
                 // Interfaces
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting interfaces");
                 strDB += "# Define Interfaces\r\n" +
-                         "set interfaces reth3 unit " + tenant.TenantId + " vlan-id " + tenant.TenantId + "\r\n" +
-                         "set interfaces reth3 unit " + tenant.TenantId + " family inet address " + strREth3IntIP + "/25\r\n" +
-                         "set interfaces reth3 unit " + tenant.TenantId + " family inet6 address " + strREth3IntIPv6 + "/64\r\n";
-               _strDelete += "delete interfaces reth3 unit " + tenant.TenantId + "\r\n";
+                         $"set interfaces reth3 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
+                         $"set interfaces reth3 unit {tenant.TenantId} family inet address {strREth3IntIP}/25\r\n" +
+                         $"set interfaces reth3 unit {tenant.TenantId} family inet6 address {strREth3IntIPv6}/64\r\n";
+               _strDelete += $"delete interfaces reth3 unit {tenant.TenantId}\r\n";
 
                 if (HasPrivate || HasMicrosoft)
                 {
-                    strDB += "set interfaces reth1 unit " + tenant.TenantId + " vlan-id " + tenant.TenantId + "\r\n" +
-                             "set interfaces reth1 unit " + tenant.TenantId + " family inet address " + strREth1IntIP + "/31\r\n" +
-                             (HasIPv6 ? "set interfaces reth1 unit " + tenant.TenantId + " family inet6 address " + strREth1IntIPv6 + "/127\r\n" : "") +
-                             "set interfaces reth2 unit " + tenant.TenantId + " vlan-id " + tenant.TenantId + "\r\n" +
-                             "set interfaces reth2 unit " + tenant.TenantId + " family inet address " + strREth2IntIP + "/31\r\n" +
-                             (HasIPv6 ? "set interfaces reth2 unit " + tenant.TenantId + " family inet6 address " + strREth2IntIPv6 + "/127\r\n" : "");
-                   _strDelete += "delete interfaces reth1 unit " + tenant.TenantId + "\r\n" +
-                                 "delete interfaces reth2 unit " + tenant.TenantId + "\r\n";
+                    strDB += $"set interfaces reth1 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
+                             $"set interfaces reth1 unit {tenant.TenantId} family inet address {strREth1IntIP}/31\r\n" +
+                             (HasIPv6 ? $"set interfaces reth1 unit {tenant.TenantId} family inet6 address {strREth1IntIPv6}/127\r\n" : "") +
+                             $"set interfaces reth2 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
+                             $"set interfaces reth2 unit {tenant.TenantId} family inet address {strREth2IntIP}/31\r\n" +
+                             (HasIPv6 ? $"set interfaces reth2 unit {tenant.TenantId} family inet6 address {strREth2IntIPv6}/127\r\n" : "");
+                   _strDelete += $"delete interfaces reth1 unit {tenant.TenantId}\r\n" +
+                                 $"delete interfaces reth2 unit {tenant.TenantId}\r\n";
                 }
 
                 if (HasVPNGateway)
                 {
-                    strDB += "set interfaces lo0 unit " + tenant.TenantId + " family inet address " + strLabVpnBgpIP + "/32\r\n" +
-                             "set interfaces st0 unit " + tenant.TenantId + "8 family inet mtu 1436\r\n" +
-                             "set interfaces st0 unit " + tenant.TenantId + "8 family inet address 169.254." + tenant.TenantId + ".1/32\r\n";
-                   _strDelete += "delete interfaces lo0 unit " + tenant.TenantId + "\r\n" +
-                                 "delete interfaces st0 unit " + tenant.TenantId + "8\r\n";
+                    strDB += $"set interfaces lo0 unit {tenant.TenantId} family inet address {strLabVpnBgpIP}/32\r\n" +
+                             $"set interfaces st0 unit {tenant.TenantId}8 family inet mtu 1436\r\n" +
+                             $"set interfaces st0 unit {tenant.TenantId}8 family inet address 169.254.{tenant.TenantId}.1/32\r\n";
+                   _strDelete += $"delete interfaces lo0 unit {tenant.TenantId}\r\n" +
+                                 $"delete interfaces st0 unit {tenant.TenantId}8\r\n";
 
                 }
 
                 if (HasVPNGateway && HasVPNAA)
                 {
-                    strDB += "set interfaces st0 unit " + tenant.TenantId + "9 family inet mtu 1436\r\n" +
-                             "set interfaces st0 unit " + tenant.TenantId + "9 family inet address 169.254." + tenant.TenantId + ".2/32\r\n";
-                   _strDelete += "delete interfaces st0 unit " + tenant.TenantId + "9\r\n";
+                    strDB += $"set interfaces st0 unit {tenant.TenantId}9 family inet mtu 1436\r\n" +
+                             $"set interfaces st0 unit {tenant.TenantId}9 family inet address 169.254.{tenant.TenantId}.2/32\r\n";
+                   _strDelete += $"delete interfaces st0 unit {tenant.TenantId}9\r\n";
 
                 }
                 strDB += "\r\n";
@@ -1067,74 +1047,74 @@ public class ConfigGenerator
                 // Routing Instances
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting routing instances");
                 strDB += "# Define Routing Instances (VRFs)\r\n" +
-                         "set routing-instances Cust" + tenant.TenantId + " instance-type virtual-router\r\n" +
-                         "set routing-instances Cust" + tenant.TenantId + " interface reth3." + tenant.TenantId + "\r\n" +
-                         "set routing-instances Cust" + tenant.TenantId + " routing-options interface-routes rib-group inet to-Cust" + tenant.TenantId + "-instance\r\n" +
-                         "set routing-instances Cust" + tenant.TenantId + " routing-options interface-routes rib-group inet6 to-Cust" + tenant.TenantId + "-instance-v6\r\n" +
-                         "set routing-instances Cust" + tenant.TenantId + " routing-options instance-import import-internet-routes\r\n";
-               _strDelete += "delete routing-instances Cust" + tenant.TenantId + "\r\n";
+                         $"set routing-instances Cust{tenant.TenantId} instance-type virtual-router\r\n" +
+                         $"set routing-instances Cust{tenant.TenantId} interface reth3.{tenant.TenantId}\r\n" +
+                         $"set routing-instances Cust{tenant.TenantId} routing-options interface-routes rib-group inet to-Cust{tenant.TenantId}-instance\r\n" +
+                         $"set routing-instances Cust{tenant.TenantId} routing-options interface-routes rib-group inet6 to-Cust{tenant.TenantId}-instance-v6\r\n" +
+                         $"set routing-instances Cust{tenant.TenantId} routing-options instance-import import-internet-routes\r\n";
+               _strDelete += $"delete routing-instances Cust{tenant.TenantId}\r\n";
 
 
                 if (HasPrivate || HasMicrosoft)
                 {
-                    strDB += "set routing-instances Cust" + tenant.TenantId + " interface reth1." + tenant.TenantId + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " interface reth2." + tenant.TenantId + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp type internal\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp export Cust" + tenant.TenantId + "-onprem\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp multipath\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp neighbor " + strREth1NIP + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp neighbor " + strREth2NIP + "\r\n";
+                    strDB += $"set routing-instances Cust{tenant.TenantId} interface reth1.{tenant.TenantId}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} interface reth2.{tenant.TenantId}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp type internal\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp export Cust{tenant.TenantId}-onprem\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp multipath\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp neighbor {strREth1NIP}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp neighbor {strREth2NIP}\r\n";
                     if (HasIPv6)
                     {
-                        strDB += "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 type internal\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 export Cust" + tenant.TenantId + "-onprem\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 family inet6 unicast\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 multipath\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 neighbor " + strREth1NIPv6 + "\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 neighbor " + strREth2NIPv6 + "\r\n";
+                        strDB += $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 type internal\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 export Cust{tenant.TenantId}-onprem\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 family inet6 unicast\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 multipath\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 neighbor {strREth1NIPv6}\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 neighbor {strREth2NIPv6}\r\n";
                     }
                 }
 
                 if (HasMicrosoft)
                 {
-                    strDB += "set routing-instances Cust" + tenant.TenantId + " routing-options static route " + strERNATIP + " discard\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp export Cust" + tenant.TenantId + "-nat\r\n";
+                    strDB += $"set routing-instances Cust{tenant.TenantId} routing-options static route {strERNATIP} discard\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp export Cust{tenant.TenantId}-nat\r\n";
                 }
 
                 if (HasVPNGateway)
                 {
-                    strDB += "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp multihop\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp export Cust" + tenant.TenantId + "-onprem\r\n" +
-                             "#set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp export ibgp-outbound\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp peer-as " + strAzASN + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp local-as " + strASN + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp multipath\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " interface lo0." + tenant.TenantId + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " interface st0." + tenant.TenantId + "8\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp neighbor " + strVpnBgpPriNIP + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " routing-options static route " + strVpnBgpPriNIP + "/32 next-hop st0." + tenant.TenantId + "8\r\n";
+                    strDB += $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp multihop\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp export Cust{tenant.TenantId}-onprem\r\n" +
+                             $"#set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp export ibgp-outbound\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp peer-as {strAzASN}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp local-as {strASN}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp multipath\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} interface lo0.{tenant.TenantId}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} interface st0.{tenant.TenantId}8\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp neighbor {strVpnBgpPriNIP}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} routing-options static route {strVpnBgpPriNIP}/32 next-hop st0.{tenant.TenantId}8\r\n";
                 }
 
                 if (HasVPNGateway && HasVPNAA)
                 {
-                    strDB += "set routing-instances Cust" + tenant.TenantId + " interface st0." + tenant.TenantId + "9\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp neighbor " + strVpnBgpSecNIP + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " routing-options static route " + strVpnBgpSecNIP + "/32 next-hop st0." + tenant.TenantId + "9\r\n";
+                    strDB += $"set routing-instances Cust{tenant.TenantId} interface st0.{tenant.TenantId}9\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp neighbor {strVpnBgpSecNIP}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} routing-options static route {strVpnBgpSecNIP}/32 next-hop st0.{tenant.TenantId}9\r\n";
                 }
                 strDB += "\r\n";
 
                 // Policy Options
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting policy options");
                 strDB += "# Define Policy Options\r\n" +
-                         "set policy-options policy-statement Cust" + tenant.TenantId + "-onprem term pvt from interface reth3." + tenant.TenantId + "\r\n" +
-                         "set policy-options policy-statement Cust" + tenant.TenantId + "-onprem term pvt then accept\r\n";
-               _strDelete += "delete policy-options policy-statement Cust" + tenant.TenantId + "-onprem\r\n";
+                         $"set policy-options policy-statement Cust{tenant.TenantId}-onprem term pvt from interface reth3.{tenant.TenantId}\r\n" +
+                         $"set policy-options policy-statement Cust{tenant.TenantId}-onprem term pvt then accept\r\n";
+               _strDelete += $"delete policy-options policy-statement Cust{tenant.TenantId}-onprem\r\n";
 
                 if (HasMicrosoft)
                 {
-                    strDB += "set policy-options policy-statement Cust" + tenant.TenantId + "-nat term msft-peering from route-filter " + strERNATIP + " exact\r\n" +
-                             "set policy-options policy-statement Cust" + tenant.TenantId + "-nat term msft-peering then accept\r\n";
-                   _strDelete += "delete policy-options policy-statement Cust" + tenant.TenantId + "-nat\r\n";
+                    strDB += $"set policy-options policy-statement Cust{tenant.TenantId}-nat term msft-peering from route-filter {strERNATIP} exact\r\n" +
+                             $"set policy-options policy-statement Cust{tenant.TenantId}-nat term msft-peering then accept\r\n";
+                   _strDelete += $"delete policy-options policy-statement Cust{tenant.TenantId}-nat\r\n";
 
                 }
                 strDB += "\r\n";
@@ -1144,96 +1124,96 @@ public class ConfigGenerator
                 {
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting crypto gateway and VPN");
                     strDB += "# Set Gateway\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 ike-policy azure_ike_policy\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 address " + strVPNEndPoint.Split(',')[0] + "\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 dead-peer-detection interval 10\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 dead-peer-detection threshold 5\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 no-nat-traversal\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 local-identity inet " + strLabVpnIP + "\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 external-interface lo0.7\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_1 version v2-only\r\n\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 ike-policy azure_ike_policy\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 address {strVPNEndPoint.Split(',')[0]}\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 dead-peer-detection interval 10\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 dead-peer-detection threshold 5\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 no-nat-traversal\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 local-identity inet {strLabVpnIP}\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 external-interface lo0.7\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_1 version v2-only\r\n\r\n" +
                              "# Set VPN\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_1 bind-interface st0." + tenant.TenantId + "8\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_1 ike gateway gw_Cust" + tenant.TenantId + "_1\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_1 ike ipsec-policy azure_ipsec_policy\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_1 establish-tunnels immediately\r\n\r\n";
-                   _strDelete += "delete security ike gateway gw_Cust" + tenant.TenantId + "_1\r\n" +
-                                 "delete security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_1\r\n";
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 bind-interface st0.{tenant.TenantId}8\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 ike gateway gw_Cust{tenant.TenantId}_1\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 ike ipsec-policy azure_ipsec_policy\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 establish-tunnels immediately\r\n\r\n";
+                   _strDelete += $"delete security ike gateway gw_Cust{tenant.TenantId}_1\r\n" +
+                                 $"delete security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1\r\n";
                 }
 
                 if (HasVPNGateway && HasVPNAA)
                 {
                     strDB += "# Active-Active Gateway and VPN\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 ike-policy azure_ike_policy\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 address " + strVPNEndPoint.Split(',')[1] + "\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 dead-peer-detection interval 10\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 dead-peer-detection threshold 5\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 no-nat-traversal\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 local-identity inet " + strLabVpnIP + "\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 external-interface lo0.7\r\n" +
-                             "set security ike gateway gw_Cust" + tenant.TenantId + "_2 version v2-only\r\n\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_2 bind-interface st0." + tenant.TenantId + "9\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_2 ike gateway gw_Cust" + tenant.TenantId + "_2\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_2 ike ipsec-policy azure_ipsec_policy\r\n" +
-                             "set security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_2 establish-tunnels immediately\r\n";
-                   _strDelete += "delete security ike gateway gw_Cust" + tenant.TenantId + "_2\r\n" +
-                                 "delete security ipsec vpn vpn_Azure_Cust" + tenant.TenantId + "_2\r\n";
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 ike-policy azure_ike_policy\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 address {strVPNEndPoint.Split(',')[1]}\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 dead-peer-detection interval 10\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 dead-peer-detection threshold 5\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 no-nat-traversal\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 local-identity inet {strLabVpnIP}\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 external-interface lo0.7\r\n" +
+                             $"set security ike gateway gw_Cust{tenant.TenantId}_2 version v2-only\r\n\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 bind-interface st0.{tenant.TenantId}9\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 ike gateway gw_Cust{tenant.TenantId}_2\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 ike ipsec-policy azure_ipsec_policy\r\n" +
+                             $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 establish-tunnels immediately\r\n";
+                   _strDelete += $"delete security ike gateway gw_Cust{tenant.TenantId}_2\r\n" +
+                                 $"delete security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2\r\n";
                 }
                 if (HasVPNGateway) { strDB += "\r\n"; }
 
                 // Security Zones
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting security zones");
                 strDB += "# Define Security Zones\r\n" +
-                         "set security zones security-zone Cust" + tenant.TenantId + " host-inbound-traffic system-services ping\r\n" +
-                         "set security zones security-zone Cust" + tenant.TenantId + " host-inbound-traffic system-services traceroute\r\n" +
-                         "set security zones security-zone Cust" + tenant.TenantId + " host-inbound-traffic protocols bgp\r\n" +
-                         "set security zones security-zone Cust" + tenant.TenantId + " interfaces reth3." + tenant.TenantId + "\r\n";
-               _strDelete += "delete security zones security-zone Cust" + tenant.TenantId + "\r\n";
+                         $"set security zones security-zone Cust{tenant.TenantId} host-inbound-traffic system-services ping\r\n" +
+                         $"set security zones security-zone Cust{tenant.TenantId} host-inbound-traffic system-services traceroute\r\n" +
+                         $"set security zones security-zone Cust{tenant.TenantId} host-inbound-traffic protocols bgp\r\n" +
+                         $"set security zones security-zone Cust{tenant.TenantId} interfaces reth3.{tenant.TenantId}\r\n";
+               _strDelete += $"delete security zones security-zone Cust{tenant.TenantId}\r\n";
 
                 if (HasPrivate || HasMicrosoft)
                 {
-                    strDB += "set security zones security-zone Cust" + tenant.TenantId + " interfaces reth1." + tenant.TenantId + "\r\n" +
-                             "set security zones security-zone Cust" + tenant.TenantId + " interfaces reth2." + tenant.TenantId + "\r\n";
+                    strDB += $"set security zones security-zone Cust{tenant.TenantId} interfaces reth1.{tenant.TenantId}\r\n" +
+                             $"set security zones security-zone Cust{tenant.TenantId} interfaces reth2.{tenant.TenantId}\r\n";
                 }
 
                 if (HasVPNGateway)
                 {
-                    strDB += "set security zones security-zone Cust" + tenant.TenantId + " interfaces lo0." + tenant.TenantId + "\r\n" +
-                             "set security zones security-zone Cust" + tenant.TenantId + " interfaces st0." + tenant.TenantId + "8\r\n";
+                    strDB += $"set security zones security-zone Cust{tenant.TenantId} interfaces lo0.{tenant.TenantId}\r\n" +
+                             $"set security zones security-zone Cust{tenant.TenantId} interfaces st0.{tenant.TenantId}8\r\n";
                 }
 
                 if (HasVPNGateway && HasVPNAA)
                 {
-                    strDB += "set security zones security-zone Cust" + tenant.TenantId + " interfaces st0." + tenant.TenantId + "9\r\n";
+                    strDB += $"set security zones security-zone Cust{tenant.TenantId} interfaces st0.{tenant.TenantId}9\r\n";
                 }
                 strDB += "\r\n";
 
                 // Security NAT Source
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting source NATs");
                 strDB += "# Define Source NAT rules\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_InternetNAT from zone Cust" + tenant.TenantId + "\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_InternetNAT to zone internet\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_InternetNAT rule Internet" + tenant.TenantId + "-NAT match source-address 0.0.0.0/0\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_InternetNAT rule Internet" + tenant.TenantId + "-NAT then source-nat pool Internet-Out\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_ER from zone Cust" + tenant.TenantId + "\r\n" +
-                         "set security nat source rule-set Cust" + tenant.TenantId + "_ER to zone Cust" + tenant.TenantId + "\r\n";
-               _strDelete += "delete security nat source rule-set Cust" + tenant.TenantId + "_InternetNAT\r\n" +
-                             "delete security nat source rule-set Cust" + tenant.TenantId + "_ER\r\n";
+                         $"set security nat source rule-set Cust{tenant.TenantId}_InternetNAT from zone Cust{tenant.TenantId}\r\n" +
+                         $"set security nat source rule-set Cust{tenant.TenantId}_InternetNAT to zone internet\r\n" +
+                         $"set security nat source rule-set Cust{tenant.TenantId}_InternetNAT rule Internet{tenant.TenantId}-NAT match source-address 0.0.0.0/0\r\n" +
+                         $"set security nat source rule-set Cust{tenant.TenantId}_InternetNAT rule Internet{tenant.TenantId}-NAT then source-nat pool Internet-Out\r\n" +
+                         $"set security nat source rule-set Cust{tenant.TenantId}_ER from zone Cust{tenant.TenantId}\r\n" +
+                         $"set security nat source rule-set Cust{tenant.TenantId}_ER to zone Cust{tenant.TenantId}\r\n";
+               _strDelete += $"delete security nat source rule-set Cust{tenant.TenantId}_InternetNAT\r\n" +
+                             $"delete security nat source rule-set Cust{tenant.TenantId}_ER\r\n";
 
                 if (HasPrivate || HasVPNGateway)
                 {
-                    strDB += "set security nat source rule-set Cust" + tenant.TenantId + "_ER rule Cust" + tenant.TenantId + "_No_NAT match destination-address-name vnet_add_pvt\r\n" +
-                             "set security nat source rule-set Cust" + tenant.TenantId + "_ER rule Cust" + tenant.TenantId + "_No_NAT match application any\r\n" +
-                             "set security nat source rule-set Cust" + tenant.TenantId + "_ER rule Cust" + tenant.TenantId + "_No_NAT then source-nat off\r\n";
+                    strDB += $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_No_NAT match destination-address-name vnet_add_pvt\r\n" +
+                             $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_No_NAT match application any\r\n" +
+                             $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_No_NAT then source-nat off\r\n";
                 }
 
                 if (HasMicrosoft)
                 {
-                    strDB += "set security nat source pool Cust" + tenant.TenantId + "_ToMSFT address " + strERNATIP + "\r\n" +
-                             "set security nat source rule-set Cust" + tenant.TenantId + "_ER rule Cust" + tenant.TenantId + "_NAT match destination-address 0.0.0.0/0\r\n" +
-                             "set security nat source rule-set Cust" + tenant.TenantId + "_ER rule Cust" + tenant.TenantId + "_NAT then source-nat pool Cust" + tenant.TenantId + "_ToMSFT\r\n";
-                   _strDelete += "delete security nat source pool Cust" + tenant.TenantId + "_ToMSFT\r\n" +
-                                 "delete security nat source rule-set Cust" + tenant.TenantId + "_ER\r\n";
+                    strDB += $"set security nat source pool Cust{tenant.TenantId}_ToMSFT address {strERNATIP}\r\n" +
+                             $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT match destination-address 0.0.0.0/0\r\n" +
+                             $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT then source-nat pool Cust{tenant.TenantId}_ToMSFT\r\n";
+                   _strDelete += $"delete security nat source pool Cust{tenant.TenantId}_ToMSFT\r\n" +
+                                 $"delete security nat source rule-set Cust{tenant.TenantId}_ER\r\n";
                 }
                 strDB += "\r\n";
 
@@ -1243,24 +1223,24 @@ public class ConfigGenerator
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting static NATs");
                     int intVMIP = 10;                                                               // Starting third octet for IP of the NAT VMs
                     strDB += "# Define Static NATs\r\n";
-                    for (int i = 1; i <= 4; i++)
+                    for (int i = 0; i < labVms.Length; i++)
                     {
-                        if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() != "None")
+                        if (labVms[i] != "None")
                         {
                             // v4 Inbound NATs
-                            strDB += "set security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + " match destination-address " + strINetNAT + "\r\n" +
-                                     "set security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + " match destination-port " + tenant.TenantId + intVMIP + "\r\n" +
-                                     "set security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + " then static-nat prefix 10." + strLabOctet + "." + tenant.TenantId + "." + intVMIP + "/32\r\n";
+                            strDB += $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} match destination-address {strINetNAT}\r\n" +
+                                     $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} match destination-port {tenant.TenantId}{intVMIP}\r\n" +
+                                     $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} then static-nat prefix 10.{strLabOctet}.{tenant.TenantId}.{intVMIP}/32\r\n";
 
-                            if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "Windows")
+                            if (labVms[i] == "Windows")
                             {
-                                strDB += "set security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + " then static-nat prefix mapped-port 3389\r\n";
+                                strDB += $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} then static-nat prefix mapped-port 3389\r\n";
                             }
                             else
                             {
-                                strDB += "set security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + " then static-nat prefix mapped-port 22\r\n";
+                                strDB += $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} then static-nat prefix mapped-port 22\r\n";
                             }
-                           _strDelete += "delete security nat static rule-set incoming-cust-nat rule Cust" + tenant.TenantId + "_" + intVMIP + "\r\n";
+                           _strDelete += $"delete security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP}\r\n";
 
                             // v6 Inbound NATs
                             //if (HasIPv6)
@@ -1290,22 +1270,22 @@ public class ConfigGenerator
                 // Security Policies (C to C, C to I, I to C)
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting security policies");
                 strDB += "# Define Security Zone policies\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone Cust" + tenant.TenantId + " policy allow-intrazone match source-address any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone Cust" + tenant.TenantId + " policy allow-intrazone match destination-address any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone Cust" + tenant.TenantId + " policy allow-intrazone match application any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone Cust" + tenant.TenantId + " policy allow-intrazone then permit\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone internet policy allow-outbound match source-address any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone internet policy allow-outbound match destination-address any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone internet policy allow-outbound match application any\r\n" +
-                         "set security policies from-zone Cust" + tenant.TenantId + " to-zone internet policy allow-outbound then permit\r\n" +
-                         "set security policies from-zone internet to-zone Cust" + tenant.TenantId + " policy allow-inbound-mgmt match source-address any\r\n" +
-                         "set security policies from-zone internet to-zone Cust" + tenant.TenantId + " policy allow-inbound-mgmt match destination-address any\r\n" +
-                         "set security policies from-zone internet to-zone Cust" + tenant.TenantId + " policy allow-inbound-mgmt match application junos-rdp\r\n" +
-                         "set security policies from-zone internet to-zone Cust" + tenant.TenantId + " policy allow-inbound-mgmt match application junos-ssh\r\n" +
-                         "set security policies from-zone internet to-zone Cust" + tenant.TenantId + " policy allow-inbound-mgmt then permit\r\n\r\n";
-               _strDelete += "delete security policies from-zone Cust" + tenant.TenantId + " to-zone Cust" + tenant.TenantId + "\r\n" +
-                             "delete security policies from-zone Cust" + tenant.TenantId + " to-zone internet\r\n" +
-                             "delete security policies from-zone internet to-zone Cust" + tenant.TenantId + "\r\n\r\n";
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId} policy allow-intrazone match source-address any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId} policy allow-intrazone match destination-address any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId} policy allow-intrazone match application any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId} policy allow-intrazone then permit\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone internet policy allow-outbound match source-address any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone internet policy allow-outbound match destination-address any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone internet policy allow-outbound match application any\r\n" +
+                         $"set security policies from-zone Cust{tenant.TenantId} to-zone internet policy allow-outbound then permit\r\n" +
+                         $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match source-address any\r\n" +
+                         $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match destination-address any\r\n" +
+                         $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match application junos-rdp\r\n" +
+                         $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match application junos-ssh\r\n" +
+                         $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt then permit\r\n\r\n";
+               _strDelete += $"delete security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId}\r\n" +
+                             $"delete security policies from-zone Cust{tenant.TenantId} to-zone internet\r\n" +
+                             $"delete security policies from-zone internet to-zone Cust{tenant.TenantId}\r\n\r\n";
             }
             else
             {
@@ -1336,7 +1316,8 @@ public class ConfigGenerator
             }
 
             string strUplinkInt;    // Interface name for the selected ER uplink
-            string strASN = (tenant.Lab == "SEA") ? "65020" : "65021"; ;          // Lab ASN
+            var lab = GetLabConstants(tenant.Lab);
+            string strASN = lab.Asn;
 
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
             bool HasVPNGateway = tenant.Vpngateway != "None";
@@ -1347,7 +1328,7 @@ public class ConfigGenerator
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Router config required");
                 // Add banner, set variables
-                string strThirdHextet = (tenant.Lab == "SEA") ? "1" : "2";                                                             // String indicating the IPv6 location hextet (SEA=1, ASH=2)
+                string strThirdHextet = lab.Octet;
                 string strOuterTag = (tenant.EruplinkPort == "ECX") ? tenant.TenantId.ToString() : "<<Get from ER circuit in Azure>>"; // String containing the outer tag of the ER QinQ tag
                 string strMSFTIntIP = "";    // Microsoft Peering Interface IPv4 Address (no mask or CIDR, just the IP)
                 string strMSFTNIP = "";      // Microsoft Peering Neighbor  IPv4 Address (no mask or CIDR, just the IP)
@@ -1362,14 +1343,14 @@ public class ConfigGenerator
                 if (IsPrimary)
                 {
                     strDB = "#######\r\n### Primary Router\r\n#######\r\n\r\n";
-                    strPvtIntIP = "192.168." + tenant.TenantId + "." + "17";
-                    strPvtNIP = "192.168." + tenant.TenantId + "." + "18";
-                    strPvtIntIPv6 = "fd:1:" + strThirdHextet + ":" + tenant.TenantId + "FF::1";
-                    strPvtNIPv6 = "fd:1:" + strThirdHextet + ":" + tenant.TenantId + "FF::2";
-                    strFWIntIP = "192.168." + tenant.TenantId + "." + "0";
-                    strFWNIP = "192.168." + tenant.TenantId + "." + "1";
-                    strFWIntIPv6 = "fd:2:" + strThirdHextet + ":" + tenant.TenantId + "FF::";
-                    strFWNIPv6 = "fd:2:" + strThirdHextet + ":" + tenant.TenantId + "FF::1";
+                    strPvtIntIP = $"192.168.{tenant.TenantId}.17";
+                    strPvtNIP = $"192.168.{tenant.TenantId}.18";
+                    strPvtIntIPv6 = $"fd:1:{strThirdHextet}:{tenant.TenantId}FF::1";
+                    strPvtNIPv6 = $"fd:1:{strThirdHextet}:{tenant.TenantId}FF::2";
+                    strFWIntIP = $"192.168.{tenant.TenantId}.0";
+                    strFWNIP = $"192.168.{tenant.TenantId}.1";
+                    strFWIntIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::";
+                    strFWNIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::1";
                     if (HasMicrosoft)
                     {
                         strMSFTIntIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 1);
@@ -1381,14 +1362,14 @@ public class ConfigGenerator
                 else
                 {
                     strDB = "#######\r\n### Secondary Router\r\n#######\r\n\r\n";
-                    strPvtIntIP = "192.168." + tenant.TenantId + "." + "21";
-                    strPvtNIP = "192.168." + tenant.TenantId + "." + "22";
-                    strPvtIntIPv6 = "fd:1:" + strThirdHextet + ":" + tenant.TenantId + "FF::5";
-                    strPvtNIPv6 = "fd:1:" + strThirdHextet + ":" + tenant.TenantId + "FF::6";
-                    strFWIntIP = "192.168." + tenant.TenantId + "." + "2";
-                    strFWNIP = "192.168." + tenant.TenantId + "." + "3";
-                    strFWIntIPv6 = "fd:2:" + strThirdHextet + ":" + tenant.TenantId + "FF::2";
-                    strFWNIPv6 = "fd:2:" + strThirdHextet + ":" + tenant.TenantId + "FF::3";
+                    strPvtIntIP = $"192.168.{tenant.TenantId}.21";
+                    strPvtNIP = $"192.168.{tenant.TenantId}.22";
+                    strPvtIntIPv6 = $"fd:1:{strThirdHextet}:{tenant.TenantId}FF::5";
+                    strPvtNIPv6 = $"fd:1:{strThirdHextet}:{tenant.TenantId}FF::6";
+                    strFWIntIP = $"192.168.{tenant.TenantId}.2";
+                    strFWNIP = $"192.168.{tenant.TenantId}.3";
+                    strFWIntIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::2";
+                    strFWNIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::3";
                     if (HasMicrosoft)
                     {
                         strMSFTIntIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 5);
@@ -1434,52 +1415,52 @@ public class ConfigGenerator
                     // Create VRF, Internal Interfaces, and Internal BGP
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting internal interfaces");
                     strDB += "# Define Internal Interfaces\r\n" +
-                             "set interfaces ae0 unit " + tenant.TenantId + " vlan-id " + tenant.TenantId + "\r\n" +
-                             "set interfaces ae0 unit " + tenant.TenantId + " family inet address " + strFWIntIP + "/31\r\n" +
-                             (HasIPv6 ? "set interfaces ae0 unit " + tenant.TenantId + " family inet6 address " + strFWIntIPv6 + "/127\r\n" : "") +
-                             "set routing-instances Cust" + tenant.TenantId + " description \"Customer " + tenant.TenantId + " VRF\"\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " instance-type virtual-router\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " interface ae0." + tenant.TenantId + "\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp type internal\r\n" +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp export nhs-vnet\r\n" +
-                             (HasVPNGateway ? "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp local-preference 150\r\n" : "") +
-                             "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp neighbor " + strFWNIP + "\r\n";
+                             $"set interfaces ae0 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
+                             $"set interfaces ae0 unit {tenant.TenantId} family inet address {strFWIntIP}/31\r\n" +
+                             (HasIPv6 ? $"set interfaces ae0 unit {tenant.TenantId} family inet6 address {strFWIntIPv6}/127\r\n" : "") +
+                             $"set routing-instances Cust{tenant.TenantId} description \"Customer {tenant.TenantId} VRF\"\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} instance-type virtual-router\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} interface ae0.{tenant.TenantId}\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp type internal\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp export nhs-vnet\r\n" +
+                             (HasVPNGateway ? $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp local-preference 150\r\n" : "") +
+                             $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp neighbor {strFWNIP}\r\n";
                     if (HasIPv6)
                     {
-                        strDB += "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 type internal\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 family inet6 unicast\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 export nhs-vnet\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ibgp6 neighbor " + strFWNIPv6 + "\r\n";
+                        strDB += $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 type internal\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 family inet6 unicast\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 export nhs-vnet\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp6 neighbor {strFWNIPv6}\r\n";
                     }
                     strDB += "\r\n";
 
-                   _strDelete += "delete interfaces ae0 unit " + tenant.TenantId + "\r\n" +
-                                 "delete routing-instances Cust" + tenant.TenantId + "\r\n";
+                   _strDelete += $"delete interfaces ae0 unit {tenant.TenantId}\r\n" +
+                                 $"delete routing-instances Cust{tenant.TenantId}\r\n";
 
                     // Add Private Peering Interface and BGP if needed
                     if (HasPrivate)
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Private Peering interfaces and BGP");
                         strDB += "# Private Peering Config\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0 description \"Customer " + tenant.TenantId + " Private Peering to Azure\"\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0 vlan-tags outer " + strOuterTag + "\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0 vlan-tags inner " + tenant.TenantId + "0\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0 family inet address " + strPvtIntIP + "/30\r\n" +
-                                 (HasIPv6 ? "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0 family inet6 address " + strPvtIntIPv6 + "/126\r\n" : "") +
-                                 "set routing-instances Cust" + tenant.TenantId + " interface " + strUplinkInt + "." + tenant.TenantId + "0\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp peer-as 12076\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp neighbor " + strPvtNIP + "\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp bfd-liveness-detection minimum-interval 300\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp bfd-liveness-detection multiplier 3" + "\r\n";
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 description \"Customer {tenant.TenantId} Private Peering to Azure\"\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 vlan-tags outer {strOuterTag}\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 vlan-tags inner {tenant.TenantId}0\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 family inet address {strPvtIntIP}/30\r\n" +
+                                 (HasIPv6 ? $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 family inet6 address {strPvtIntIPv6}/126\r\n" : "") +
+                                 $"set routing-instances Cust{tenant.TenantId} interface {strUplinkInt}.{tenant.TenantId}0\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp peer-as 12076\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp neighbor {strPvtNIP}\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection minimum-interval 300\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection multiplier 3\r\n";
                         if (HasIPv6)
                         {
-                            strDB += "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp6 peer-as 12076\r\n" +
-                                     "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp6 family inet6 unicast\r\n" +
-                                     "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp6 neighbor " + strPvtNIPv6 + "\r\n";
+                            strDB += $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp6 peer-as 12076\r\n" +
+                                     $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp6 family inet6 unicast\r\n" +
+                                     $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp6 neighbor {strPvtNIPv6}\r\n";
                         }
                         strDB += "\r\n";
 
-                       _strDelete += "delete interfaces " + strUplinkInt + " unit " + tenant.TenantId + "0\r\n";
+                       _strDelete += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}0\r\n";
                     }
 
                     // Add Microsoft Peering Interface and BGP if needed
@@ -1487,17 +1468,17 @@ public class ConfigGenerator
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Microsoft Peering interfaces and BGP");
                         strDB += "# Microsoft Peering Config\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "1 description \"Customer " + tenant.TenantId + " Microsoft Peering to Azure\"\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "1 vlan-tags outer " + strOuterTag + "\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "1 vlan-tags inner " + tenant.TenantId + "1\r\n" +
-                                 "set interfaces " + strUplinkInt + " unit " + tenant.TenantId + "1 family inet address " + strMSFTIntIP + "/30\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " interface " + strUplinkInt + "." + tenant.TenantId + "1\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp peer-as 12076\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp neighbor " + strMSFTNIP + "\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp bfd-liveness-detection minimum-interval 300\r\n" +
-                                 "set routing-instances Cust" + tenant.TenantId + " protocols bgp group ebgp bfd-liveness-detection multiplier 3\r\n\r\n";
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 description \"Customer {tenant.TenantId} Microsoft Peering to Azure\"\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 vlan-tags outer {strOuterTag}\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 vlan-tags inner {tenant.TenantId}1\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 family inet address {strMSFTIntIP}/30\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} interface {strUplinkInt}.{tenant.TenantId}1\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp peer-as 12076\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp neighbor {strMSFTNIP}\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection minimum-interval 300\r\n" +
+                                 $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection multiplier 3\r\n\r\n";
 
-                       _strDelete += "delete interfaces " + strUplinkInt + " unit " + tenant.TenantId + "1\r\n\r\n";
+                       _strDelete += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}1\r\n\r\n";
                     }
                 }
                 else
@@ -1529,8 +1510,8 @@ public class ConfigGenerator
                     // Add VRF if needed
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting VRF");
                     strDB += "# Define VRF\r\n" +
-                             "vrf definition " + tenant.TenantId + "\r\n" +
-                             " rd " + strASN + ":" + tenant.TenantId + "\r\n" +
+                             $"vrf definition {tenant.TenantId}\r\n" +
+                             $" rd {strASN}:{tenant.TenantId}\r\n" +
                              " address-family ipv4\r\n" +
                              " address-family ipv6\r\n\r\n";
 
@@ -1539,16 +1520,16 @@ public class ConfigGenerator
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Private Peering interface");
                         strDB += "# Define Private ER Interface\r\n" +
-                                 "interface " + strUplinkInt + "." + tenant.TenantId + "0\r\n" +
-                                 " description Customer " + tenant.TenantId + " Private Peering to Azure\r\n" +
-                                 " encapsulation dot1Q " + strOuterTag + " second-dot1q " + tenant.TenantId + "0\r\n" +
-                                 " vrf forwarding " + tenant.TenantId + "\r\n" +
-                                 " ip address " + strPvtIntIP + " 255.255.255.252\r\n" +
-                                 (HasIPv6 ? " ipv6 address " + strPvtIntIPv6 + "/126\r\n" : "") +
+                                 $"interface {strUplinkInt}.{tenant.TenantId}0\r\n" +
+                                 $" description Customer {tenant.TenantId} Private Peering to Azure\r\n" +
+                                 $" encapsulation dot1Q {strOuterTag} second-dot1q {tenant.TenantId}0\r\n" +
+                                 $" vrf forwarding {tenant.TenantId}\r\n" +
+                                 $" ip address {strPvtIntIP} 255.255.255.252\r\n" +
+                                 (HasIPv6 ? $" ipv6 address {strPvtIntIPv6}/126\r\n" : "") +
                                  " bfd interval 300 min_rx 300 multiplier 3\r\n" +
                                  " no bfd echo\r\n" +
                                  " no shutdown\r\n\r\n";
-                       _strDelete += "no interface " + strUplinkInt + "." + tenant.TenantId + "0\r\n";
+                       _strDelete += $"no interface {strUplinkInt}.{tenant.TenantId}0\r\n";
                     }
 
                     // Add Microsoft Peering Interface if needed
@@ -1556,82 +1537,82 @@ public class ConfigGenerator
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Microsoft Peering interface");
                         strDB += "# Define Microsoft ER Interface\r\n" +
-                                 "interface " + strUplinkInt + "." + tenant.TenantId + "1\r\n" +
-                                 " description Customer " + tenant.TenantId + " Microsoft Peering to Azure\r\n" +
-                                 " encapsulation dot1Q " + strOuterTag + " second-dot1q " + tenant.TenantId + "1\r\n" +
-                                 " vrf forwarding " + tenant.TenantId + "\r\n" +
-                                 " ip address " + strMSFTIntIP + " 255.255.255.252\r\n" +
+                                 $"interface {strUplinkInt}.{tenant.TenantId}1\r\n" +
+                                 $" description Customer {tenant.TenantId} Microsoft Peering to Azure\r\n" +
+                                 $" encapsulation dot1Q {strOuterTag} second-dot1q {tenant.TenantId}1\r\n" +
+                                 $" vrf forwarding {tenant.TenantId}\r\n" +
+                                 $" ip address {strMSFTIntIP} 255.255.255.252\r\n" +
                                  " bfd interval 300 min_rx 300 multiplier 3\r\n" +
                                  " no bfd echo\r\n" +
                                  " no shutdown\r\n\r\n";
-                       _strDelete += "no interface " + strUplinkInt + "." + tenant.TenantId + "1\r\n";
+                       _strDelete += $"no interface {strUplinkInt}.{tenant.TenantId}1\r\n";
                     }
 
                     // Add Firewall Config
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting Firewall interface");
                     strDB += "# Define Interface to Firewall\r\n" +
-                             "interface Port-channel1." + tenant.TenantId + "\r\n" +
-                             " description Customer " + tenant.TenantId + " to Firewall\r\n" +
-                             " encapsulation dot1Q " + tenant.TenantId + "\r\n" +
-                             " vrf forwarding " + tenant.TenantId + "\r\n" +
-                             " ip address " + strFWIntIP + " 255.255.255.254\r\n" +
-                             (HasIPv6 ? " ipv6 address " + strFWIntIPv6 + "/127\r\n" : "") +
+                             $"interface Port-channel1.{tenant.TenantId}\r\n" +
+                             $" description Customer {tenant.TenantId} to Firewall\r\n" +
+                             $" encapsulation dot1Q {tenant.TenantId}\r\n" +
+                             $" vrf forwarding {tenant.TenantId}\r\n" +
+                             $" ip address {strFWIntIP} 255.255.255.254\r\n" +
+                             (HasIPv6 ? $" ipv6 address {strFWIntIPv6}/127\r\n" : "") +
                              " no shutdown\r\n\r\n";
-                   _strDelete += "no interface Port-channel1." + tenant.TenantId + "\r\n";
+                   _strDelete += $"no interface Port-channel1.{tenant.TenantId}\r\n";
 
                     // Add Route Map
                     if (HasVPNGateway)
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting VPN Route Map");
                         strDB += "# Define Route Map\r\n" +
-                                 "route-map Cust" + tenant.TenantId + " permit 10\r\n" +
+                                 $"route-map Cust{tenant.TenantId} permit 10\r\n" +
                                  "  set local-preference 150\r\n\r\n";
-                       _strDelete += "no route-map Cust" + tenant.TenantId + "\r\n";
+                       _strDelete += $"no route-map Cust{tenant.TenantId}\r\n";
                     }
 
                     // Add BGP
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting BGP");
                     strDB += "# Define BGP Address Family\r\n" +
-                             "router bgp " + strASN + "\r\n" +
-                             " address-family ipv4 vrf " + tenant.TenantId + "\r\n" +
-                             "  neighbor " + strFWNIP + " remote-as " + strASN + "\r\n" +
-                             "  neighbor " + strFWNIP + " activate\r\n" +
-                             "  neighbor " + strFWNIP + " next-hop-self\r\n" +
-                             (HasVPNGateway ? "  neighbor " + strFWNIP + " route-map Cust" + tenant.TenantId + " out\r\n" : "");
+                             $"router bgp {strASN}\r\n" +
+                             $" address-family ipv4 vrf {tenant.TenantId}\r\n" +
+                             $"  neighbor {strFWNIP} remote-as {strASN}\r\n" +
+                             $"  neighbor {strFWNIP} activate\r\n" +
+                             $"  neighbor {strFWNIP} next-hop-self\r\n" +
+                             (HasVPNGateway ? $"  neighbor {strFWNIP} route-map Cust{tenant.TenantId} out\r\n" : "");
 
                     if (HasPrivate)
                     {
-                        strDB += "  neighbor " + strPvtNIP + " remote-as 12076\r\n" +
-                                 "  neighbor " + strPvtNIP + " activate\r\n" +
-                                 "  neighbor " + strPvtNIP + " next-hop-self\r\n" +
-                                 "  neighbor " + strPvtNIP + " soft-reconfiguration inbound\r\n" +
-                                 (HasMicrosoft ? "  neighbor " + strPvtNIP + " route-map only-advertise-private out\r\n" : "");
+                        strDB += $"  neighbor {strPvtNIP} remote-as 12076\r\n" +
+                                 $"  neighbor {strPvtNIP} activate\r\n" +
+                                 $"  neighbor {strPvtNIP} next-hop-self\r\n" +
+                                 $"  neighbor {strPvtNIP} soft-reconfiguration inbound\r\n" +
+                                 (HasMicrosoft ? $"  neighbor {strPvtNIP} route-map only-advertise-private out\r\n" : "");
                     }
 
                     if (HasMicrosoft)
                     {
-                        strDB += "  neighbor " + strMSFTNIP + " remote-as 12076\r\n" +
-                                 "  neighbor " + strMSFTNIP + " activate\r\n" +
-                                 "  neighbor " + strMSFTNIP + " next-hop-self\r\n" +
-                                 "  neighbor " + strMSFTNIP + " soft-reconfiguration inbound\r\n";
+                        strDB += $"  neighbor {strMSFTNIP} remote-as 12076\r\n" +
+                                 $"  neighbor {strMSFTNIP} activate\r\n" +
+                                 $"  neighbor {strMSFTNIP} next-hop-self\r\n" +
+                                 $"  neighbor {strMSFTNIP} soft-reconfiguration inbound\r\n";
                     }
 
                     if (HasIPv6 && HasPrivate)
                     {
-                        strDB += " address-family ipv6 vrf " + tenant.TenantId + "\r\n" +
-                                 "  neighbor " + strFWNIPv6 + " remote-as " + strASN + "\r\n" +
-                                 "  neighbor " + strFWNIPv6 + " activate\r\n" +
-                                 "  neighbor " + strFWNIPv6 + " next-hop-self\r\n" +
-                                 "  neighbor " + strPvtNIPv6 + " remote-as 12076\r\n" +
-                                 "  neighbor " + strPvtNIPv6 + " activate\r\n" +
-                                 "  neighbor " + strPvtNIPv6 + " next-hop-self\r\n" +
-                                 "  neighbor " + strPvtNIPv6 + " soft-reconfiguration inbound\r\n";
+                        strDB += $" address-family ipv6 vrf {tenant.TenantId}\r\n" +
+                                 $"  neighbor {strFWNIPv6} remote-as {strASN}\r\n" +
+                                 $"  neighbor {strFWNIPv6} activate\r\n" +
+                                 $"  neighbor {strFWNIPv6} next-hop-self\r\n" +
+                                 $"  neighbor {strPvtNIPv6} remote-as 12076\r\n" +
+                                 $"  neighbor {strPvtNIPv6} activate\r\n" +
+                                 $"  neighbor {strPvtNIPv6} next-hop-self\r\n" +
+                                 $"  neighbor {strPvtNIPv6} soft-reconfiguration inbound\r\n";
                     }
 
                     strDB += " exit-address-family\r\n\r\n";
-                   _strDelete += "router bgp " + strASN + "\r\n" +
-                                 " no address-family ipv4 vrf " + tenant.TenantId + "\r\n" +
-                                 "no vrf definition " + tenant.TenantId + "\r\n\r\n";
+                   _strDelete += $"router bgp {strASN}\r\n" +
+                                 $" no address-family ipv4 vrf {tenant.TenantId}\r\n" +
+                                 $"no vrf definition {tenant.TenantId}\r\n\r\n";
                 }
                _strDelete += "\r\n";
             }
@@ -1672,11 +1653,8 @@ public class ConfigGenerator
                 strDeviceName = (IsPrimary) ? "ASH-NX9K-01" : "ASH-NX9K-02";
             }
 
-            bool HasLabVM = false;
-            for (int i = 1; i <= 4; i++)
-            {
-                if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "None") { HasLabVM = true; }
-            }
+            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            bool HasLabVM = labVms.Any(vm => vm != "None");
 
             // Add banner, set variables
             if (IsPrimary)
@@ -1695,9 +1673,9 @@ public class ConfigGenerator
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSwitchConfig", "Switch config required");
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSwitchConfig", "Starting Switch Config");
                 strDB += "# Define VLAN\r\n" +
-                         "vlan " + tenant.TenantId + "\r\n" +
-                         "  name Customer" + tenant.TenantId + "\r\n";
-               _strDelete += "no vlan " + tenant.TenantId + "\r\n\r\n";
+                         $"vlan {tenant.TenantId}\r\n" +
+                         $"  name Customer{tenant.TenantId}\r\n";
+               _strDelete += $"no vlan {tenant.TenantId}\r\n\r\n";
             }
             else
             {
@@ -1717,10 +1695,10 @@ public class ConfigGenerator
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateLabVMConfig", "Setting variables");
             // Set variables
             string strDB;
-            string strServer = tenant.Lab + "-ER-" + ((int)tenant.TenantId / 10).ToString("00");
+            string strServer = $"{tenant.Lab}-ER-{((int)tenant.TenantId / 10):00}";
 
             strDB = "# Lab VM Config\r\n" +
-                    "# Run this script in elevated PS on ***" + strServer + "***.\r\n\r\n" +
+                    $"# Run this script in elevated PS on ***{strServer}***.\r\n\r\n" +
                     "# The default subscription is ExpressRoute-Lab,\r\n" +
                     "# If the pathfinder subscription is needed add\r\n" +
                     "# -Subscription Pathfinder\r\n" +
@@ -1735,22 +1713,23 @@ public class ConfigGenerator
             else
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateLabVMConfig", "Creating Lab VM Instructions");
+                string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
                 int intVMCount = 0;
-                for (int i = 1; i <= 4; i++)
+                foreach (string vm in labVms)
                 {
-                    if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "Centos")
+                    if (vm == "Centos")
                     {
-                        strDB += "New-LabVM " + tenant.TenantId + " -OS CentOS\r\n";
+                        strDB += $"New-LabVM {tenant.TenantId} -OS CentOS\r\n";
                     }
-                    else if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "Ubuntu")
+                    else if (vm == "Ubuntu")
                     {
-                        strDB += "New-LabVM " + tenant.TenantId + " -OS Ubuntu\r\n";
+                        strDB += $"New-LabVM {tenant.TenantId} -OS Ubuntu\r\n";
                     }
-                    else if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() == "Windows")
+                    else if (vm == "Windows")
                     {
-                        strDB += "New-LabVM " + tenant.TenantId + "\r\n";
+                        strDB += $"New-LabVM {tenant.TenantId}\r\n";
                     }
-                    if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() != "None") { intVMCount++; }
+                    if (vm != "None") { intVMCount++; }
                 }
 
                 if (intVMCount == 0)
@@ -1764,8 +1743,8 @@ public class ConfigGenerator
                    _strDelete += "#######\r\n" +
                                  "### Remove Lab VMs\r\n" +
                                  "#######\r\n" +
-                                 "# Run this script in elevated PS on ***" + strServer + "***.\r\n" +
-                                 "Remove-LabVM " + tenant.TenantId + "\r\n\r\n\r\n";
+                                 $"# Run this script in elevated PS on ***{strServer}***.\r\n" +
+                                 $"Remove-LabVM {tenant.TenantId}\r\n\r\n\r\n";
                 }
             }
             bool results = await SaveToSql("LabVMPowerShell", tenant, strDB);
@@ -1785,23 +1764,18 @@ public class ConfigGenerator
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Pulling Ninja data from SQL");
             User ninja = _context.Users.Where(u => u.UserName.Contains(tenant.NinjaOwner)).FirstOrDefault();
             string strDB;
-            string strRGName = tenant.Lab + "-Cust" + tenant.TenantId;
+            string strRGName = $"{tenant.Lab}-Cust{tenant.TenantId}";
+            var lab = GetLabConstants(tenant.Lab);
             string strERLocation = (tenant.Lab == "SEA" ? "Seattle" : "Washington DC");
-            string strLabLocationOctect = (tenant.Lab == "SEA" ? "1" : "2");
-            string strLabVpnEP = (tenant.Lab == "SEA" ? "63.243.229.124" : "66.198.12.124");
-            string strLabPrefixv6 = (tenant.Lab == "SEA" ? "2001:5a0:4406:" : "2001:5a0:3c06:");
+            string strLabLocationOctect = lab.Octet;
+            string strLabVpnEP = lab.VpnIP;
+            string strLabPrefixv6 = lab.IPv6Prefix;
 
-            bool HasLabVM = false;
-            for (int i = 1; i <= 4; i++)
-            {
-                if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() != "None") { HasLabVM = true; }
-            }
+            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            bool HasLabVM = labVms.Any(vm => vm != "None");
 
-            bool HasAzureVM = false;
-            for (int i = 1; i <= 4; i++)
-            {
-                if (tenant.GetType().GetProperty("AzVm" + i.ToString()).GetValue(tenant).ToString() != "None") { HasAzureVM = true; }
-            }
+            string[] azVms = [tenant.AzVm1, tenant.AzVm2, tenant.AzVm3, tenant.AzVm4];
+            bool HasAzureVM = azVms.Any(vm => vm != "None");
 
             bool HasER = tenant.Ersku != "None";
             bool HasPrivate = (Boolean)tenant.PvtPeering;
@@ -1810,36 +1784,10 @@ public class ConfigGenerator
             bool HasVPNAA = tenant.Vpnconfig == "Active-Active";
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
 
-            string strERSpeed = (tenant.Erspeed < 1000 ? tenant.Erspeed + " Mbps" : (tenant.Erspeed / 1000) + " Gbps");
+            string strERSpeed = tenant.Erspeed < 1000 ? $"{tenant.Erspeed} Mbps" : $"{tenant.Erspeed / 1000} Gbps";
             string strERRouteFilter = (tenant.Msfttags == "" ? "None requested" : tenant.Msfttags);
 
-            string strVPNEndPoint;
-            if (tenant.VpnendPoint != null)
-            {
-                if (tenant.VpnendPoint == "TBD,N/A" || tenant.VpnendPoint == "Active-Passive")
-                {
-                    if (tenant.Vpnconfig == "Active-Active")
-                    {
-                        strVPNEndPoint = "TBD,TBD";
-                    }
-                    else
-                    {
-                        strVPNEndPoint = "TBD,N/A";
-                    }
-                }
-                else
-                {
-                    strVPNEndPoint = tenant.VpnendPoint;
-                }
-            }
-            else if (tenant.Vpnconfig == "Active-Active")
-            {
-                strVPNEndPoint = "TBD,TBD";
-            }
-            else
-            {
-                strVPNEndPoint = "TBD,N/A";
-            }
+            string strVPNEndPoint = ResolveVpnEndPoint(tenant);
 
             // Header
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Creating email header");
@@ -1883,7 +1831,7 @@ public class ConfigGenerator
                     "    <table width=780 style='text-align: justify'>\r\n" +
                     "        <tr>\r\n" +
                     "            <td>Congratulations, your PathLab environment is active and ready to go, however you must finish use of this environment by\r\n" +
-                    "                <b>" + tenant.ReturnDate.ToString("d") + "</b>, after that date your environment and all data therein will be removed with no backup or retention of data\r\n" +
+                    $"                <b>{tenant.ReturnDate.ToString("d")}</b>, after that date your environment and all data therein will be removed with no backup or retention of data\r\n" +
                     "                or config.</td>\r\n" +
                     "        </tr>\r\n" +
                     "        <tr>\r\n" +
@@ -1902,12 +1850,12 @@ public class ConfigGenerator
             // Azure Info
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Creating Azure Info");
             strDB += "    <!-- Azure Info -->\r\n" +
-                     "    <span class='s'>Azure Info\r\n" +
-                     "                (<a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/resource/subscriptions/" + StrSubID + "/resourceGroups/" + strRGName + "/overview'>Azure Portal</a>)</span><br/>\r\n" +
+                     $"    <span class='s'>Azure Info\r\n" +
+                     $"                (<a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/resource/subscriptions/{StrSubID}/resourceGroups/{strRGName}/overview'>Azure Portal</a>)</span><br/>\r\n" +
                      "    <table>\r\n" +
-                     "        <tr><td width=150><b>Resource Group</b></td><td width=450>" + strRGName + "</td></tr>\r\n" +
-                     "        <tr><td><b>Azure Region</b></td><td>" + tenant.AzureRegion + "</td></tr>\r\n" +
-                     "        <tr style='padding-bottom: 15px;'><td><b>Authorized Users</b></td><td width=450>" + tenant.Contacts + "</td></tr>\r\n" +
+                     $"        <tr><td width=150><b>Resource Group</b></td><td width=450>{strRGName}</td></tr>\r\n" +
+                     $"        <tr><td><b>Azure Region</b></td><td>{tenant.AzureRegion}</td></tr>\r\n" +
+                     $"        <tr style='padding-bottom: 15px;'><td><b>Authorized Users</b></td><td width=450>{tenant.Contacts}</td></tr>\r\n" +
                      "    </table>\r\n";
 
             if (HasAzureVM)
@@ -1916,20 +1864,20 @@ public class ConfigGenerator
                          "        <tr><th width=170>VM Name</th><th width=130>OS</th><th width=200>RDP/SSH IP</th><th width=150>Private IP</th></tr>\r\n";
 
                 int intVMCount = 0;
-                for (int i = 1; i <= 4; i++)
+                foreach (string vm in azVms)
                 {
-                    if (tenant.GetType().GetProperty("AzVm" + i.ToString()).GetValue(tenant).ToString() != "None")
+                    if (vm != "None")
                     {
                         intVMCount++;
-                        string strPublicIP = strRGName + "-VM0" + intVMCount + "-pip4";
-                        string strPublicIPv6 = strRGName + "-VM0" + intVMCount + "-pip6";
-                        string strPrivateIP = "10." + region.Ipv4 + "." + tenant.TenantId + "." + (intVMCount + 3);
-                        string strPrivateIPv6 = "fd:0:" + region.Ipv6 + ":" + tenant.TenantId + "00::" + (intVMCount + 3);
+                        string strPublicIP = $"{strRGName}-VM0{intVMCount}-pip4";
+                        string strPublicIPv6 = $"{strRGName}-VM0{intVMCount}-pip6";
+                        string strPrivateIP = $"10.{region.Ipv4}.{tenant.TenantId}.{intVMCount + 3}";
+                        string strPrivateIPv6 = $"fd:0:{region.Ipv6}:{tenant.TenantId}00::{intVMCount + 3}";
                         strDB += "        " +
-                                 "<tr><td class='b'>" + strRGName + "-VM0" + intVMCount + "</td>" +
-                                 "<td class='b'>" + tenant.GetType().GetProperty("AzVm" + i.ToString()).GetValue(tenant).ToString() + "</td>" +
-                                 "<td class='b'>" + strPublicIP + (HasIPv6 ? "<br/>" + strPublicIPv6 : "") + "</td>" +
-                                 "<td class='b'>" + strPrivateIP + (HasIPv6 ? "<br/>" + strPrivateIPv6 : "") + "</td></tr>\r\n";
+                                 $"<tr><td class='b'>{strRGName}-VM0{intVMCount}</td>" +
+                                 $"<td class='b'>{vm}</td>" +
+                                 $"<td class='b'>{strPublicIP}{(HasIPv6 ? $"<br/>{strPublicIPv6}" : "")}</td>" +
+                                 $"<td class='b'>{strPrivateIP}{(HasIPv6 ? $"<br/>{strPrivateIPv6}" : "")}</td></tr>\r\n";
                     }
                 }
                 strDB += "    </table>\r\n" +
@@ -1945,23 +1893,23 @@ public class ConfigGenerator
                 strDB += "    <!-- ExpressRoute Info -->\r\n" +
                          "    <span class='s'>ExpressRoute Circuit Info:</span><br/>\r\n" +
                          "    <table>\r\n" +
-                         "        <tr><td width=150><b>SKU</b></td><td width=450>" + tenant.Ersku + "</td></tr>\r\n" +
-                         "        <tr><td><b>Uplink/Provider</b></td><td>" + tenant.EruplinkPort + "</td></tr>\r\n" +
-                         "        <tr><td><b>Location</b></td><td>" + strERLocation + "</td></tr>\r\n" +
-                         "        <tr><td><b>Speed</b></td><td>" + strERSpeed + "</td></tr>\r\n";
+                         $"        <tr><td width=150><b>SKU</b></td><td width=450>{tenant.Ersku}</td></tr>\r\n" +
+                         $"        <tr><td><b>Uplink/Provider</b></td><td>{tenant.EruplinkPort}</td></tr>\r\n" +
+                         $"        <tr><td><b>Location</b></td><td>{strERLocation}</td></tr>\r\n" +
+                         $"        <tr><td><b>Speed</b></td><td>{strERSpeed}</td></tr>\r\n";
 
                 if (HasPrivate)
                 {
-                    strDB += "        <tr><td><b>ER Gateway Size</b></td><td>" + tenant.ErgatewaySize + "</td></tr>\r\n";
+                    strDB += $"        <tr><td><b>ER Gateway Size</b></td><td>{tenant.ErgatewaySize}</td></tr>\r\n";
 
                 }
-                strDB += "        <tr><td><b>Private Peering</b></td><td>" + ((bool)tenant.PvtPeering ? "Enabled" : "Not Enabled") + "</td></tr>\r\n" +
-                         "        <tr><td><b>Microsoft Peering</b></td><td>" + ((bool)tenant.Msftpeering ? "Enabled" : "Not Enabled") + "</td></tr>\r\n";
+                strDB += $"        <tr><td><b>Private Peering</b></td><td>{((bool)tenant.PvtPeering ? "Enabled" : "Not Enabled")}</td></tr>\r\n" +
+                         $"        <tr><td><b>Microsoft Peering</b></td><td>{((bool)tenant.Msftpeering ? "Enabled" : "Not Enabled")}</td></tr>\r\n";
 
                 if (HasMicrosoft)
                 {
-                    strDB += "        <tr><td class='i'><b>&bull; Route Filter</b></td><td>" + strERRouteFilter + "</td></tr>\r\n" +
-                             "        <tr><td class='i'><b>&bull; NAT Address</b></td><td>" + tenant.Msftadv + "</td></tr>\r\n";
+                    strDB += $"        <tr><td class='i'><b>&bull; Route Filter</b></td><td>{strERRouteFilter}</td></tr>\r\n" +
+                             $"        <tr><td class='i'><b>&bull; NAT Address</b></td><td>{tenant.Msftadv}</td></tr>\r\n";
 
                 }
                 strDB += "    </table>\r\n" +
@@ -1972,18 +1920,18 @@ public class ConfigGenerator
             if (HasVPNGateway)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Creating VPN Info");
-                string strAzureVNet = "10." + region.Ipv4 + "." + tenant.TenantId + ".0/24";
-                string strLabVNet = "10." + strLabLocationOctect + "." + tenant.TenantId + ".0/25";
+                string strAzureVNet = $"10.{region.Ipv4}.{tenant.TenantId}.0/24";
+                string strLabVNet = $"10.{strLabLocationOctect}.{tenant.TenantId}.0/25";
                 strDB += "    <!-- VPN Info -->\r\n" +
                          "    <span class='s'>VPN Info:</span><br/>\r\n" +
                          "    <table>\r\n" +
-                         "        <tr><td width=150><b>Gateway Size</b></td><td width=450>" + tenant.Vpngateway + "</td></tr>\r\n" +
-                         "        <tr><td><b>BGP</td><td>" + tenant.Vpnbgp + "</td></tr>\r\n" +
-                         "        <tr><td><b>Configuration</td><td>" + tenant.Vpnconfig + "</td></tr>\r\n" +
-                         "        <tr><td><b>Azure Endpoint(s)</b></td><td>" + (tenant.Vpnconfig == "Active-Active" ? strVPNEndPoint : strVPNEndPoint.Split(',')[0]) + "</td></tr>\r\n" +
-                         "        <tr><td><b>Azure Subnet</td><td>" + strAzureVNet + "</td></tr>\r\n" +
-                         "        <tr><td><b>Lab Endpoint</td><td>" + strLabVpnEP + "</td></tr>\r\n" +
-                         "        <tr><td><b>Lab Subnet</td><td>" + strLabVNet + "</td></tr>\r\n" +
+                         $"        <tr><td width=150><b>Gateway Size</b></td><td width=450>{tenant.Vpngateway}</td></tr>\r\n" +
+                         $"        <tr><td><b>BGP</td><td>{tenant.Vpnbgp}</td></tr>\r\n" +
+                         $"        <tr><td><b>Configuration</td><td>{tenant.Vpnconfig}</td></tr>\r\n" +
+                         $"        <tr><td><b>Azure Endpoint(s)</b></td><td>{(tenant.Vpnconfig == "Active-Active" ? strVPNEndPoint : strVPNEndPoint.Split(',')[0])}</td></tr>\r\n" +
+                         $"        <tr><td><b>Azure Subnet</td><td>{strAzureVNet}</td></tr>\r\n" +
+                         $"        <tr><td><b>Lab Endpoint</td><td>{strLabVpnEP}</td></tr>\r\n" +
+                         $"        <tr><td><b>Lab Subnet</td><td>{strLabVNet}</td></tr>\r\n" +
                          "    </table>\r\n" +
                          "    <hr/>\r\n\r\n";
             }
@@ -1993,7 +1941,7 @@ public class ConfigGenerator
             strDB += "    <!-- Lab Info -->\r\n" +
                      "    <span class='s'>Lab Info:</span><br/>\r\n" +
                      "    <table width=650>\r\n" +
-                     "            <tr><td width=150><b>Location</b></td><td width=450>" + (tenant.Lab == "SEA" ? "Seattle" : "Ashburn") + "</td></tr>\r\n" +
+                     $"            <tr><td width=150><b>Location</b></td><td width=450>{(tenant.Lab == "SEA" ? "Seattle" : "Ashburn")}</td></tr>\r\n" +
                      "    </table>\r\n";
 
             if (HasLabVM)
@@ -2002,20 +1950,20 @@ public class ConfigGenerator
                          "        <tr><th width=170>VM Name</th><th width=130>OS</th><th width=200>RDP/SSH IP</th><th width=150>Private IP</th></tr>\r\n";
 
                 int intVMCount = 0;
-                for (int i = 1; i <= 4; i++)
+                foreach (string vm in labVms)
                 {
-                    if (tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() != "None")
+                    if (vm != "None")
                     {
                         intVMCount++;
-                        string strPublicIP = tenant.Lab.ToLower() + ".pathlab.xyz:" + tenant.TenantId + (intVMCount + 9);
-                        string strPrivateIP = "10." + strLabLocationOctect + "." + tenant.TenantId + "." + (intVMCount + 9);
-                        string strPrivateIPv6 = strLabPrefixv6 + tenant.TenantId + "::" + (intVMCount + 9);
+                        string strPublicIP = $"{tenant.Lab.ToLower()}.pathlab.xyz:{tenant.TenantId}{intVMCount + 9}";
+                        string strPrivateIP = $"10.{strLabLocationOctect}.{tenant.TenantId}.{intVMCount + 9}";
+                        string strPrivateIPv6 = $"{strLabPrefixv6}{tenant.TenantId}::{intVMCount + 9}";
 
                         strDB += "        " +
-                                 "<tr><td class='b'>" + tenant.Lab + "-ER-" + tenant.TenantId + "-VM0" + intVMCount + "</td>" +
-                                 "<td class='b'>" + tenant.GetType().GetProperty("LabVm" + i.ToString()).GetValue(tenant).ToString() + "</td>" +
-                                 "<td class='b'>" + strPublicIP + "</td>" +
-                                 "<td class='b'>" + strPrivateIP + (HasIPv6 ? "<br/>" + strPrivateIPv6 : "") + "</td></tr>\r\n";
+                                 $"<tr><td class='b'>{tenant.Lab}-ER-{tenant.TenantId}-VM0{intVMCount}</td>" +
+                                 $"<td class='b'>{vm}</td>" +
+                                 $"<td class='b'>{strPublicIP}</td>" +
+                                 $"<td class='b'>{strPrivateIP}{(HasIPv6 ? $"<br/>{strPrivateIPv6}" : "")}</td></tr>\r\n";
                     }
                 }
                 strDB += "    </table>\r\n" +
@@ -2031,13 +1979,13 @@ public class ConfigGenerator
                      "    For any servers in this environment, Lab or Azure, use the following local administrator account:\r\n" +
                      "    <table>\r\n" +
                      "        <tr><td width=150><b>User Name</b></td><td width=450>PathLabUser</td></tr>\r\n" +
-                     "        <tr><td><b>Password</b></td><td><a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/asset/Microsoft_Azure_KeyVault/Secret/https://" + strRGName.ToLower() + "-kv.vault.azure.net/secrets/PathLabUser/'>Key Vault</a></td></tr>\r\n" +
+                     $"        <tr><td><b>Password</b></td><td><a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/asset/Microsoft_Azure_KeyVault/Secret/https://{strRGName.ToLower()}-kv.vault.azure.net/secrets/PathLabUser/'>Key Vault</a></td></tr>\r\n" +
                      "    </table>\r\n" +
                      "    <table>\r\n" +
                      "        <tr><td colspan=2 width=650>To retrieve the password:</td></tr>\r\n" +
-                     "        <tr><td class='l1'>&bull;</td><td class='l2'>Click the <a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/asset/Microsoft_Azure_KeyVault/Secret/https://" +
-                              strRGName.ToLower() + "-kv.vault.azure.net/secrets/PathLabUser/'>Key Vault</a> link above which will launch the Azure Portal (the accounts listed as &quot;Authorized Users&quot; above should have " +
-                              "access to the resource group and the Key Vault, " + strRGName + "-kv, linked above)</td></tr>\r\n" +
+                     $"        <tr><td class='l1'>&bull;</td><td class='l2'>Click the <a href='https://ms.portal.azure.com/#@microsoft.onmicrosoft.com/asset/Microsoft_Azure_KeyVault/Secret/https://" +
+                              $"{strRGName.ToLower()}-kv.vault.azure.net/secrets/PathLabUser/'>Key Vault</a> link above which will launch the Azure Portal (the accounts listed as &quot;Authorized Users&quot; above should have " +
+                              $"access to the resource group and the Key Vault, {strRGName}-kv, linked above)</td></tr>\r\n" +
                      "        <tr><td class='l1'>&bull;</td><td class='l2'>The link will take you to the Key Vault and directly to the Secret named PathLabUser</td></tr>\r\n" +
                      "        <tr><td class='l1'>&bull;</td><td class='l2'>Click the &quot;Show secret value&quot; button to display the password</td></tr>\r\n" +
                      "        <tr><td class='l1'>&bull;</td><td class='l2'>Click the copy icon to the right of the password to load the password into the clipboard</td></tr>\r\n" +
@@ -2048,7 +1996,7 @@ public class ConfigGenerator
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Creating email footer");
             strDB += "    <!-- Footer -->\r\n" +
                      "    <span class='s'>Questions or Issues?</span><br/>\r\n" +
-                     "    If you have issues or question please contact " + ninja.Name + " (<a href='mailto:" + ninja.UserName + "?subject=Lab%20" + strRGName + "%20Question'>send mail</a>).<br/>\r\n" +
+                     $"    If you have issues or question please contact {ninja.Name} (<a href='mailto:{ninja.UserName}?subject=Lab%20{strRGName}%20Question'>send mail</a>).<br/>\r\n" +
                      "    <p>Thanks,</p>\r\n" +
                      "    <p>Pathfinders Lab Team</p>\r\n" +
                      "</body>\r\n" +
@@ -2070,16 +2018,18 @@ public class ConfigGenerator
             else
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.SaveToSQL", "Saving config changes to SQL");
-                Config config = new Config { };
-                config.ConfigId = Guid.NewGuid();
-                config.ConfigType = configType;
-                config.TenantGuid = tenant.TenantGuid;
-                config.TenantId = tenant.TenantId;
-                config.TenantVersion = tenant.TenantVersion;
-                config.NinjaOwner = tenant.NinjaOwner;
-                config.Config1 = strDB;
-                config.CreatedDate = DateTime.Now;
-                config.CreatedBy = _userEmail.Split('@')[0];
+                Config config = new Config
+                {
+                    ConfigId = Guid.NewGuid(),
+                    ConfigType = configType,
+                    TenantGuid = tenant.TenantGuid,
+                    TenantId = tenant.TenantId,
+                    TenantVersion = tenant.TenantVersion,
+                    NinjaOwner = tenant.NinjaOwner,
+                    Config1 = strDB,
+                    CreatedDate = DateTime.Now,
+                    CreatedBy = _userEmail.Split('@')[0]
+                };
                 _context.Configs.Add(config);
                 await _context.SaveChangesAsync();
             }
@@ -2087,61 +2037,7 @@ public class ConfigGenerator
             return true;
         }
 
-        private static string SqlClean(string strInput)
-        {
-            return strInput.Replace("'", "''");
-        }
-
-        private short FindTenantId(Tenant tenant)
-        {
-            // For a given lab (SEA or ASH):
-            // If TenantID (used as Tenant Type) = 1 then tenantID needs to be > 100
-            // If TenantID (used as Tenant Type) = 0 then TenantID needed to be > 1 and < 100 and
-            //     If TenantVersion (used as Server Preference) is = 0, then pick next available tenantID
-            //     If TenantVersion (used as Server Preference) is > 0, then pick next available tenantID on that server
-
-            _logger.LogDebug("{Method}: {Msg}", "AppLogic.FindTenantID", "Starting");
-            
-            int i;
-            int intStart;
-            int intEnd;
-
-            if (tenant.TenantId == 0)
-            {
-                // Get a "normal" tenant ID for use in the lab
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.FindTenantID", "Getting next normal tenant ID");
-                intStart = tenant.TenantVersion == 0 ? 10 : tenant.TenantVersion * 10;
-                intEnd = tenant.TenantVersion == 0 ? 69 : tenant.TenantVersion * 10 + 9;
-                
-            }
-            else
-            {
-                // Get an extended tenant ID for Azure only, or non-lab resource consuming tenants
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.FindTenantID", "Getting next extended (over 100) tenant ID");
-                intStart = 100;
-                intEnd = 150;
-            }
-            List<short> ActiveTenantIDs = _context.Tenants.Where(t => t.Lab == tenant.Lab && t.TenantId >= intStart && t.TenantId <= intEnd && t.DeletedDate == null).OrderBy(t => t.TenantId).Select(t => t.TenantId).ToList();
-
-            for (i = intStart; i <= intEnd; i++)
-            {
-                if (!ActiveTenantIDs.Contains((short)i)) { break; }
-            }
-
-            if (i == intEnd + 1)
-            {
-                _logger.LogError("FindTenantId: No more tenant IDs for criteria ({Start}-{End}) in {Lab}", intStart, intEnd, tenant.Lab);
-                return 0;
-            }
-            else
-            {
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.FindTenantID", "Winner, winner, chicken dinner. The new tenant ID is ");
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.FindTenantID", "Complete");
-                return (short)i;
-            }
-        }
-
-        private string GetP2P(string strPrefix, bool isPrimary, Guid? id)
+        private string GetP2P(string strPrefix, bool isPrimary)
         {
             string myPrefix;
             int intSlash;
@@ -2150,14 +2046,14 @@ public class ConfigGenerator
 
             if (isPrimary)
             {
-                myPrefix = strPrefix.Substring(0, strPrefix.IndexOf("/")) + "/30";
+                myPrefix = $"{strPrefix.Substring(0, strPrefix.IndexOf("/"))}/30";
             }
             else
             {
                 intSlash = strPrefix.IndexOf("/");
                 intDot = strPrefix.LastIndexOf(".") + 1;
                 intNext = int.Parse(strPrefix.Substring(intDot, intSlash - intDot)) + 4;
-                myPrefix = strPrefix.Substring(0, intDot) + intNext + "/30";
+                myPrefix = $"{strPrefix.Substring(0, intDot)}{intNext}/30";
             }
             _logger.LogDebug("GetP2P: {Type} P2P Set ({Prefix})", isPrimary ? "Primary" : "Secondary", myPrefix);
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GetP2P", "Complete");
@@ -2177,12 +2073,12 @@ public class ConfigGenerator
                 if (isP2P)
                 {
                     strDevice = tenant.Lab == "SEA" ? "SEA-MX03-01/02" : "ASH-ASR06X-01/02";
-                    strPurpose = "Cust " + tenant.TenantId + " MSFT Peering";
+                    strPurpose = $"Cust {tenant.TenantId} MSFT Peering";
                 }
                 else
                 {
                     strDevice = tenant.Lab == "SEA" ? "SEA-SRX42-01" : "ASH-SRX42-01";
-                    strPurpose = "Cust " + tenant.TenantId + " MSFT NAT";
+                    strPurpose = $"Cust {tenant.TenantId} MSFT NAT";
                 }
 
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.AssignPublicIP", "Pulling Public IPs from SQL");

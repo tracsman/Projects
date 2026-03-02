@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
+    <None Include="PathWeb\Tools\QueryTenants\QueryTenants.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,6 +22,14 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
     <PackageReference Include="Microsoft.Identity.Web" Version="4.3.0" />
     <PackageReference Include="Microsoft.Identity.Web.UI" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Areas\About\Controllers\" />
+    <Folder Include="Areas\IPAddresses\Controllers\" />
+    <Folder Include="Areas\Tenants\Controllers\" />
+    <Folder Include="Areas\Users\Controllers\" />
+    <Folder Include="Authentication\" />
   </ItemGroup>
 
 </Project>

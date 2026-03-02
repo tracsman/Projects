@@ -8,6 +8,17 @@
     <h2>@ViewData["Title"]</h2>
 </div>
 
+<div class="d-flex gap-2 mb-3">
+    @if (authLevel >= 8)
+    {
+        <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
+        <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
+        <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+    }
+    <a asp-action="Config" asp-route-id="@Model.TenantGuid" class="btn btn-primary">View Config</a>
+    <a asp-action="Index" class="btn btn-secondary">Back to List</a>
+</div>
+
 <!-- Basic Information -->
 <div class="card mb-3">
     <div class="card-header fw-bold" data-bs-toggle="collapse" data-bs-target="#collapseBasic" role="button" aria-expanded="true">
@@ -99,7 +110,7 @@
     <div class="card-body">
         <table class="table table-hover mb-0">
             <tr><th style="width:200px">Tenant GUID</th><td>@Model.TenantGuid</td></tr>
-            <tr><th>Server Preference</th><td>@Model.TenantVersion</td></tr>
+            <tr><th>Tenant Version</th><td>@Model.TenantVersion</td></tr>
             <tr><th>Work Item ID</th><td>@Model.WorkItemId</td></tr>
             <tr><th>Assigned Date</th><td>@Model.AssignedDate.ToString("u")</td></tr>
             <tr><th>Assigned By</th><td>@Model.AssignedBy</td></tr>

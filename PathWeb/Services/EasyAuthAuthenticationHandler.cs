@@ -4,6 +4,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
+namespace PathWeb.Services;
+
 public class EasyAuthAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
     public EasyAuthAuthenticationHandler(

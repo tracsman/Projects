@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Pathfinder Lab Configuration Manager";
     byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
     }
@@ -15,7 +15,7 @@
         @if (authLevel >= 6)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="Tenants" asp-controller="Home" asp-action="Index" class="text-decoration-none text-body">
+            <a asp-controller="Tenants" asp-action="Index" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">Tenant Management</span><br />
                     The section allows the creation, updates, and release of the tenant environment.
@@ -27,7 +27,7 @@
         @if (authLevel >= 11)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="IPAddresses" asp-controller="Home" asp-action="Index" class="text-decoration-none text-body">
+            <a asp-controller="Addresses" asp-action="Index" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">IP Address Management</span><br />
                     This section allows for the view, assignment, and release of the public IP addresses
@@ -40,7 +40,7 @@
         @if (authLevel >= 14)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="Users" asp-controller="Home" asp-action="Index" class="text-decoration-none text-body">
+            <a asp-controller="Users" asp-action="Index" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">User Management</span><br />
                     This section is to add, update, and delete users for this site. This section also has
@@ -52,7 +52,7 @@
         @if (authLevel >= 1)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="" asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-body">
+            <a asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">Workshop Registration</span>
                     This section is used for the participant registration of upcoming workshops.
@@ -63,7 +63,7 @@
         @if (authLevel >= 3)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="" asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-body">
+            <a asp-controller="Home" asp-action="ComingSoon" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">Workshop Management</span>
                     This section is for the creation, management, and deletion of workshops.
@@ -74,7 +74,7 @@
         @if (authLevel >= 1)
         {
         <div class="col-md-4 mb-3">
-            <a asp-area="About" asp-controller="Home" asp-action="Index" class="text-decoration-none text-body">
+            <a asp-controller="About" asp-action="Index" class="text-decoration-none text-body">
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">About</span><br />
                     Learn more about this site, the physical lab, the logical tenant, and site development progress.
