@@ -1,23 +1,20 @@
 @model PathWeb.Models.Tenant
 @{
-    ViewData["Title"] = $"Edit Tenant: {Model.TenantName}";
+    ViewData["Title"] = "Create New Tenant";
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
     <h2>@ViewData["Title"]</h2>
 </div>
 
-<form asp-action="Edit" method="post">
+<form asp-action="Create" method="post">
     <div asp-validation-summary="ModelOnly" class="text-danger"></div>
     <input type="hidden" asp-for="TenantGuid" />
-    <input type="hidden" asp-for="Lab" />
     <input type="hidden" asp-for="TenantId" />
     <input type="hidden" asp-for="AssignedDate" />
     <input type="hidden" asp-for="AssignedBy" />
     <input type="hidden" asp-for="LastUpdateDate" />
     <input type="hidden" asp-for="LastUpdateBy" />
-    <input type="hidden" asp-for="DeletedDate" />
-    <input type="hidden" asp-for="DeletedBy" />
     <input type="hidden" asp-for="WorkItemId" />
 
     <!-- Basic Information -->
@@ -28,21 +25,24 @@
         <div class="collapse show" id="collapseBasic">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label class="col-md-3 col-form-label fw-bold">Tenant Name</label>
+                    <label asp-for="Lab" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
-                        <input class="form-control" value="@Model.TenantName" readonly />
+                        <select asp-for="Lab" asp-items="@ViewBag.Labs" class="form-select">
+                            <option value="">- select Lab -</option>
+                        </select>
+                        <span asp-validation-for="Lab" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
                     <label class="col-md-3 col-form-label fw-bold">Server Preference</label>
                     <div class="col-md-9">
-                        <select asp-for="TenantVersion" class="form-select">
+                        <select name="serverPreference" class="form-select">
                             @for (short i = 0; i <= 6; i++)
                             {
-                                <option value="@i">@i</option>
+                                <option value="@i">@(i == 0 ? "Any" : $"Server {i} ({i}0-{i}9)")</option>
                             }
+                            <option value="100">No on-prem needed (100+)</option>
                         </select>
-                        <span asp-validation-for="TenantVersion" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
@@ -269,31 +269,21 @@
         </div>
     </div>
 
-    <!-- Additional Information (collapsed by default) -->
-    <div class="card mb-3">
-        <div class="card-header fw-bold" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" role="button" aria-expanded="false">
-            Additional Information
-        </div>
-        <div class="collapse" id="collapseAdmin">
-            <div class="card-body">
-                <table class="table table-hover mb-0">
-                    <tr><th style="width:200px">Tenant GUID</th><td>@Model.TenantGuid</td></tr>
-                    <tr><th>Server Preference</th><td>@Model.TenantVersion</td></tr>
-                    <tr><th>Assigned Date</th><td>@Model.AssignedDate.ToString("u")</td></tr>
-                    <tr><th>Assigned By</th><td>@Model.AssignedBy</td></tr>
-                    <tr><th>Last Update</th><td>@Model.LastUpdateDate.ToString("u")</td></tr>
-                    <tr><th>Updated By</th><td>@Model.LastUpdateBy</td></tr>
-                </table>
-            </div>
-        </div>
-    </div>
-
     <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create</button>
+        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
     </div>
 </form>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('Lab').addEventListener('change', function () {
+            var region = document.getElementById('AzureRegion');
+            if (!region.value) {
+                if (this.value === 'SEA') region.value = 'West US 2';
+                else if (this.value === 'ASH') region.value = 'East US';
+            }
+        });
+    </script>
 }

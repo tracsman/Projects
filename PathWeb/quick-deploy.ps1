@@ -92,12 +92,12 @@ Write-Step "Warming up all pages..."
 $warmupPaths = @(
     "/",
     "/Tenants",
-    "/IPAddresses",
+    "/Addresses",
     "/Users",
     "/About",
-    "/About/Home/Lab",
-    "/About/Home/Tenant",
-    "/About/Home/Progress"
+    "/About/Lab",
+    "/About/Tenant",
+    "/About/Progress"
 )
 foreach ($path in $warmupPaths) {
     try {

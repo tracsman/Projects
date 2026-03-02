@@ -51,11 +51,10 @@
     </tr>
 </table>
 <hr />
-<p>
+<div class="d-flex gap-2">
     @if (authLevel >= 12)
     {
-        <a asp-action="Edit" asp-route-id="@Model.RangeId">Edit</a>
-        <span>|</span>
+        <a asp-action="Edit" asp-route-id="@Model.RangeId" class="btn btn-primary">Edit</a>
     }
-    <a asp-action="Index">Back to List</a>
-</p>
+    <a asp-action="Index" class="btn btn-secondary">Back to List</a>
+</div>
