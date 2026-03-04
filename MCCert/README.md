@@ -12,7 +12,8 @@ The deployment creates three virtual networks with the following components:
 
 - **VNet01 (Hub)**: Central hub with VPN Gateway for P2S and S2S connectivity
 - **VNet02 (Spoke)**: Windows 11 workstation accessible via Azure Bastion
-- **VNet03 (Spoke)**: Linux VMs including a strongSwan-based VPN router for S2S connection
+- **VNet03 (Spoke)**: Linux VMs with automated strongSwan-based VPN router for S2S connection
+- **VMSS**: Single Virtual Machine Scale Set managing all VM instances with Flexible orchestration
 
 ## Network Topology
 
@@ -30,7 +31,8 @@ The deployment creates three virtual networks with the following components:
 | VNet01 | GatewaySubnet | 10.1.0.128/25 | VPN Gateway |
 | VNet02 | Tenant | 10.2.0.0/25 | Workload VMs |
 | VNet02 | AzureBastionSubnet | 10.2.0.128/25 | Azure Bastion |
-| VNet03 | Tenant | 10.3.0.0/24 | Workload VMs & Router |
+| VNet03 | Tenant | 10.3.0.0/25 | Workload VMs |
+| VNet03 | VPN | 10.3.0.128/25 | VPN Router & UDR |
 
 ## Resources
 
@@ -41,7 +43,7 @@ The deployment creates three virtual networks with the following components:
 | Virtual Network | VNet01 | Microsoft.Network/virtualNetworks | 10.1.0.0/24 |
 | VPN Gateway | VNet01-gw-vpn | Microsoft.Network/virtualNetworkGateways | Dynamic (Public IP) |
 | VPN Gateway Public IP | VNet01-gw-vpn-pip | Microsoft.Network/publicIPAddresses | *Assigned at deployment* |
-| Ubuntu VM | VNet01-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.1.0.0/25) |
+| Ubuntu VM (VMSS Instance) | VNet01-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.1.0.0/25) |
 | VM NIC | VNet01-VM01-nic | Microsoft.Network/networkInterfaces | Dynamic |
 
 ### VNet02 Resources
@@ -51,7 +53,7 @@ The deployment creates three virtual networks with the following components:
 | Virtual Network | VNet02 | Microsoft.Network/virtualNetworks | 10.2.0.0/24 |
 | Bastion Host | VNet02-bastion | Microsoft.Network/bastionHosts | N/A |
 | Bastion Public IP | VNet02-bastion-pip | Microsoft.Network/publicIPAddresses | *Assigned at deployment* |
-| Windows 11 VM | VNet02-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.2.0.0/25) |
+| Windows 11 VM (VMSS Instance) | VNet02-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.2.0.0/25) |
 | VM NIC | VNet02-VM01-nic | Microsoft.Network/networkInterfaces | Dynamic |
 
 ### VNet03 Resources
@@ -59,11 +61,30 @@ The deployment creates three virtual networks with the following components:
 | Resource | Name | Type | IP Address |
 |----------|------|------|------------|
 | Virtual Network | VNet03 | Microsoft.Network/virtualNetworks | 10.3.0.0/24 |
-| Ubuntu VM | VNet03-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.3.0.0/24) |
+| Route Table | VNet03-tenant-rt | Microsoft.Network/routeTables | Routes 10.1.0.0/24 to router |
+| Ubuntu VM (VMSS Instance) | VNet03-VM01 | Microsoft.Compute/virtualMachines | Dynamic (10.3.0.0/25 - Tenant) |
 | VM NIC | VNet03-VM01-nic | Microsoft.Network/networkInterfaces | Dynamic |
-| Linux Router | VNet03-router01 | Microsoft.Compute/virtualMachines | Dynamic (10.3.0.0/24) |
+| Linux Router (VMSS Instance) | VNet03-router01 | Microsoft.Compute/virtualMachines | Dynamic (10.3.0.128/25 - VPN) |
 | Router NIC | VNet03-router01-nic | Microsoft.Network/networkInterfaces | Dynamic |
 | Router Public IP | VNet03-router01-pip | Microsoft.Network/publicIPAddresses | *Assigned at deployment* |
+
+### Security Resources
+
+| Resource | Name | Type | Purpose |
+|----------|------|------|---------|
+| Key Vault | kv-vpngw-{uniqueString} | Microsoft.KeyVault/vaults | Secure storage for VM passwords and VPN keys |
+| Secret | vm-admin-password | Key Vault Secret | Admin password for all VMs |
+| Secret | vpn-shared-key | Key Vault Secret | Pre-shared key for S2S VPN |
+
+### VMSS Resources
+
+| Resource | Name | Type | Purpose |
+|----------|------|------|---------|
+| Virtual Machine Scale Set | VPNGWJonVMSS | Microsoft.Compute/virtualMachineScaleSets | Flexible orchestration for all VMs |
+| VM Instance | VNet01-VM01 | Microsoft.Compute/virtualMachines | Ubuntu workload VM |
+| VM Instance | VNet02-VM01 | Microsoft.Compute/virtualMachines | Windows 11 P2S client VM |
+| VM Instance | VNet03-VM01 | Microsoft.Compute/virtualMachines | Ubuntu workload VM |
+| VM Instance | VNet03-router01 | Microsoft.Compute/virtualMachines | strongSwan S2S VPN router |
 
 ### VPN Resources
 
@@ -95,12 +116,12 @@ The deployment creates three virtual networks with the following components:
 
 ## VM Specifications
 
-| VM Name | OS | Size | Purpose |
-|---------|-----|------|---------|
-| VNet01-VM01 | Ubuntu 22.04 LTS | Standard_B1s | Workload |
-| VNet02-VM01 | Windows 11 23H2 Pro | Standard_B2s | P2S VPN Client |
-| VNet03-VM01 | Ubuntu 22.04 LTS | Standard_B1s | Workload |
-| VNet03-router01 | Ubuntu 22.04 LTS | Standard_B2s | S2S VPN Router |
+| VM Name | OS | Size | Purpose | VMSS Instance |
+|---------|-----|------|---------|---------------|
+| VNet01-VM01 | Ubuntu 22.04 LTS | Standard_B1s | Workload | ✅ |
+| VNet02-VM01 | Windows 11 23H2 Pro | Standard_B2s | P2S VPN Client | ✅ |
+| VNet03-VM01 | Ubuntu 22.04 LTS | Standard_B1s | Workload | ✅ |
+| VNet03-router01 | Ubuntu 22.04 LTS | Standard_B2s | S2S VPN Router | ✅ |
 
 ## Prerequisites
 
@@ -110,8 +131,11 @@ The deployment creates three virtual networks with the following components:
 
 ## Deployment
 
-### From VS Code PowerShell Terminal
+### Two-Phase Deployment Process
 
+This template uses a **two-phase deployment** to ensure secure Key Vault integration:
+
+#### Phase 1: Infrastructure Deployment
 ```powershell
 # Connect to Azure China
 Connect-AzAccount -Environment AzureChinaCloud
@@ -119,7 +143,22 @@ Connect-AzAccount -Environment AzureChinaCloud
 # Navigate to project folder
 cd c:\Bin\Git\Projects\MCCert
 
-# Run deployment script
+# Deploy infrastructure (VNets, Key Vault, VPN Gateway)
+# Note: deployVMs = false in main.bicepparam
+./deploy.ps1
+```
+
+#### Phase 2: Add Secrets & Deploy VMs
+```powershell
+# Get Key Vault name from deployment output
+$kvName = (Get-AzResourceGroupDeployment -ResourceGroupName "your-rg-name" -Name "your-deployment-name").Outputs.keyVaultName.Value
+
+# Add required secrets
+az keyvault secret set --vault-name $kvName --name "vm-admin-password" --value "YourSecurePassword123!"
+az keyvault secret set --vault-name $kvName --name "vpn-shared-key" --value "YourVpnSharedKey123!"
+
+# Update deployVMs = true in main.bicepparam
+# Then redeploy to create VMs
 ./deploy.ps1
 ```
 
@@ -127,9 +166,10 @@ cd c:\Bin\Git\Projects\MCCert
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| adminPassword | Password for all VMs | *Prompted securely* |
+| deployVMs | Controls VM deployment phase | false (Phase 1), true (Phase 2) |
 | aadTenantId | Entra ID Tenant GUID | xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx |
-| vpnSharedKey | S2S VPN Pre-Shared Key | *Prompted securely* |
+
+*Note: Sensitive parameters are stored securely in Key Vault.*
 
 ## Post-Deployment Configuration
 
@@ -139,38 +179,24 @@ cd c:\Bin\Git\Projects\MCCert
 2. Download VPN client
 3. Install on Windows 11 VM (VNet02-VM01) or local machine
 
-### 2. Configure strongSwan Router (VNet03-router01)
+### 2. strongSwan Router Configuration (Automated)
 
-SSH to the router and edit `/etc/ipsec.conf`:
+The strongSwan router (VNet03-router01) is **automatically configured** during deployment with:
 
-```conf
-config setup
-    charondebug="ike 2, knl 2, cfg 2"
+- **Fully automated IPsec configuration** using actual public IP addresses
+- **Pre-shared key** automatically retrieved from Key Vault
+- **Auto-start VPN tunnel** on boot
+- **IP forwarding enabled** for traffic routing
+- **User Defined Route (UDR)** on Tenant subnet forwards 10.1.0.0/24 traffic to router
 
-conn azure-vpn
-    keyexchange=ikev2
-    authby=secret
-    left=%defaultroute
-    leftid=<ROUTER_PUBLIC_IP>
-    leftsubnet=10.3.0.0/24
-    right=<VPN_GATEWAY_PUBLIC_IP>
-    rightsubnet=10.1.0.0/24
-    ike=aes256-sha256-modp1024
-    esp=aes256-sha256
-    auto=start
-```
+No manual configuration required! The S2S VPN tunnel will establish automatically once Key Vault secrets are populated.
 
-Edit `/etc/ipsec.secrets`:
-
-```
-<ROUTER_PUBLIC_IP> <VPN_GATEWAY_PUBLIC_IP> : PSK "your-preshared-key"
-```
-
-Restart strongSwan:
+**To verify connection status:**
 
 ```bash
-sudo ipsec restart
+# SSH to VNet03-router01 and check status
 sudo ipsec status
+sudo journalctl -u strongswan -f
 ```
 
 ### 3. Access Windows VM
@@ -181,13 +207,24 @@ sudo ipsec status
 
 ## Estimated Deployment Time
 
+### Phase 1 (Infrastructure)
 | Resource | Time |
 |----------|------|
 | Virtual Networks | 1-2 minutes |
-| Virtual Machines | 5-10 minutes |
+| Key Vault | 1-2 minutes |
 | Azure Bastion | 5-10 minutes |
 | VPN Gateway | 30-45 minutes |
-| **Total** | **~45-60 minutes** |
+| **Phase 1 Total** | **~40-55 minutes** |
+
+### Phase 2 (VMs + Secret Validation)
+| Resource | Time |
+|----------|------|
+| Secret Validation | 1-2 minutes |
+| Virtual Machine Scale Set | 2-3 minutes |
+| VM Instances (4x) | 5-10 minutes |
+| **Phase 2 Total** | **~8-15 minutes** |
+
+**Total Deployment Time: ~50-70 minutes**
 
 ## Cost Considerations
 
@@ -195,7 +232,7 @@ sudo ipsec status
 |----------|-----|------------------------|
 | VPN Gateway | VpnGw2AZ | ~$300 USD |
 | Azure Bastion | Basic | ~$140 USD |
-| VMs (4x) | B1s/B2s | ~$50-100 USD |
+| VMSS (4 instances) | B1s/B2s | ~$50-100 USD |
 | Public IPs (3x) | Standard | ~$15 USD |
 
 *Costs are estimates for Azure China. Actual costs may vary.*
