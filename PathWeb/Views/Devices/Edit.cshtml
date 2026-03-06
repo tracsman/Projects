@@ -1,0 +1,91 @@
+@model PathWeb.Models.Device
+@{
+    ViewData["Title"] = $"Edit Device: {Model.Name}";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form asp-action="Edit">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <input type="hidden" asp-for="DeviceId" />
+            <input type="hidden" asp-for="Type" />
+            <input type="hidden" asp-for="Name" />
+            <input type="hidden" asp-for="Lab" />
+
+            <div class="mb-3 row">
+                <label class="col-md-3 col-form-label fw-bold">Name</label>
+                <div class="col-md-9">
+                    <input class="form-control bg-light" value="@Model.Name" readonly />
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label class="col-md-3 col-form-label fw-bold">Type</label>
+                <div class="col-md-9">
+                    <input class="form-control bg-light" value="@Model.Type" readonly />
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label class="col-md-3 col-form-label fw-bold">Lab</label>
+                <div class="col-md-9">
+                    <input class="form-control bg-light" value="@Model.Lab" readonly />
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label asp-for="MgmtIpv4" class="col-md-3 col-form-label fw-bold"></label>
+                <div class="col-md-9">
+                    <input asp-for="MgmtIpv4" class="form-control" />
+                    <span asp-validation-for="MgmtIpv4" class="text-danger"></span>
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label asp-for="MgmtIpv6" class="col-md-3 col-form-label fw-bold"></label>
+                <div class="col-md-9">
+                    <input asp-for="MgmtIpv6" class="form-control" />
+                    <span asp-validation-for="MgmtIpv6" class="text-danger"></span>
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label asp-for="Os" class="col-md-3 col-form-label fw-bold"></label>
+                <div class="col-md-9">
+                    <input asp-for="Os" class="form-control" />
+                    <span asp-validation-for="Os" class="text-danger"></span>
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label asp-for="InService" class="col-md-3 col-form-label fw-bold"></label>
+                <div class="col-md-9">
+                    <div class="form-check form-switch mt-2">
+                        <input asp-for="InService" class="form-check-input" type="checkbox" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3 row">
+                <label asp-for="Issues" class="col-md-3 col-form-label fw-bold"></label>
+                <div class="col-md-9">
+                    <textarea asp-for="Issues" class="form-control" rows="4"></textarea>
+                    <span asp-validation-for="Issues" class="text-danger"></span>
+                </div>
+            </div>
+
+            <div class="offset-md-3">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a asp-action="Details" asp-route-id="@Model.DeviceId" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

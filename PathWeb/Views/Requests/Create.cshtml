@@ -1,29 +1,19 @@
-@model PathWeb.Models.Tenant
+@model PathWeb.Models.TenantRequest
 @{
-    ViewData["Title"] = $"Edit Tenant: {Model.TenantName}";
+    ViewData["Title"] = "Request a Lab";
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
     <h2>@ViewData["Title"]</h2>
+    <p>Fill out the form below to request a lab tenant. Your request will be reviewed by an admin.</p>
 </div>
 
-<form asp-action="Edit" method="post">
+<form asp-action="Create" method="post">
     <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-    <input type="hidden" asp-for="TenantGuid" />
-    <input type="hidden" asp-for="Lab" />
-    <input type="hidden" asp-for="TenantId" />
-    <input type="hidden" asp-for="AssignedDate" />
-    <input type="hidden" asp-for="AssignedBy" />
-
-    <div class="d-flex gap-2 mb-3">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-secondary">Cancel</a>
-    </div>
-    <input type="hidden" asp-for="LastUpdateDate" />
-    <input type="hidden" asp-for="LastUpdateBy" />
-    <input type="hidden" asp-for="DeletedDate" />
-    <input type="hidden" asp-for="DeletedBy" />
-    <input type="hidden" asp-for="WorkItemId" />
+    <input type="hidden" asp-for="RequestId" />
+    <input type="hidden" asp-for="Status" />
+    <input type="hidden" asp-for="RequestedDate" />
+    <input type="hidden" asp-for="RequestedBy" />
 
     <!-- Basic Information -->
     <div class="card mb-3">
@@ -33,19 +23,12 @@
         <div class="collapse show" id="collapseBasic">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label class="col-md-3 col-form-label fw-bold">Tenant Name</label>
+                    <label asp-for="Lab" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
-                        <input class="form-control bg-light" value="@Model.TenantName" readonly />
-                    </div>
-                </div>
-                <input type="hidden" asp-for="TenantVersion" />
-                <div class="mb-3 row">
-                    <label asp-for="NinjaOwner" class="col-md-3 col-form-label fw-bold"></label>
-                    <div class="col-md-9">
-                        <select asp-for="NinjaOwner" asp-items="@ViewBag.Ninjas" class="form-select">
-                            <option value="">- select Ninja Owner -</option>
+                        <select asp-for="Lab" asp-items="@ViewBag.Labs" class="form-select">
+                            <option value="">- select Lab -</option>
                         </select>
-                        <span asp-validation-for="NinjaOwner" class="text-danger"></span>
+                        <span asp-validation-for="Lab" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
@@ -56,16 +39,9 @@
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="ReturnDate" class="col-md-3 col-form-label fw-bold"></label>
-                    <div class="col-md-9">
-                        <input asp-for="ReturnDate" class="form-control" type="date" value="@Model.ReturnDate.ToString("yyyy-MM-dd")" />
-                        <span asp-validation-for="ReturnDate" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="mb-3 row">
                     <label asp-for="Usage" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
-                        <textarea asp-for="Usage" class="form-control" rows="4"></textarea>
+                        <textarea asp-for="Usage" class="form-control" rows="4" placeholder="Describe what you'll be using the lab for..."></textarea>
                         <span asp-validation-for="Usage" class="text-danger"></span>
                     </div>
                 </div>
@@ -73,10 +49,10 @@
         </div>
     </div>
 
-    <!-- Azure Information -->
+    <!-- Azure / ExpressRoute Information -->
     <div class="card mb-3">
         <div class="card-header fw-bold" data-bs-toggle="collapse" data-bs-target="#collapseAzure" role="button" aria-expanded="true">
-            Azure Information
+            Azure / ExpressRoute Information
         </div>
         <div class="collapse show" id="collapseAzure">
             <div class="card-body">
@@ -138,20 +114,6 @@
                         <span asp-validation-for="Msftpeering" class="text-danger"></span>
                     </div>
                 </div>
-                <div class="mb-3 row">
-                    <label asp-for="Msfttags" class="col-md-3 col-form-label fw-bold"></label>
-                    <div class="col-md-9">
-                        <input asp-for="Msfttags" class="form-control" />
-                        <span asp-validation-for="Msfttags" class="text-danger"></span>
-                    </div>
-                </div>
-                <div class="mb-3 row">
-                    <label asp-for="Skey" class="col-md-3 col-form-label fw-bold"></label>
-                    <div class="col-md-9">
-                        <input asp-for="Skey" class="form-control" />
-                        <span asp-validation-for="Skey" class="text-danger"></span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -182,13 +144,6 @@
                         <select asp-for="Vpnconfig" asp-items="@ViewBag.VpnConfigs" class="form-select"></select>
                     </div>
                 </div>
-                <div class="mb-3 row">
-                    <label asp-for="VpnendPoint" class="col-md-3 col-form-label fw-bold"></label>
-                    <div class="col-md-9">
-                        <input asp-for="VpnendPoint" class="form-control" />
-                        <span asp-validation-for="VpnendPoint" class="text-danger"></span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -204,7 +159,6 @@
                     <label asp-for="AddressFamily" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
                         <select asp-for="AddressFamily" asp-items="@ViewBag.IpVersions" class="form-select"></select>
-                        <span asp-validation-for="AddressFamily" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
@@ -235,69 +189,45 @@
                     <label asp-for="LabVm1" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm1" asp-items="@ViewBag.VmOsList" class="form-select"></select>
-                        <span asp-validation-for="LabVm1" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
                     <label asp-for="LabVm2" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm2" asp-items="@ViewBag.VmOsList" class="form-select"></select>
-                        <span asp-validation-for="LabVm2" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
                     <label asp-for="LabVm3" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm3" asp-items="@ViewBag.VmOsList" class="form-select"></select>
-                        <span asp-validation-for="LabVm3" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
                     <label asp-for="LabVm4" class="col-md-3 col-form-label fw-bold"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm4" asp-items="@ViewBag.VmOsList" class="form-select"></select>
-                        <span asp-validation-for="LabVm4" class="text-danger"></span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Additional Information (collapsed by default) -->
-    <div class="card mb-3">
-        <div class="card-header fw-bold" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" role="button" aria-expanded="false">
-            Additional Information
-        </div>
-        <div class="collapse" id="collapseAdmin">
-            <div class="card-body">
-                <table class="table table-hover mb-0">
-                    <tr><th style="width:200px">Tenant GUID</th><td>@Model.TenantGuid</td></tr>
-                    <tr><th>Tenant Version</th><td>@Model.TenantVersion</td></tr>
-                    <tr><th>Work Item ID</th><td>@if (Model.WorkItemId.HasValue && Model.WorkItemId > 0)
-                            {
-                                var adoOrg = ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["AzureDevOps:OrgUrl"];
-                                var adoProject = ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["AzureDevOps:Project"];
-                                <a href="@adoOrg/@adoProject/_workitems/edit/@Model.WorkItemId" target="_blank">@Model.WorkItemId</a>
-                            }
-                            else
-                            {
-                                <i>none</i>
-                            }</td></tr>
-                    <tr><th>Assigned Date</th><td>@Model.AssignedDate.ToString("u")</td></tr>
-                    <tr><th>Assigned By</th><td>@Model.AssignedBy</td></tr>
-                    <tr><th>Last Update</th><td>@Model.LastUpdateDate.ToString("u")</td></tr>
-                    <tr><th>Updated By</th><td>@Model.LastUpdateBy</td></tr>
-                </table>
-            </div>
-        </div>
-    </div>
-
     <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">Submit Request</button>
+        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
     </div>
 </form>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('Lab').addEventListener('change', function () {
+            var region = document.getElementById('AzureRegion');
+            if (!region.value) {
+                if (this.value === 'SEA') region.value = 'West US 2';
+                else if (this.value === 'ASH') region.value = 'East US';
+            }
+        });
+    </script>
 }

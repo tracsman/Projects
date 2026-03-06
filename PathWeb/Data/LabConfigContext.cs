@@ -14,6 +14,8 @@ public partial class LabConfigContext : DbContext
 
     public virtual DbSet<Config> Configs { get; set; }
 
+    public virtual DbSet<Device> Devices { get; set; }
+
     public virtual DbSet<PublicIp> PublicIps { get; set; }
 
     public virtual DbSet<Region> Regions { get; set; }
@@ -21,6 +23,8 @@ public partial class LabConfigContext : DbContext
     public virtual DbSet<Setting> Settings { get; set; }
 
     public virtual DbSet<Tenant> Tenants { get; set; }
+
+    public virtual DbSet<TenantRequest> TenantRequests { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
 
@@ -39,6 +43,35 @@ public partial class LabConfigContext : DbContext
             entity.Property(e => e.NinjaOwner).HasMaxLength(50);
             entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
             entity.Property(e => e.TenantId).HasColumnName("TenantID");
+        });
+
+        modelBuilder.Entity<Device>(entity =>
+        {
+            entity.HasKey(e => e.DeviceId);
+
+            entity.ToTable("Devices");
+
+            entity.HasIndex(e => e.Name, "IX_Devices_Name").IsUnique();
+
+            entity.Property(e => e.DeviceId)
+                .HasDefaultValueSql("(newid())", "DF_Devices_DeviceID")
+                .HasColumnName("DeviceID");
+            entity.Property(e => e.Type).HasMaxLength(10);
+            entity.Property(e => e.Name).HasMaxLength(22);
+            entity.Property(e => e.Lab)
+                .HasMaxLength(3)
+                .IsFixedLength();
+            entity.Property(e => e.MgmtIpv4)
+                .HasMaxLength(15)
+                .HasColumnName("MgmtIPv4");
+            entity.Property(e => e.MgmtIpv6)
+                .HasMaxLength(45)
+                .HasColumnName("MgmtIPv6");
+            entity.Property(e => e.Os)
+                .HasMaxLength(30)
+                .HasColumnName("OS");
+            entity.Property(e => e.InService)
+                .HasDefaultValue(true, "DF_Devices_InService");
         });
 
         modelBuilder.Entity<PublicIp>(entity =>
@@ -164,6 +197,70 @@ public partial class LabConfigContext : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("VPNGateway");
             entity.Property(e => e.WorkItemId).HasColumnName("WorkItemID");
+        });
+
+        modelBuilder.Entity<TenantRequest>(entity =>
+        {
+            entity.HasKey(e => e.RequestId);
+
+            entity.ToTable("TenantRequests");
+
+            entity.Property(e => e.RequestId)
+                .HasDefaultValueSql("(newid())", "DF_TenantRequests_RequestID")
+                .HasColumnName("RequestID");
+            entity.Property(e => e.Status).HasMaxLength(10);
+            entity.Property(e => e.RequestedBy).HasMaxLength(50);
+            entity.Property(e => e.Lab)
+                .HasMaxLength(3)
+                .IsFixedLength();
+            entity.Property(e => e.Contacts).HasMaxLength(150);
+            entity.Property(e => e.AzureRegion).HasMaxLength(50);
+            entity.Property(e => e.Ersku)
+                .HasMaxLength(10)
+                .HasColumnName("ERSKU");
+            entity.Property(e => e.Erspeed).HasColumnName("ERSpeed");
+            entity.Property(e => e.EruplinkPort)
+                .HasMaxLength(50)
+                .HasColumnName("ERUplinkPort");
+            entity.Property(e => e.ErgatewaySize)
+                .HasMaxLength(50)
+                .HasColumnName("ERGatewaySize");
+            entity.Property(e => e.ErfastPath).HasColumnName("ERFastPath");
+            entity.Property(e => e.Msftpeering).HasColumnName("MSFTPeering");
+            entity.Property(e => e.Vpngateway)
+                .HasMaxLength(20)
+                .HasColumnName("VPNGateway");
+            entity.Property(e => e.Vpnbgp).HasColumnName("VPNBGP");
+            entity.Property(e => e.Vpnconfig)
+                .HasMaxLength(15)
+                .HasColumnName("VPNConfig");
+            entity.Property(e => e.AddressFamily).HasMaxLength(4);
+            entity.Property(e => e.AzVm1)
+                .HasMaxLength(18)
+                .HasColumnName("AzVM1");
+            entity.Property(e => e.AzVm2)
+                .HasMaxLength(18)
+                .HasColumnName("AzVM2");
+            entity.Property(e => e.AzVm3)
+                .HasMaxLength(18)
+                .HasColumnName("AzVM3");
+            entity.Property(e => e.AzVm4)
+                .HasMaxLength(18)
+                .HasColumnName("AzVM4");
+            entity.Property(e => e.LabVm1)
+                .HasMaxLength(18)
+                .HasColumnName("LabVM1");
+            entity.Property(e => e.LabVm2)
+                .HasMaxLength(18)
+                .HasColumnName("LabVM2");
+            entity.Property(e => e.LabVm3)
+                .HasMaxLength(18)
+                .HasColumnName("LabVM3");
+            entity.Property(e => e.LabVm4)
+                .HasMaxLength(18)
+                .HasColumnName("LabVM4");
+            entity.Property(e => e.ReviewedBy).HasMaxLength(50);
+            entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
         });
 
         modelBuilder.Entity<User>(entity =>

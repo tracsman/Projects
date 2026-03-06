@@ -1,0 +1,56 @@
+@model PathWeb.Models.Device
+@{
+    ViewData["Title"] = "Device Details";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<table class="table table-hover">
+    <tr>
+        <th style="width: 150px;">Device ID</th>
+        <td>@Model.DeviceId</td>
+    </tr>
+    <tr>
+        <th>Name</th>
+        <td>@Model.Name</td>
+    </tr>
+    <tr>
+        <th>Type</th>
+        <td>@Model.Type</td>
+    </tr>
+    <tr>
+        <th>Lab</th>
+        <td>@Model.Lab</td>
+    </tr>
+    <tr>
+        <th>Mgmt IPv4</th>
+        <td>@(string.IsNullOrEmpty(Model.MgmtIpv4) ? Html.Raw("<i>empty</i>") : Model.MgmtIpv4)</td>
+    </tr>
+    <tr>
+        <th>Mgmt IPv6</th>
+        <td>@(string.IsNullOrEmpty(Model.MgmtIpv6) ? Html.Raw("<i>empty</i>") : Model.MgmtIpv6)</td>
+    </tr>
+    <tr>
+        <th>OS</th>
+        <td>@(string.IsNullOrEmpty(Model.Os) ? Html.Raw("<i>empty</i>") : Model.Os)</td>
+    </tr>
+    <tr>
+        <th>In Service</th>
+        <td>@(Model.InService ? "Yes" : "No")</td>
+    </tr>
+    <tr>
+        <th>Issues</th>
+        <td>@(string.IsNullOrEmpty(Model.Issues) ? Html.Raw("<i>none</i>") : Model.Issues)</td>
+    </tr>
+</table>
+<hr />
+<div class="d-flex gap-2">
+    @if (authLevel >= 12)
+    {
+        <a asp-action="Edit" asp-route-id="@Model.DeviceId" class="btn btn-primary">Edit</a>
+    }
+    <a asp-action="Index" class="btn btn-secondary">Back to List</a>
+</div>

@@ -317,11 +317,10 @@ public class ConfigGenerator
                 }
 
                 // Get New SKey and copy to clipboard
-                strDB += "# Set a new alias to access the clipboard\r\n" +
+                strDB += "# Copy Service Key to clipboard\r\n" +
                          "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
                          "Write-Host 'Copying Service Key to Clipboard' -ForegroundColor Cyan\r\n" +
-                         "New-Alias Out-Clipboard $env:SystemRoot\\System32\\Clip.exe -ErrorAction SilentlyContinue\r\n" +
-                         "$er.ServiceKey | Out-Clipboard\r\n" +
+                         "$er.ServiceKey | Set-Clipboard\r\n" +
                          "Write-Host 'The Service Key is now in the clipboard, please paste into the xls asap.' -ForegroundColor Green\r\n\r\n";
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateERConfig", "PowerShell strings created");
             }
@@ -439,21 +438,21 @@ public class ConfigGenerator
             }
             if (HasVPNGateway)
             {
-                strDB += "$LabSharedKey = (Get-AzKeyVaultSecret -VaultName LabSecrets -Name AzureVPNSecret -ErrorAction Stop).SecretValueText\r\n" +
+                strDB += "$LabSharedKey = Get-AzKeyVaultSecret -VaultName LabSecrets -Name AzureVPNSecret -AsPlainText\r\n" +
                          $"$LabPIP = '{strLabVpnIP}'\r\n" +
                          $"$LabBGPIP = '192.168.{tenant.TenantId}.88'\r\n";
             }
             if (HasAzureVM)
             {
                 strDB += "$VMPrefix = $RGName + '-VM'\r\n" +
-                         "$VMSize = 'Standard_B2s'\r\n" +
+                         "$VMSize = 'Standard_B2s_v2'\r\n" +
                          "$VMPostDeploy = 'ICMPv4'\r\n" +
                          strVMOS;
             }
 
             strDB += "$username = 'PathLabUser'\r\n" +
-                     "$RegEx='^(?=\\P{Ll}*\\p{Ll})(?=\\P{Lu}*\\p{Lu})(?=\\P{N}*\\p{N})(?=[\\p{L}\\p{N}]*[^\\p{L}\\p{N}])[\\s\\S]{12,}$'\r\n" +
-                     "Do {$password = ([char[]](Get-Random -Input $(40..44 + 46..59 + 63..91 + 95..122) -Count 20)) -join \"\"}\r\n" +
+                     "$RegEx='^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^a-zA-Z\\d]).{12,}$'\r\n" +
+                     "Do {$password = ([char[]](Get-Random -Input $(@(33,35) + 45..46 + 48..57 + @(61) + 65..90 + @(95) + 97..122 + @(126)) -Count 20)) -join \"\"}\r\n" +
                      "While ($password -cnotmatch $RegEx)\r\n\r\n" +
                      "$securePassword = ConvertTo-SecureString $password -AsPlainText -Force\r\n" +
                      "$KeyVaultAccessList = " + String.Join(",", lstContacts) + "\r\n\r\n";
@@ -486,32 +485,32 @@ public class ConfigGenerator
                      "$kvName = $RGName + '-kv'\r\n" +
                      "$kv = Get-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName\r\n" +
                      "If ($kv -eq $null) {\r\n" +
-                     "      Write-Host '  clearing any older Key Vaults (this may take 30 seconds or more)'\r\n" +
-                     "      Get-AzKeyVault -InRemovedState | Remove-AzKeyVault -InRemovedState -Force\r\n" +
-                     "      Write-Host '  creating new Key Vault'\r\n" +
+                     "      Write-Host '  clearing soft-deleted vault if present'\r\n" +
+                     "      Remove-AzKeyVault -VaultName $kvName -InRemovedState -Force -Location $Region -ErrorAction SilentlyContinue\r\n" +
+                     "      Write-Host '  creating new Key Vault (RBAC enabled by default)'\r\n" +
                      "      $kv = New-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName -Location $Region}\r\n" +
-                     "Else {Write-Host '  resource Exists, Skipping'}\r\n\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host 'Creating KeyVault Secret' -ForegroundColor Cyan\r\n" +
-                     "$kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $username -ErrorAction Stop\r\n" +
-                     "If ($kvs -eq $null) {Try {$kvs = Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop}\r\n" +
-                     "                     Catch {Write-host 'Vault not found, waiting 10 seconds and trying again.'\r\n" +
-                     "                            Sleep -Seconds 10\r\n" +
-                     "                            $kvs = Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop}}\r\n" +
                      "Else {Write-Host '  resource Exists, Skipping'}\r\n" +
-                     "$cred = New-Object System.Management.Automation.PSCredential ($kvs.Name, $kvs.SecretValue)\r\n\r\n" +
+                     "$kvScope = (Get-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName).ResourceId\r\n\r\n" +
                      "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host 'Setting KeyVault ACLs' -ForegroundColor Cyan\r\n" +
-                     "Write-Host '  Adding NetPath team'\r\n" +
-                     "Set-AzKeyVaultAccessPolicy -VaultName $kvName -ResourceGroupName $RGName -ObjectId '88e03f93-cfa1-45ba-9257-311df3814259' -PermissionsToSecrets Get,List,Set,Delete,Backup,Restore,Recover,Purge\r\n" +
+                     "Write-Host 'Setting KeyVault RBAC' -ForegroundColor Cyan\r\n" +
                      "ForEach ($User in $KeyVaultAccessList.Split(';')) {\r\n" +
                      "    $User = $User.Trim()\r\n" +
                      "    Write-Host \"  Adding $User\"\r\n" +
-                     "    Set-AzKeyVaultAccessPolicy -VaultName $kvName -ResourceGroupName $RGName -ObjectId (Get-AzADUser -UserPrincipalName $User).id -PermissionsToSecrets Get,List\r\n" +
+                     "    $userId = (Get-AzADUser -UserPrincipalName $User).Id\r\n" +
+                     "    New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue | Out-Null\r\n" +
                      "    If ((Get-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName -ErrorAction Stop).Count -gt 0) {\r\n" +
                      "        Write-Host '    account already assigned, skipping'}\r\n" +
                      "    Else {New-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName | Out-Null }\r\n" +
-                     "}\r\n\r\n";
+                     "}\r\n\r\n" +
+                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
+                     "Write-Host 'Creating KeyVault Secret' -ForegroundColor Cyan\r\n" +
+                     "$kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $username -ErrorAction SilentlyContinue\r\n" +
+                     "If ($kvs -eq $null) {Try {Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null}\r\n" +
+                     "                     Catch {Write-Host '  RBAC propagating, waiting 15 seconds and trying again.'\r\n" +
+                     "                            Sleep -Seconds 15\r\n" +
+                     "                            Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null}}\r\n" +
+                     "Else {Write-Host '  resource Exists, Skipping'}\r\n" +
+                     "$cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)\r\n\r\n";
 
             // Check/Create Virtual Network
             if (HasPrivate || HasAzureVM || HasVPNGateway)
@@ -545,7 +544,7 @@ public class ConfigGenerator
                          "    $VNet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName\r\n" +
                          "    $subnet = Get-AzVirtualNetworkSubnetConfig -Name GatewaySubnet -VirtualNetwork $VNet\r\n" +
                          "    Try {$pip = Get-AzPublicIpAddress -Name $VNetName-gw-er-pip -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
-                         "    Catch {$pip = New-AzPublicIpAddress -Name $VNetName-gw-er-pip -ResourceGroupName $RGName -Location $Region " + (tenant.ErgatewaySize.Contains("AZ") ? "-AllocationMethod Static -Sku Standard" : "-AllocationMethod Dynamic -sku Basic") + "}\r\n" +
+                         "    Catch {$pip = New-AzPublicIpAddress -Name $VNetName-gw-er-pip -ResourceGroupName $RGName -Location $Region -AllocationMethod Static -Sku Standard}\r\n" +
                          "    $ipconf = New-AzVirtualNetworkGatewayIpConfig -Name gwipconf -Subnet $subnet -PublicIpAddress $pip\r\n" +
                          "    New-AzVirtualNetworkGateway -Name $VNetName-gw-er -ResourceGroupName $RGName -Location $Region -IpConfigurations $ipconf -GatewayType Expressroute -GatewaySku " + tenant.ErgatewaySize + " -AsJob | Out-Null\r\n" +
                          "    } # End Try\r\n\r\n";
@@ -564,9 +563,9 @@ public class ConfigGenerator
                          "    $VNet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName\r\n" +
                          "    $subnet = Get-AzVirtualNetworkSubnetConfig -Name GatewaySubnet -VirtualNetwork $VNet\r\n" +
                          "    Try {$pip1 = Get-AzPublicIpAddress -Name $VNetName-gw-vpn-pip1 -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
-                         "    Catch {$pip1 = New-AzPublicIpAddress -Name $VNetName-gw-vpn-pip1 -ResourceGroupName $RGName -Location $Region " + (tenant.Vpngateway.Contains("AZ") ? "-AllocationMethod Static -Sku Standard" : "-AllocationMethod Dynamic -sku Basic") + "}\r\n" +
+                         "    Catch {$pip1 = New-AzPublicIpAddress -Name $VNetName-gw-vpn-pip1 -ResourceGroupName $RGName -Location $Region -AllocationMethod Static -Sku Standard}\r\n" +
                          (HasVPNAA ? "    Try {$pip2 = Get-AzPublicIpAddress -Name $VNetName-gw-vpn-pip2 -ResourceGroupName $RGName -ErrorAction Stop}\r\n" : "") +
-                         (HasVPNAA ? "    Catch {$pip2 = New-AzPublicIpAddress -Name $VNetName-gw-vpn-pip2 -ResourceGroupName $RGName -Location $Region " + (tenant.Vpngateway.Contains("AZ") ? "-AllocationMethod Static -Sku Standard" : "-AllocationMethod Dynamic -sku Basic") + "}\r\n" : "") +
+                         (HasVPNAA ? "    Catch {$pip2 = New-AzPublicIpAddress -Name $VNetName-gw-vpn-pip2 -ResourceGroupName $RGName -Location $Region -AllocationMethod Static -Sku Standard}\r\n" : "") +
                          "    $ipconf1 = New-AzVirtualNetworkGatewayIpConfig -Name gwipconf1 -Subnet $subnet -PublicIpAddress $pip1\r\n" +
                          (HasVPNAA ? "    $ipconf2 = New-AzVirtualNetworkGatewayIpConfig -Name gwipconf2 -Subnet $subnet -PublicIpAddress $pip2\r\n" : "") +
                          "    New-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName -Location $Region -IpConfigurations $ipconf1" + (HasVPNAA ? ",$ipconf2" : "") + " -GatewayType Vpn -VpnType RouteBased -VpnGatewayGeneration Generation2 -GatewaySku " + tenant.Vpngateway + (HasVPNAA ? " -EnableActiveActiveFeature" : "") + " -AsJob | Out-Null\r\n" +
@@ -643,14 +642,10 @@ public class ConfigGenerator
                          "    'Windows' {$vmConfig = New-AzVMConfig -VMName $VMName -VMSize $VMSize | `\r\n" +
                          "               Set-AzVMOperatingSystem -Windows -ComputerName $VMName -Credential $cred -EnableAutoUpdate -ProvisionVMAgent | `\r\n" +
                          "               Set-AzVMSourceImage -PublisherName MicrosoftWindowsServer -Offer WindowsServer `\r\n" +
-                         "               -Skus 2019-datacenter-gensecond -Version latest | Add-AzVMNetworkInterface -Id $nic.Id | Set-AzVMBootDiagnostic -Disable}\r\n" +
-                         "    'Centos'  {$vmConfig = New-AzVMConfig -VMName $VMName -VMSize $VMSize | `\r\n" +
-                         "               Set-AzVMOperatingSystem -Linux -ComputerName $VMName -Credential $cred | `\r\n" +
-                         "               Set-AzVMSourceImage -PublisherName OpenLogic -Offer CentOS -Skus '8_2-gen2' -Version latest | `\r\n" +
-                         "               Add-AzVMNetworkInterface -Id $nic.Id | Set-AzVMBootDiagnostic -Disable}\r\n" +
+                         "               -Skus 2022-datacenter-azure-edition-core -Version latest | Add-AzVMNetworkInterface -Id $nic.Id | Set-AzVMBootDiagnostic -Disable}\r\n" +
                          "    'Ubuntu'  {$vmConfig = New-AzVMConfig -VMName $VMName -VMSize $VMSize | `\r\n" +
                          "               Set-AzVMOperatingSystem -Linux -ComputerName $VMName -Credential $cred | `\r\n" +
-                         "               Set-AzVMSourceImage -PublisherName Canonical -Offer UbuntuServer -Skus '18_04-lts-gen2' -Version latest | `\r\n" +
+                         "               Set-AzVMSourceImage -PublisherName Canonical -Offer ubuntu-24_04-lts -Skus server -Version latest | `\r\n" +
                          "               Add-AzVMNetworkInterface -Id $nic.Id | Set-AzVMBootDiagnostic -Disable}\r\n" +
                          "           } # End Switch\r\n\r\n";
 
@@ -684,7 +679,7 @@ public class ConfigGenerator
                          "        $ScriptExe = \".\\$ScriptName\"\r\n" +
                          "        $PublicConfiguration = @{'fileUris' = [Object[]]\"$ScriptLocation\";'timestamp' = \"$timestamp\";'commandToExecute' = \"powershell.exe -ExecutionPolicy Unrestricted -Command $ScriptExe\"}\r\n\r\n" +
                          "        Set-AzVMExtension -ResourceGroupName $RGName -VMName $VMName -Location $Region `\r\n" +
-                         "        -Name $ExtensionName -Publisher 'Microsoft.Compute' -ExtensionType 'CustomScriptExtension' -TypeHandlerVersion '1.8' `\r\n" +
+                         "        -Name $ExtensionName -Publisher 'Microsoft.Compute' -ExtensionType 'CustomScriptExtension' -TypeHandlerVersion '1.10' `\r\n" +
                          "        -Settings $PublicConfiguration -ErrorAction Stop | Out-Null }\r\n" +
                          "    Else {# For future Linux extensions if needed\r\n" +
                          "         }# End If\r\n" +
@@ -702,7 +697,6 @@ public class ConfigGenerator
                          "     Write-Host '  resource exists, skipping'}\r\n" +
                          "Catch {\r\n" +
                          "    $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName\r\n" +
-                         "    $NeedSpace = $False\r\n" +
                          "    $i=0\r\n" +
                          "    If ($gw.ProvisioningState -eq 'Updating') {Write-Host '  waiting for VPN gateway to finish provisioning: ' -NoNewline\r\n" +
                          "                                               Sleep 10}\r\n" +
@@ -713,9 +707,9 @@ public class ConfigGenerator
                          "        Sleep 10\r\n" +
                          "        $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName}\r\n\r\n" +
                          "    If ($i -gt 0) {\r\n" +
-                         "        Write - Host" +
-                         "        Write - Host '  VPN Gateway deployement complete.'\r\n" +
-                         "        Write - Host '  Building connection'\r\n" +
+                         "        Write-Host\r\n" +
+                         "        Write-Host '  VPN Gateway deployment complete.'\r\n" +
+                         "        Write-Host '  Building connection'\r\n" +
                          "    }\r\n\r\n" +
                          "    If ($gw.ProvisioningState -eq 'Succeeded') {\r\n" +
                          "        Write-Host '  creating tunnel'\r\n" +
@@ -1717,11 +1711,7 @@ public class ConfigGenerator
                 int intVMCount = 0;
                 foreach (string vm in labVms)
                 {
-                    if (vm == "Centos")
-                    {
-                        strDB += $"New-LabVM {tenant.TenantId} -OS CentOS\r\n";
-                    }
-                    else if (vm == "Ubuntu")
+                    if (vm == "Ubuntu")
                     {
                         strDB += $"New-LabVM {tenant.TenantId} -OS Ubuntu\r\n";
                     }

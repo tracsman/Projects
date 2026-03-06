@@ -34,22 +34,37 @@
                         <li class="nav-item">
                             <a class="nav-link" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Requests" asp-action="Create">Request a Lab</a>
+                        </li>
                         @if (navAuthLevel >= 6)
                         {
                         <li class="nav-item">
                             <a class="nav-link" asp-controller="Tenants" asp-action="Index">Tenants</a>
                         </li>
                         }
-                        @if (navAuthLevel >= 11)
+                        @if (navAuthLevel >= 8)
                         {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Addresses" asp-action="Index">IP Addresses</a>
-                        </li>
-                        }
-                        @if (navAuthLevel >= 14)
-                        {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Users" asp-action="Index">Users</a>
+                            var db = ViewContext.HttpContext.RequestServices.GetRequiredService<PathWeb.Data.LabConfigContext>();
+                            var pendingCount = db.TenantRequests.Count(r => r.Status == "Pending");
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Admin@(pendingCount > 0 ? $" ({pendingCount})" : "")
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-controller="Requests" asp-action="Queue">Tenant Requests</a></li>
+                                @if (navAuthLevel >= 11)
+                                {
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><a class="dropdown-item" asp-controller="Devices" asp-action="Index">Devices</a></li>
+                                <li><a class="dropdown-item" asp-controller="Addresses" asp-action="Index">IP Addresses</a></li>
+                                }
+                                @if (navAuthLevel >= 14)
+                                {
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Users</a></li>
+                                }
+                            </ul>
                         </li>
                         }
                         @if (navAuthLevel >= 1)

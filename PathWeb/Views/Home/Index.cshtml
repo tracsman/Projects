@@ -24,31 +24,6 @@
             </a>
         </div>
         }
-        @if (authLevel >= 11)
-        {
-        <div class="col-md-4 mb-3">
-            <a asp-controller="Addresses" asp-action="Index" class="text-decoration-none text-body">
-                <div class="border rounded p-3 h-100 tile-hover">
-                    <span class="h4">IP Address Management</span><br />
-                    This section allows for the view, assignment, and release of the public IP addresses
-                    used in the lab. Normally done as part of Tenant Management, this section allows for
-                    the reservation of addresses for other uses.
-                </div>
-            </a>
-        </div>
-        }
-        @if (authLevel >= 14)
-        {
-        <div class="col-md-4 mb-3">
-            <a asp-controller="Users" asp-action="Index" class="text-decoration-none text-body">
-                <div class="border rounded p-3 h-100 tile-hover">
-                    <span class="h4">User Management</span><br />
-                    This section is to add, update, and delete users for this site. This section also has
-                    AuthLevel information and how it is used to provide user authorization.
-                </div>
-            </a>
-        </div>
-        }
         @if (authLevel >= 1)
         {
         <div class="col-md-4 mb-3">
@@ -67,17 +42,6 @@
                 <div class="border rounded p-3 h-100 tile-hover">
                     <span class="h4">Workshop Management</span>
                     This section is for the creation, management, and deletion of workshops.
-                </div>
-            </a>
-        </div>
-        }
-        @if (authLevel >= 1)
-        {
-        <div class="col-md-4 mb-3">
-            <a asp-controller="About" asp-action="Index" class="text-decoration-none text-body">
-                <div class="border rounded p-3 h-100 tile-hover">
-                    <span class="h4">About</span><br />
-                    Learn more about this site, the physical lab, the logical tenant, and site development progress.
                 </div>
             </a>
         </div>

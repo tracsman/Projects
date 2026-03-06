@@ -35,14 +35,66 @@
     </p>
 
     <h4>Site Construction</h4>
-    <p>
-        This site is built on ASP.NET Core (.NET 10) using Razor views with Bootstrap styling,
-        Entity Framework Core for data access, and is hosted as an Azure App Service in West US 2.
-        It uses an Azure SQL Server backend for data storage with Entra ID (Azure AD) authentication
-        via Easy Auth and Managed Identity — no passwords or connection strings with secrets.
-        Authorization is provided by a Users table in the database with per-user, manually assigned
-        permission levels (AuthLevels 0-15).
-    </p>
+
+    <h5 class="mt-3">Platform &amp; Hosting</h5>
+    <ul>
+        <li><strong>Framework:</strong> ASP.NET Core (.NET 10) with C# 14, using Razor views and Bootstrap 5 styling with dark/light theme support.</li>
+        <li><strong>Hosting:</strong> Azure App Service (Linux, West US 2) with Always On enabled to eliminate cold starts.</li>
+        <li><strong>Database:</strong> Azure SQL Server (<code>labconfig.database.windows.net</code>) using Entity Framework Core 10 for data access.</li>
+        <li><strong>Source Control:</strong> GitHub (<a href="https://github.com/tracsman/Projects" target="_blank">tracsman/Projects</a>) with GitHub Copilot-assisted development.</li>
+    </ul>
+
+    <h5>Authentication &amp; Authorization</h5>
+    <ul>
+        <li><strong>Authentication:</strong> Microsoft Entra ID via Easy Auth (App Service platform-level authentication). No passwords or connection string secrets are stored anywhere in the application.</li>
+        <li><strong>SQL Authentication:</strong> System-assigned Managed Identity — the App Service identity is granted direct access to Azure SQL via Entra ID, eliminating the need for SQL credentials.</li>
+        <li><strong>Local Development:</strong> Supports three auth modes — Easy Auth (App Service), code-based OIDC (with Entra ID app registration), or a fake development identity from <code>appsettings.Development.json</code>.</li>
+        <li><strong>Authorization:</strong> Custom role-based system using a <code>Users</code> table with per-user AuthLevels (0–15). Each controller action checks the user's AuthLevel to determine access to features like tenant management, admin functions, and user administration.</li>
+    </ul>
+
+    <h5>Data Model</h5>
+    <ul>
+        <li><strong>Tenants:</strong> Core entity representing a customer lab environment — includes ExpressRoute, VPN, VM, and addressing configuration for both Azure and on-premises resources.</li>
+        <li><strong>Tenant Requests:</strong> Self-service lab request workflow — any authenticated user can submit a request, admins review and approve/reject from a queue.</li>
+        <li><strong>Devices:</strong> Inventory of physical network devices (routers, switches) in each lab location.</li>
+        <li><strong>IP Addresses:</strong> Public IP address management and assignment tracking.</li>
+        <li><strong>Config:</strong> Generated configuration data for each tenant (network device configs, PowerShell scripts).</li>
+        <li><strong>Regions:</strong> Lookup table of Azure regions available for tenant deployments.</li>
+        <li><strong>Settings:</strong> Application-level configuration values stored in the database.</li>
+        <li><strong>Users:</strong> User directory with Ninja (admin) flags, display names, and AuthLevel assignments.</li>
+    </ul>
+
+    <h5>Key Services</h5>
+    <ul>
+        <li><strong>ConfigGenerator:</strong> The heart of the application — generates Juniper, Cisco, and PowerShell configuration scripts for each tenant based on their ExpressRoute, VPN, and VM settings. This is the web evolution of the original Excel/VBA "Configuration Generator" spreadsheet.</li>
+        <li><strong>AuthLevelService:</strong> Resolves the authenticated user's email to their AuthLevel from the database on every request, injecting it into <code>HttpContext.Items</code> for use by controllers and views.</li>
+        <li><strong>EasyAuthAuthenticationHandler:</strong> Custom authentication handler that reads Easy Auth platform headers (<code>X-MS-CLIENT-PRINCIPAL</code>) and constructs a <code>ClaimsPrincipal</code> with the user's name, email, and identity.</li>
+    </ul>
+
+    <h5>Lab Request Workflow</h5>
+    <ol>
+        <li>Any authenticated user submits a lab request via the <strong>Request a Lab</strong> form, specifying their ExpressRoute, VPN, VM, and region requirements.</li>
+        <li>Admins (AuthLevel ≥ 8) see pending requests in the <strong>Admin → Tenant Requests</strong> queue, with a count badge on the nav menu.</li>
+        <li>The reviewing admin selects a <strong>server preference</strong> (which determines the TenantID range and physical server assignment) and approves the request.</li>
+        <li>On approval, a <strong>Tenant</strong> record is created in the database.</li>
+        <li>A <strong>Power Automate</strong> flow monitors the database for approved requests and automatically creates/updates <strong>ADO Experiment work items</strong> in the <code>msazure/One</code> project using delegated Entra ID credentials.</li>
+        <li>The admin is redirected to the <strong>Tenant Edit</strong> page to review and refine settings.</li>
+    </ol>
+
+    <h5>Deployment</h5>
+    <ul>
+        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, enables Managed Identity, configures Easy Auth with Entra ID, sets up logging, builds, and deploys the application.</li>
+        <li><strong><code>quick-deploy.ps1</code>:</strong> Fast redeployment — skips all infrastructure provisioning, just builds, packages, deploys, and warms up the app (including EF Core JIT compilation and Razor page pre-compilation).</li>
+        <li><strong><code>Warmup.ps1</code>:</strong> Post-restart warmup — polls the <code>/warmup</code> endpoint to pre-compile EF Core and the DI pipeline, then touches all Razor pages to force JIT compilation.</li>
+        <li><strong>Health endpoints:</strong> <code>/health</code> and <code>/warmup</code> are excluded from Easy Auth so deployment and monitoring tools can reach them without authentication.</li>
+    </ul>
+
+    <h5>NuGet Packages</h5>
+    <ul>
+        <li><code>Azure.Identity</code> — <code>DefaultAzureCredential</code> for passwordless auth to Azure SQL</li>
+        <li><code>Microsoft.EntityFrameworkCore</code> + <code>SqlServer</code> — ORM and Azure SQL provider</li>
+        <li><code>Microsoft.Identity.Web</code> — Entra ID / OIDC authentication for local development</li>
+    </ul>
 
     <h4>Roadmap</h4>
     <ul>

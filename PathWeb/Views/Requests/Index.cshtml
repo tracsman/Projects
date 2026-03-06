@@ -1,0 +1,51 @@
+@model IEnumerable<PathWeb.Models.TenantRequest>
+@{
+    ViewData["Title"] = "My Lab Requests";
+    bool isAdmin = ViewBag.IsAdmin == true;
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@(isAdmin ? "All Lab Requests" : ViewData["Title"])</h2>
+    <p>@(isAdmin ? "Showing all lab requests across all users." : "Showing your submitted lab requests and their current status.")</p>
+    <a asp-action="Create" class="btn btn-primary">Submit New Request</a>
+</div>
+
+<table class="table table-bordered">
+    <thead class="table-dark">
+        <tr>
+            <th class="text-center">Status</th>
+            <th>Lab</th>
+            @if (isAdmin)
+            {
+                <th>Requested By</th>
+            }
+            <th>Usage</th>
+            <th class="text-center">Requested</th>
+            <th class="text-center">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            var badgeClass = item.Status switch
+            {
+                "Approved" => "bg-success",
+                "Rejected" => "bg-danger",
+                _ => "bg-warning text-dark"
+            };
+            <tr>
+                <td class="text-center"><span class="badge @badgeClass">@item.Status</span></td>
+                <td>@item.Lab</td>
+                @if (isAdmin)
+                {
+                    <td>@(((Dictionary<string, string>)ViewBag.UserNames).GetValueOrDefault(item.RequestedBy, item.RequestedBy))</td>
+                }
+                <td>@(item.Usage.Length > 60 ? item.Usage[..60] + "..." : item.Usage)</td>
+                <td class="text-center">@item.RequestedDate.ToString("yyyy-MM-dd")</td>
+                <td class="text-center">
+                    <a asp-action="Details" asp-route-id="@item.RequestId">Details</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
