@@ -111,7 +111,16 @@
         <table class="table table-hover mb-0">
             <tr><th style="width:200px">Tenant GUID</th><td>@Model.TenantGuid</td></tr>
             <tr><th>Tenant Version</th><td>@Model.TenantVersion</td></tr>
-            <tr><th>Work Item ID</th><td>@Model.WorkItemId</td></tr>
+            <tr><th>Work Item ID</th><td>@if (Model.WorkItemId.HasValue && Model.WorkItemId > 0)
+                    {
+                        var adoOrg = ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["AzureDevOps:OrgUrl"];
+                        var adoProject = ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["AzureDevOps:Project"];
+                        <a href="@adoOrg/@adoProject/_workitems/edit/@Model.WorkItemId" target="_blank">@Model.WorkItemId</a>
+                    }
+                    else
+                    {
+                        <i>none</i>
+                    }</td></tr>
             <tr><th>Assigned Date</th><td>@Model.AssignedDate.ToString("u")</td></tr>
             <tr><th>Assigned By</th><td>@Model.AssignedBy</td></tr>
             <tr><th>Last Update</th><td>@Model.LastUpdateDate.ToString("u")</td></tr>

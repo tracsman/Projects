@@ -402,11 +402,11 @@ public class TenantsController : Controller
 
         // Server preference determines which physical server (and TenantID range) to use
         // Preference 0 = any server (range 10-69), Preference 1-6 = specific server (e.g., 4 = 40-49)
-        // Preference 100 = no on-prem needed (range 100+)
+        // Preference 100 = no on-prem needed (range 101+)
         short rangeStart, rangeEnd;
         if (serverPreference >= 100)
         {
-            rangeStart = 100;
+            rangeStart = 101;
             rangeEnd = 999;
         }
         else if (serverPreference > 0)
@@ -427,7 +427,7 @@ public class TenantsController : Controller
         }
 
         // Fallback: if preferred range is full, search extended range
-        for (short id = 100; id < 1000; id++)
+        for (short id = 101; id < 1000; id++)
         {
             if (!usedIds.Contains(id))
                 return id;
@@ -462,7 +462,7 @@ public class TenantsController : Controller
         var ninjas = await _context.Users
             .Where(u => u.Ninja)
             .OrderBy(u => u.Name)
-            .Select(u => new { Value = u.UserName.Split('@')[0], Text = u.Name })
+            .Select(u => new { Value = u.UserName, Text = u.Name + " (" + u.UserName + ")" })
             .ToListAsync();
         ViewBag.Ninjas = new SelectList(ninjas, "Value", "Text");
 

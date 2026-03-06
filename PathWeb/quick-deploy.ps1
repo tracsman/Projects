@@ -86,25 +86,34 @@ try {
     exit 1
 }
 
-# Warm up all areas to force JIT compilation
+# Wait for app to restart and warm up EF Core / DI
 $appUrl = "https://$WebAppName.azurewebsites.net"
-Write-Step "Warming up all pages..."
-$warmupPaths = @(
-    "/",
-    "/Tenants",
-    "/Addresses",
-    "/Users",
-    "/About",
-    "/About/Lab",
-    "/About/Tenant",
-    "/About/Progress"
-)
+
+Write-Step "Waiting for app restart and warming up EF Core..."
+$ready = $false
+for ($i = 1; $i -le 36; $i++) {
+    try {
+        $response = Invoke-WebRequest -Uri "$appUrl/warmup" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
+        $warmup = $response.Content | ConvertFrom-Json
+        Write-Success "App is warm (build: $($warmup.build), db: $($warmup.dbMs)ms)"
+        $ready = $true
+        break
+    } catch {
+        Write-Host "." -NoNewline
+        Start-Sleep -Seconds 5
+    }
+}
+if (-not $ready) {
+    Write-Info "App did not respond to /warmup after 3 minutes, continuing anyway..."
+}
+
+Write-Step "Compiling Razor Pages..."
+$warmupPaths = @("/", "/Tenants", "/Addresses", "/Users",
+                  "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {
         Invoke-WebRequest -Uri "$appUrl$path" -TimeoutSec 15 -UseBasicParsing -MaximumRedirection 0 -ErrorAction SilentlyContinue | Out-Null
-    } catch {
-        # Ignore - Easy Auth redirects are expected
-    }
+    } catch { }
     Write-Host "  $path" -ForegroundColor DarkGray
 }
 Write-Success "All pages warmed up!"

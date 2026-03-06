@@ -1,0 +1,102 @@
+@model PathWeb.Models.TenantRequest
+@{
+    ViewData["Title"] = "Review Lab Request";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>Submitted by <strong>@(((Dictionary<string, string>)ViewBag.UserNames).GetValueOrDefault(Model.RequestedBy, Model.RequestedBy))</strong> on @Model.RequestedDate.ToString("yyyy-MM-dd HH:mm")</p>
+</div>
+
+<!-- Approve / Reject Actions -->
+<div class="card mb-3 border-primary">
+    <div class="card-header fw-bold">Actions</div>
+    <div class="card-body">
+        <div class="d-flex gap-2 mb-3">
+            <form asp-action="Approve" method="post" class="d-flex gap-2 align-items-end">
+                <input type="hidden" name="id" value="@Model.RequestId" />
+                <div>
+                    <label class="form-label fw-bold mb-1">Server Preference</label>
+                    <select name="serverPreference" class="form-select">
+                        @for (short i = 0; i <= 6; i++)
+                        {
+                            <option value="@i">@(i == 0 ? "Any" : $"Server {i} ({i}0-{i}9)")</option>
+                        }
+                        <option value="100">No on-prem needed (101+)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success">Approve &amp; Create Tenant</button>
+            </form>
+            <a asp-action="Queue" class="btn btn-secondary align-self-end">Back to Queue</a>
+        </div>
+        <hr />
+        <form asp-action="Reject" method="post">
+            <input type="hidden" name="id" value="@Model.RequestId" />
+            <div class="mb-3">
+                <label for="reviewNotes" class="form-label fw-bold">Rejection Notes</label>
+                <textarea name="reviewNotes" id="reviewNotes" class="form-control" rows="3"
+                          placeholder="Reason for rejection..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-danger">Reject</button>
+        </form>
+    </div>
+</div>
+
+<!-- Basic Information -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">Basic Information</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">Lab</th><td>@Model.Lab</td></tr>
+            <tr><th>Contact(s)</th><td>@Model.Contacts</td></tr>
+            <tr><th>Usage</th><td>@Model.Usage</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- Azure / ExpressRoute -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">Azure / ExpressRoute</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">Azure Region</th><td>@Model.AzureRegion</td></tr>
+            <tr><th>ER SKU</th><td>@Model.Ersku</td></tr>
+            <tr><th>ER Speed</th><td>@Model.Erspeed</td></tr>
+            <tr><th>Uplink Port</th><td>@Model.EruplinkPort</td></tr>
+            <tr><th>Private Peering</th><td>@(Model.PvtPeering == true ? "Enabled" : "Not Enabled")</td></tr>
+            <tr><th>ER Gateway Size</th><td>@Model.ErgatewaySize</td></tr>
+            <tr><th>ER Fast Path</th><td>@(Model.ErfastPath == true ? "Enabled" : "Not Enabled")</td></tr>
+            <tr><th>MSFT Peering</th><td>@(Model.Msftpeering == true ? "Enabled" : "Not Enabled")</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- VPN -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">VPN Information</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">VPN Gateway</th><td>@Model.Vpngateway</td></tr>
+            <tr><th>VPN BGP</th><td>@(Model.Vpnbgp == true ? "Enabled" : "Not Enabled")</td></tr>
+            <tr><th>VPN Config</th><td>@Model.Vpnconfig</td></tr>
+        </table>
+    </div>
+</div>
+
+<!-- VMs -->
+<div class="card mb-3">
+    <div class="card-header fw-bold">VM Information</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">Address Family</th><td>@Model.AddressFamily</td></tr>
+            <tr><th>Azure VM 1</th><td>@Model.AzVm1</td></tr>
+            <tr><th>Azure VM 2</th><td>@Model.AzVm2</td></tr>
+            <tr><th>Azure VM 3</th><td>@Model.AzVm3</td></tr>
+            <tr><th>Azure VM 4</th><td>@Model.AzVm4</td></tr>
+            <tr><th>Lab VM 1</th><td>@Model.LabVm1</td></tr>
+            <tr><th>Lab VM 2</th><td>@Model.LabVm2</td></tr>
+            <tr><th>Lab VM 3</th><td>@Model.LabVm3</td></tr>
+            <tr><th>Lab VM 4</th><td>@Model.LabVm4</td></tr>
+        </table>
+    </div>
+</div>

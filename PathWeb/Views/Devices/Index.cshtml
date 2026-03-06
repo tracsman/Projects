@@ -1,0 +1,45 @@
+@model IEnumerable<PathWeb.Models.Device>
+@{
+    ViewData["Title"] = "Lab Devices";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>This is a list of all lab devices (routers, switches, firewalls, and servers) in our database.</p>
+    <p>With the appropriate permission level, you can update management IPs, OS, and issue notes.</p>
+    <p><strong>Note:</strong> This is a fixed list, you can't add or delete rows or update the device name, type, or lab assignment.</p>
+</div>
+
+<table class="table table-bordered">
+    <thead class="table-dark">
+        <tr>
+            <th class="text-center">Lab</th>
+            <th>Name</th>
+            <th class="text-center">Type</th>
+            <th>OS</th>
+            <th class="text-center">In Service</th>
+            <th class="text-center">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr class="@(item.InService ? "" : "table-warning")">
+                <td class="text-center">@item.Lab</td>
+                <td>@item.Name</td>
+                <td class="text-center">@item.Type</td>
+                <td>@item.Os</td>
+                <td class="text-center">@(item.InService ? "Yes" : "No")</td>
+                <td class="text-center">
+                    @if (authLevel >= 12)
+                    {
+                        <a asp-action="Edit" asp-route-id="@item.DeviceId">Edit</a>
+                        <span>|</span>
+                    }
+                    <a asp-action="Details" asp-route-id="@item.DeviceId">Details</a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

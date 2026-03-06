@@ -215,6 +215,25 @@ try {
     Write-Error "Failed to configure HTTPS: $_"
 }
 
+# Enable Always On to prevent idle timeout cold starts
+Write-Step "Configuring Always On..."
+try {
+    $currentWebApp = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName
+
+    if ($currentWebApp.SiteConfig.AlwaysOn) {
+        Write-Info "Always On is already enabled, skipping configuration"
+    } else {
+        Set-AzWebApp `
+            -ResourceGroupName $ResourceGroup `
+            -Name $WebAppName `
+            -AlwaysOn $true
+
+        Write-Success "Always On enabled"
+    }
+} catch {
+    Write-Error "Failed to configure Always On: $_"
+}
+
 # Configure Linux runtime stack for .NET 10
 Write-Step "Configuring .NET 10 runtime stack..."
 try {
@@ -227,7 +246,7 @@ try {
     Set-AzResource `
         -ResourceId $webAppResourceId `
         -Properties $properties `
-        -Force
+        -Force | Out-Null
 
     Write-Success ".NET 10 runtime configured"
 } catch {
@@ -254,38 +273,129 @@ try {
     }
 }
 
-# Exclude /health from Easy Auth so deploy script can poll it
-Write-Step "Configuring Easy Auth exclusion for /health endpoint..."
+# Exclude /health and /warmup from Easy Auth so deploy/warmup scripts can reach them
+Write-Step "Configuring Easy Auth exclusions for health and warmup endpoints..."
 try {
     $authUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/authsettingsV2?api-version=2022-03-01"
 
-    # Get current auth config
+    # Get current auth config, add excludedPaths, PUT the full config back
+    # (PATCH fails silently when globalValidation doesn't exist yet)
     $authResponse = Invoke-AzRestMethod -Path $authUri -Method GET
     if ($authResponse.StatusCode -eq 200) {
         $authConfig = $authResponse.Content | ConvertFrom-Json
 
-        # Check if /health is already excluded
-        $excludedPaths = $authConfig.properties.globalValidation.excludedPaths
-        if ($null -eq $excludedPaths -or "/health" -notin $excludedPaths) {
-            if ($null -eq $excludedPaths) { $excludedPaths = @() }
-            $excludedPaths = @($excludedPaths) + @("/health")
+        # Ensure globalValidation exists
+        if (-not $authConfig.properties.globalValidation) {
+            $authConfig.properties | Add-Member -NotePropertyName globalValidation -NotePropertyValue @{} -Force
+        }
 
-            $authBody = @{
-                properties = @{
-                    globalValidation = @{
-                        excludedPaths = $excludedPaths
-                    }
-                }
-            } | ConvertTo-Json -Depth 5
+        $requiredPaths = @("/health", "/warmup")
+        $existingPaths = @($authConfig.properties.globalValidation.excludedPaths)
+        if ($existingPaths.Count -eq 1 -and $null -eq $existingPaths[0]) { $existingPaths = @() }
+        $missingPaths = @($requiredPaths | Where-Object { $_ -notin $existingPaths })
 
-            Invoke-AzRestMethod -Path $authUri -Method PATCH -Payload $authBody | Out-Null
-            Write-Success "/health excluded from Easy Auth"
+        if ($missingPaths.Count -gt 0) {
+            $authConfig.properties.globalValidation | Add-Member -NotePropertyName excludedPaths -NotePropertyValue (@($existingPaths) + @($missingPaths)) -Force
+            Invoke-AzRestMethod -Path $authUri -Method PUT -Payload ($authConfig | ConvertTo-Json -Depth 10) | Out-Null
+            Write-Success "$($missingPaths -join ', ') excluded from Easy Auth"
         } else {
-            Write-Info "/health already excluded from Easy Auth"
+            Write-Info "/health and /warmup already excluded from Easy Auth"
         }
     }
 } catch {
     Write-Info "Could not configure Easy Auth exclusion: $_"
+}
+
+# Enable System-assigned Managed Identity (required for Azure SQL Entra ID auth)
+Write-Step "Enabling System-assigned Managed Identity..."
+try {
+    $identity = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Select-Object -ExpandProperty Identity
+    if ($identity -and $identity.Type -match "SystemAssigned") {
+        Write-Info "System-assigned Managed Identity already enabled (Principal: $($identity.PrincipalId))"
+    } else {
+        Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AssignIdentity $true | Out-Null
+        $identity = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Select-Object -ExpandProperty Identity
+        Write-Success "Managed Identity enabled (Principal: $($identity.PrincipalId))"
+    }
+    Write-Info "Ensure this identity has been granted access to Azure SQL (CREATE USER [...] FROM EXTERNAL PROVIDER)"
+} catch {
+    Write-Info "Could not configure Managed Identity: $_"
+}
+
+# Configure Easy Auth with Entra ID and token store
+# Prerequisites: App Registration (9e37f5a9-7325-4bf4-9e5a-db36b00faaa0) must exist in Entra ID
+# Uses GET-modify-PUT pattern to avoid wiping existing Easy Auth settings
+Write-Step "Configuring Easy Auth with Entra ID..."
+try {
+    $authUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/authsettingsV2?api-version=2022-03-01"
+    $authResponse = Invoke-AzRestMethod -Path $authUri -Method GET
+    $authConfig = $authResponse.Content | ConvertFrom-Json
+
+    $changed = $false
+
+    # Ensure platform is enabled
+    if (-not $authConfig.properties.platform -or -not $authConfig.properties.platform.enabled) {
+        $authConfig.properties | Add-Member -NotePropertyName platform -NotePropertyValue @{ enabled = $true; runtimeVersion = "~1" } -Force
+        $changed = $true
+    }
+
+    # Ensure globalValidation is configured with excluded paths
+    if (-not $authConfig.properties.globalValidation) {
+        $authConfig.properties | Add-Member -NotePropertyName globalValidation -NotePropertyValue @{} -Force
+    }
+    $gv = $authConfig.properties.globalValidation
+    if (-not $gv.requireAuthentication) {
+        $gv | Add-Member -NotePropertyName requireAuthentication -NotePropertyValue $true -Force
+        $gv | Add-Member -NotePropertyName unauthenticatedClientAction -NotePropertyValue "RedirectToLoginPage" -Force
+        $changed = $true
+    }
+    $existingPaths = @($gv.excludedPaths)
+    if ($existingPaths.Count -eq 1 -and $null -eq $existingPaths[0]) { $existingPaths = @() }
+    $requiredPaths = @("/health", "/warmup")
+    $missingPaths = @($requiredPaths | Where-Object { $_ -notin $existingPaths })
+    if ($missingPaths.Count -gt 0) {
+        $gv | Add-Member -NotePropertyName excludedPaths -NotePropertyValue (@($existingPaths) + @($missingPaths)) -Force
+        $changed = $true
+    }
+
+    # Ensure token store is enabled
+    if (-not $authConfig.properties.login) {
+        $authConfig.properties | Add-Member -NotePropertyName login -NotePropertyValue @{} -Force
+    }
+    if (-not $authConfig.properties.login.tokenStore -or -not $authConfig.properties.login.tokenStore.enabled) {
+        $authConfig.properties.login | Add-Member -NotePropertyName tokenStore -NotePropertyValue @{ enabled = $true; tokenRefreshExtensionHours = 72 } -Force
+        $changed = $true
+    }
+
+    # Ensure Entra ID provider is configured with registration details
+    if (-not $authConfig.properties.identityProviders) {
+        $authConfig.properties | Add-Member -NotePropertyName identityProviders -NotePropertyValue @{} -Force
+    }
+    if (-not $authConfig.properties.identityProviders.azureActiveDirectory) {
+        $authConfig.properties.identityProviders | Add-Member -NotePropertyName azureActiveDirectory -NotePropertyValue @{} -Force
+    }
+    $aad = $authConfig.properties.identityProviders.azureActiveDirectory
+    if (-not $aad.enabled) {
+        $aad | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force
+        $changed = $true
+    }
+    if (-not $aad.registration -or -not $aad.registration.clientId) {
+        $aad | Add-Member -NotePropertyName registration -NotePropertyValue @{
+            clientId = "9e37f5a9-7325-4bf4-9e5a-db36b00faaa0"
+            openIdIssuer = "https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0"
+            clientSecretSettingName = "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID"
+        } -Force
+        $changed = $true
+    }
+
+    if ($changed) {
+        Invoke-AzRestMethod -Path $authUri -Method PUT -Payload ($authConfig | ConvertTo-Json -Depth 20) | Out-Null
+        Write-Success "Easy Auth configured with Entra ID + token store + excluded paths"
+    } else {
+        Write-Info "Easy Auth already fully configured"
+    }
+} catch {
+    Write-Info "Could not configure Easy Auth: $_"
 }
 
 # Enable App Service application logging
@@ -397,7 +507,7 @@ try {
             -ResourceGroupName $ResourceGroup `
             -Name $WebAppName `
             -ArchivePath $zipPath `
-            -Force
+            -Force | Out-Null
 
         Write-Success "Application deployed successfully"
     } catch {

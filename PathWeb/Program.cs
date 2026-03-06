@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
@@ -68,7 +69,7 @@ else if (hasValidEntraId)
 }
 else
 {
-    // Development mode without authentication
+    // Development mode - fake identity from DevUser setting in appsettings.Development.json
     builder.Services.AddControllersWithViews();
     builder.Services.AddRazorPages();
 }
@@ -111,11 +112,128 @@ app.MapGet("/health", () =>
     return Results.Ok(new { status = "healthy", build = buildTime });
 }).AllowAnonymous();
 
+// Warmup endpoint - forces JIT compilation of EF Core model, DI pipeline, and validates SQL connectivity
+app.MapGet("/warmup", async (LabConfigContext db) =>
+{
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    // Resolving LabConfigContext compiles the EF Core model; SELECT 1 validates SQL connectivity
+    _ = await db.Database.ExecuteSqlRawAsync("SELECT 1");
+    sw.Stop();
+    var buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location)
+        .ToString("yyyy-MM-dd HH:mm:ss");
+    return Results.Ok(new { status = "warm", build = buildTime, dbMs = sw.ElapsedMilliseconds });
+}).AllowAnonymous();
+
+// Diagnostic endpoint - authenticated, shows environment, auth, DB, and runtime info for troubleshooting
+app.MapGet("/diag", async (HttpContext ctx, LabConfigContext db, IConfiguration config) =>
+{
+    // Build info
+    var assembly = typeof(Program).Assembly;
+    var buildTime = System.IO.File.GetLastWriteTime(assembly.Location).ToString("yyyy-MM-dd HH:mm:ss");
+    var dotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
+
+    // Environment
+    var isAppService = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+    var siteName = Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") ?? "(local)";
+    var instanceId = Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")?[..Math.Min(8, Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")?.Length ?? 0)] ?? "(local)";
+
+    // Auth info
+    var principalName = ctx.Request.Headers["X-MS-CLIENT-PRINCIPAL-NAME"].FirstOrDefault();
+    var userName = ctx.User?.Identity?.Name ?? "(anonymous)";
+    var userEmail = ctx.User?.FindFirst(ClaimTypes.Email)?.Value ?? "(none)";
+    var authType = isAppService ? "Easy Auth" : ctx.User?.Identity?.IsAuthenticated == true ? "OIDC / Dev Identity" : "None";
+
+    // Easy Auth headers present
+    var hasClientPrincipal = !string.IsNullOrEmpty(ctx.Request.Headers["X-MS-CLIENT-PRINCIPAL"].FirstOrDefault());
+    var hasAccessToken = !string.IsNullOrEmpty(ctx.Request.Headers["X-MS-TOKEN-AAD-ACCESS-TOKEN"].FirstOrDefault());
+    var hasIdToken = !string.IsNullOrEmpty(ctx.Request.Headers["X-MS-TOKEN-AAD-ID-TOKEN"].FirstOrDefault());
+
+    // DB connectivity
+    string dbStatus;
+    long dbMs;
+    try
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _ = await db.Database.ExecuteSqlRawAsync("SELECT 1");
+        sw.Stop();
+        dbMs = sw.ElapsedMilliseconds;
+        dbStatus = "connected";
+    }
+    catch (Exception ex)
+    {
+        dbMs = -1;
+        dbStatus = $"error: {ex.Message}";
+    }
+
+    // DB stats
+    var tenantCount = await db.Tenants.CountAsync(t => t.DeletedDate == null);
+    var pendingRequests = await db.TenantRequests.CountAsync(r => r.Status == "Pending");
+    var userCount = await db.Users.CountAsync();
+
+    // Auth level for current user
+    var authLevel = ctx.Items["AuthLevel"] as byte? ?? 0;
+
+    return Results.Ok(new
+    {
+        build = buildTime,
+        runtime = dotnetVersion,
+        environment = new
+        {
+            site = siteName,
+            instance = instanceId,
+            isAppService
+        },
+        auth = new
+        {
+            type = authType,
+            user = userName,
+            email = userEmail,
+            easyAuthPrincipal = principalName ?? "(none)",
+            authLevel,
+            hasClientPrincipal,
+            hasAccessToken,
+            hasIdToken
+        },
+        database = new
+        {
+            status = dbStatus,
+            latencyMs = dbMs,
+            activeTenants = tenantCount,
+            pendingRequests,
+            users = userCount
+        },
+        config = new
+        {
+            adoOrg = config["AzureDevOps:OrgUrl"],
+            adoProject = config["AzureDevOps:Project"],
+            adoWorkItemType = config["AzureDevOps:WorkItemType"]
+        }
+    });
+});
+
 if (easyAuthEnabled || hasValidEntraId)
 {
     app.UseAuthentication();
 }
 app.UseAuthorization();
+
+// Development fake identity - creates an authenticated user from the DevUser config setting
+if (app.Environment.IsDevelopment() && !easyAuthEnabled && !hasValidEntraId)
+{
+    var devUser = app.Configuration["DevUser"];
+    if (!string.IsNullOrEmpty(devUser))
+    {
+        app.Use(async (context, next) =>
+        {
+            var claims = new[] {
+                new Claim(ClaimTypes.Name, devUser),
+                new Claim(ClaimTypes.Email, devUser)
+            };
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Development"));
+            await next();
+        });
+    }
+}
 
 // AuthLevel middleware - looks up the user's AuthLevel from the database on each request
 app.Use(async (context, next) =>

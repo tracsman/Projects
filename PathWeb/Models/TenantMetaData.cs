@@ -37,7 +37,7 @@ public class TenantMetaData
     public string? Contacts { get; set; }
 
     [Display(Name = "Return Date")]
-    [DisplayFormat(ApplyFormatInEditMode = true, DataFormatString = "{0:d}")]
+    [DisplayFormat(ApplyFormatInEditMode = true, DataFormatString = "{0:yyyy-MM-dd}")]
     [Required]
     public DateOnly ReturnDate { get; set; }
 
