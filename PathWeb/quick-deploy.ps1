@@ -14,10 +14,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$ResourceGroup = "testPathWeb",
+    [string]$ResourceGroup = "labinfrastructure",
 
     [Parameter(Mandatory = $false)]
-    [string]$WebAppName = "testPathWeb-app"
+    [string]$WebAppName = "PathWeb"
 )
 
 Set-StrictMode -Version Latest

@@ -9,7 +9,7 @@
     <p>Click the "Details" link next to a tenant to see environment details and configurations.</p>
     <p>If you have sufficient permissions, the Details view will also allow you to edit, release, and generate config for a tenant record.</p>
     <p>Many of the table column headers are clickable, this will sort or reverse sort the table on that column value.</p>
-    <p>The search field will search for any matches in the Lab, Tenant ID, Owner, Contacts, and Usage fields.</p>
+    <p>The search field will search for any matches in the Lab, Tenant ID, Ninja, Contacts, and Usage fields.</p>
 </div>
 
 <div class="container d-flex justify-content-between align-items-center mb-3">
@@ -33,7 +33,7 @@
                 <a asp-action="Index" asp-route-sortOrder="@ViewData["LabSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Lab and Tenant Number">Tenant Name</a>
             </th>
             <th class="text-center" style="width:8%">
-                <a asp-action="Index" asp-route-sortOrder="@ViewData["NinjaSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Owner">Owner</a>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["NinjaSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Ninja">Ninja</a>
             </th>
             <th style="width:22%">Contacts</th>
             <th style="width:8%">

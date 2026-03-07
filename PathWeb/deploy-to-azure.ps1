@@ -13,16 +13,16 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$ResourceGroup = "testPathWeb",
+    [string]$ResourceGroup = "labinfrastructure",
 
     [Parameter(Mandatory = $false)]
     [string]$Location = "westus2",
 
     [Parameter(Mandatory = $false)]
-    [string]$AppServicePlan = "testPathWeb-app-plan",
+    [string]$AppServicePlan = "PathWeb-Plan",
 
     [Parameter(Mandatory = $false)]
-    [string]$WebAppName = "testPathWeb-app", #-$(Get-Random -Minimum 1000 -Maximum 9999)",
+    [string]$WebAppName = "PathWeb",
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("B1", "B2", "B3", "S1", "S2", "S3", "P1V2", "P2V2", "P3V2")]
@@ -226,7 +226,7 @@ try {
         Set-AzWebApp `
             -ResourceGroupName $ResourceGroup `
             -Name $WebAppName `
-            -AlwaysOn $true
+            -AlwaysOn $true | Out-Null
 
         Write-Success "Always On enabled"
     }

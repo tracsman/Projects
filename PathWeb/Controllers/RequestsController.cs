@@ -11,11 +11,13 @@ public class RequestsController : Controller
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<RequestsController> _logger;
+    private readonly LogicAppService _logicAppService;
 
-    public RequestsController(LabConfigContext context, ILogger<RequestsController> logger)
+    public RequestsController(LabConfigContext context, ILogger<RequestsController> logger, LogicAppService logicAppService)
     {
         _context = context;
         _logger = logger;
+        _logicAppService = logicAppService;
     }
 
     private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
@@ -217,7 +219,7 @@ public class RequestsController : Controller
                 TenantId = await GetNextTenantId(request.Lab, serverPreference),
                 TenantVersion = 0,
                 Lab = request.Lab,
-                NinjaOwner = adminEmail,
+                NinjaOwner = adminEmail.Contains('@') ? adminEmail[..adminEmail.IndexOf('@')] : adminEmail,
                 Contacts = request.Contacts,
                 ReturnDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)),
                 Usage = request.Usage,
@@ -259,10 +261,23 @@ public class RequestsController : Controller
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Request {RequestId} approved by {User}, created tenant {TenantName}",
-                id, adminEmail, tenant.TenantName);
-            TempData["Message"] = $"Request approved! Tenant {tenant.TenantName} created. Please review and update the details below.";
-            TempData["MessageLevel"] = "success";
+            // Create ADO work item via Logic App
+            var (workItemId, adoError) = await _logicAppService.CreateWorkItemAsync(tenant, request);
+            if (workItemId > 0)
+            {
+                tenant.WorkItemId = workItemId;
+                tenant.LastUpdateDate = DateTime.Now;
+                tenant.LastUpdateBy = adminEmail;
+                await _context.SaveChangesAsync();
+            }
+
+            _logger.LogInformation("Request {RequestId} approved by {User}, created tenant {TenantName}, ADO work item {WorkItemId}",
+                id, adminEmail, tenant.TenantName, workItemId);
+            var adoNote = workItemId > 0
+                ? $" ADO work item {workItemId} created."
+                : adoError?.Contains("not configured") == true ? "" : $" (ADO: {adoError})";
+            TempData["Message"] = $"Request approved! Tenant {tenant.TenantName} created.{adoNote} Please review and update the details below.";
+            TempData["MessageLevel"] = workItemId > 0 || string.IsNullOrEmpty(adoNote) ? "success" : "warning";
             return RedirectToAction("Edit", "Tenants", new { id = tenant.TenantGuid });
         }
         catch (Exception ex)
