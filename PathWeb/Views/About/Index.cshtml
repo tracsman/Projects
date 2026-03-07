@@ -33,6 +33,43 @@
     <p>
         This site is the web evolution of that spreadsheet.
     </p>
+    <p>
+        The site remained relatively unchanged — save for some PowerShell updates as Azure evolved — until
+        early 2026, when "vibe coding" was put to the test and the site was rewritten, primarily from scratch,
+        using Claude Opus 4.6 in GitHub Copilot in Visual Studio 2026. You can read more about the new site below!
+    </p>
+
+    <h4>Workflows</h4>
+
+    <h5 class="mt-3">Lab Request Workflow</h5>
+    <ol>
+        <li>Any authenticated user submits a lab request via the <strong>Request a Lab</strong> form, specifying their ExpressRoute, VPN, VM, and region requirements.</li>
+        <li>Admins (AuthLevel ≥ 8) see pending requests in the <strong>Admin → Tenant Requests</strong> queue, with a count badge on the nav menu.</li>
+        <li>The reviewing admin selects a <strong>server preference</strong> (which determines the TenantID range and physical server assignment) and approves the request.</li>
+        <li>On approval, a <strong>Tenant</strong> record is created in the database and the <strong>Logic App</strong> creates an ADO Experiment work item with the full tenant details and a discussion comment.</li>
+        <li>The admin is redirected to the <strong>Tenant Edit</strong> page to review and refine settings. Saving edits updates both the database and the ADO work item.</li>
+    </ol>
+
+    <h5>Tenant Creation &amp; Environment Build Workflow</h5>
+    <ol>
+        <li>A <strong>Tenant</strong> record is created — either automatically when a lab request is approved, or manually by an admin (AuthLevel ≥ 8) via <strong>Admin → Create New Tenant</strong>.</li>
+        <li>The admin reviews and refines the tenant settings on the <strong>Tenant Edit</strong> page — ExpressRoute, VPN, VM, addressing, and region configuration.</li>
+        <li>The <strong>ConfigGenerator</strong> produces the full set of deployment artifacts for the tenant:
+            <ul>
+                <li><strong>Juniper configs</strong> — router configuration for ExpressRoute and VPN connectivity (MX/SRX)</li>
+                <li><strong>Cisco configs</strong> — switch and router configuration for on-premises lab connectivity</li>
+                <li><strong>PowerShell scripts</strong> — Azure deployment scripts for VNets, ExpressRoute circuits, gateways, VPN connections, and VMs</li>
+            </ul>
+        </li>
+        <li>The generated configs are deployed to build the environment:
+            <ul>
+                <li><strong>Azure</strong> — PowerShell scripts are executed to provision the Azure resources (VNets, circuits, gateways, VMs)</li>
+                <li><strong>Servers</strong> — On-premises Hyper-V servers are configured with lab VMs using the generated VM specifications</li>
+                <li><strong>Network Devices</strong> — Router and switch configurations are pushed to the lab network devices via SSH/NETCONF</li>
+            </ul>
+        </li>
+        <li>Once the environment is built and verified, an <strong>info email</strong> is sent to the requestor with connection details, credentials, and instructions for accessing their new lab environment.</li>
+    </ol>
 
     <h4>Site Construction</h4>
 
@@ -81,15 +118,6 @@
         <li><strong>On Edit:</strong> Updates the existing work item's description and adds a discussion comment noting who made the change and when.</li>
         <li><strong>Work Item Links:</strong> The tenant Details page displays a clickable link to the ADO work item when a WorkItemId exists.</li>
     </ul>
-
-    <h5>Lab Request Workflow</h5>
-    <ol>
-        <li>Any authenticated user submits a lab request via the <strong>Request a Lab</strong> form, specifying their ExpressRoute, VPN, VM, and region requirements.</li>
-        <li>Admins (AuthLevel ≥ 8) see pending requests in the <strong>Admin → Tenant Requests</strong> queue, with a count badge on the nav menu.</li>
-        <li>The reviewing admin selects a <strong>server preference</strong> (which determines the TenantID range and physical server assignment) and approves the request.</li>
-        <li>On approval, a <strong>Tenant</strong> record is created in the database and the <strong>Logic App</strong> creates an ADO Experiment work item with the full tenant details and a discussion comment.</li>
-        <li>The admin is redirected to the <strong>Tenant Edit</strong> page to review and refine settings. Saving edits updates both the database and the ADO work item.</li>
-    </ol>
 
     <h5>Deployment</h5>
     <ul>
