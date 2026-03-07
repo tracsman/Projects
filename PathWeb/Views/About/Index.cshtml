@@ -40,6 +40,7 @@
     <ul>
         <li><strong>Framework:</strong> ASP.NET Core (.NET 10) with C# 14, using Razor views and Bootstrap 5 styling with dark/light theme support.</li>
         <li><strong>Hosting:</strong> Azure App Service (Linux, West US 2) with Always On enabled to eliminate cold starts.</li>
+        <li><strong>Custom Domain:</strong> <a href="https://www.pathlab.xyz" target="_blank">www.pathlab.xyz</a> with auto-renewing App Service Managed Certificate.</li>
         <li><strong>Database:</strong> Azure SQL Server (<code>labconfig.database.windows.net</code>) using Entity Framework Core 10 for data access.</li>
         <li><strong>Source Control:</strong> GitHub (<a href="https://github.com/tracsman/Projects" target="_blank">tracsman/Projects</a>) with GitHub Copilot-assisted development.</li>
     </ul>
@@ -47,6 +48,7 @@
     <h5>Authentication &amp; Authorization</h5>
     <ul>
         <li><strong>Authentication:</strong> Microsoft Entra ID via Easy Auth (App Service platform-level authentication). No passwords or connection string secrets are stored anywhere in the application.</li>
+        <li><strong>App Registration:</strong> Uses Federated Identity Credentials (FIC) with a user-assigned Managed Identity — no client secrets needed for Easy Auth.</li>
         <li><strong>SQL Authentication:</strong> System-assigned Managed Identity — the App Service identity is granted direct access to Azure SQL via Entra ID, eliminating the need for SQL credentials.</li>
         <li><strong>Local Development:</strong> Supports three auth modes — Easy Auth (App Service), code-based OIDC (with Entra ID app registration), or a fake development identity from <code>appsettings.Development.json</code>.</li>
         <li><strong>Authorization:</strong> Custom role-based system using a <code>Users</code> table with per-user AuthLevels (0–15). Each controller action checks the user's AuthLevel to determine access to features like tenant management, admin functions, and user administration.</li>
@@ -67,8 +69,17 @@
     <h5>Key Services</h5>
     <ul>
         <li><strong>ConfigGenerator:</strong> The heart of the application — generates Juniper, Cisco, and PowerShell configuration scripts for each tenant based on their ExpressRoute, VPN, and VM settings. This is the web evolution of the original Excel/VBA "Configuration Generator" spreadsheet.</li>
+        <li><strong>LogicAppService:</strong> Integrates with Azure DevOps via an Azure Logic App to create and update Experiment work items in the <code>msazure/One</code> ADO project. The web app sends tenant data to a Logic App HTTP trigger, which uses the built-in ADO connector (authenticated with Entra ID credentials) to manage work items. Discussion comments are added to track request approvals and tenant edits.</li>
         <li><strong>AuthLevelService:</strong> Resolves the authenticated user's email to their AuthLevel from the database on every request, injecting it into <code>HttpContext.Items</code> for use by controllers and views.</li>
         <li><strong>EasyAuthAuthenticationHandler:</strong> Custom authentication handler that reads Easy Auth platform headers (<code>X-MS-CLIENT-PRINCIPAL</code>) and constructs a <code>ClaimsPrincipal</code> with the user's name, email, and identity.</li>
+    </ul>
+
+    <h5>Azure DevOps Integration</h5>
+    <ul>
+        <li><strong>Architecture:</strong> PathWeb → Azure Logic App (<code>PathWeb-ADO</code>) → Azure DevOps REST API. The Logic App acts as an authenticated proxy, using the built-in ADO connector with Entra ID credentials.</li>
+        <li><strong>On Approval:</strong> Creates an Experiment work item in <code>msazure/One</code> with a full HTML description table of the tenant configuration. A discussion comment is added with the requester, request date, approver, and approval date. The returned WorkItemId is saved to the tenant record.</li>
+        <li><strong>On Edit:</strong> Updates the existing work item's description and adds a discussion comment noting who made the change and when.</li>
+        <li><strong>Work Item Links:</strong> The tenant Details page displays a clickable link to the ADO work item when a WorkItemId exists.</li>
     </ul>
 
     <h5>Lab Request Workflow</h5>
@@ -76,17 +87,17 @@
         <li>Any authenticated user submits a lab request via the <strong>Request a Lab</strong> form, specifying their ExpressRoute, VPN, VM, and region requirements.</li>
         <li>Admins (AuthLevel ≥ 8) see pending requests in the <strong>Admin → Tenant Requests</strong> queue, with a count badge on the nav menu.</li>
         <li>The reviewing admin selects a <strong>server preference</strong> (which determines the TenantID range and physical server assignment) and approves the request.</li>
-        <li>On approval, a <strong>Tenant</strong> record is created in the database.</li>
-        <li>A <strong>Power Automate</strong> flow monitors the database for approved requests and automatically creates/updates <strong>ADO Experiment work items</strong> in the <code>msazure/One</code> project using delegated Entra ID credentials.</li>
-        <li>The admin is redirected to the <strong>Tenant Edit</strong> page to review and refine settings.</li>
+        <li>On approval, a <strong>Tenant</strong> record is created in the database and the <strong>Logic App</strong> creates an ADO Experiment work item with the full tenant details and a discussion comment.</li>
+        <li>The admin is redirected to the <strong>Tenant Edit</strong> page to review and refine settings. Saving edits updates both the database and the ADO work item.</li>
     </ol>
 
     <h5>Deployment</h5>
     <ul>
-        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, enables Managed Identity, configures Easy Auth with Entra ID, sets up logging, builds, and deploys the application.</li>
+        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, enables Managed Identity, configures Easy Auth with Entra ID (using FIC), sets up logging, builds, and deploys the application.</li>
+        <li><strong><code>deploy-logic-app.ps1</code>:</strong> Deploys the <code>PathWeb-ADO</code> Logic App and Azure DevOps API connection. After deployment, the ADO connection must be authorized via the Azure Portal with Entra ID credentials.</li>
         <li><strong><code>quick-deploy.ps1</code>:</strong> Fast redeployment — skips all infrastructure provisioning, just builds, packages, deploys, and warms up the app (including EF Core JIT compilation and Razor page pre-compilation).</li>
         <li><strong><code>Warmup.ps1</code>:</strong> Post-restart warmup — polls the <code>/warmup</code> endpoint to pre-compile EF Core and the DI pipeline, then touches all Razor pages to force JIT compilation.</li>
-        <li><strong>Health endpoints:</strong> <code>/health</code> and <code>/warmup</code> are excluded from Easy Auth so deployment and monitoring tools can reach them without authentication.</li>
+        <li><strong>Health &amp; Diagnostics:</strong> <code>/health</code> and <code>/warmup</code> are excluded from Easy Auth so deployment and monitoring tools can reach them without authentication. <code>/diag</code> (authenticated) shows build info, environment, auth status, database connectivity, and tenant/request counts.</li>
     </ul>
 
     <h5>NuGet Packages</h5>
@@ -98,7 +109,8 @@
 
     <h4>Roadmap</h4>
     <ul>
-        <li>Full tenant CRUD and configuration generation</li>
+        <li>VNet Integration for SSH/NETCONF access to lab network devices</li>
+        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI)</li>
         <li>IP address management and assignment</li>
         <li>Workshop registration and management</li>
         <li>Automated Azure deployment orchestration</li>

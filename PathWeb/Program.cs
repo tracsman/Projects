@@ -23,6 +23,10 @@ builder.Services.AddScoped<AuthLevelService>();
 // Register ConfigGenerator service
 builder.Services.AddScoped<ConfigGenerator>();
 
+// Register Logic App service for ADO work item integration
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<LogicAppService>();
+
 // Check if running on Azure App Service with Easy Auth
 var isEasyAuth = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
 var easyAuthEnabled = isEasyAuth && builder.Configuration.GetValue<bool>("AzureAd:UseEasyAuth", true);

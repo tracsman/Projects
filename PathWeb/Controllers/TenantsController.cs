@@ -12,12 +12,14 @@ public class TenantsController : Controller
     private readonly LabConfigContext _context;
     private readonly ILogger<TenantsController> _logger;
     private readonly ConfigGenerator _configGenerator;
+    private readonly LogicAppService _logicAppService;
 
-    public TenantsController(LabConfigContext context, ILogger<TenantsController> logger, ConfigGenerator configGenerator)
+    public TenantsController(LabConfigContext context, ILogger<TenantsController> logger, ConfigGenerator configGenerator, LogicAppService logicAppService)
     {
         _context = context;
         _logger = logger;
         _configGenerator = configGenerator;
+        _logicAppService = logicAppService;
     }
 
     private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
@@ -94,6 +96,7 @@ public class TenantsController : Controller
         // Look up Ninja display name
         var ninjaUser = await _context.Users.FirstOrDefaultAsync(u => u.UserName.StartsWith(tenant.NinjaOwner + "@") || u.UserName == tenant.NinjaOwner);
         ViewData["NinjaDisplayName"] = ninjaUser?.Name ?? tenant.NinjaOwner;
+        ViewData["NinjaAlias"] = tenant.NinjaOwner;
 
         _logger.LogInformation("Tenants.Details for {TenantName} by {User}", tenant.TenantName, GetUserEmail());
         return View(tenant);
@@ -228,9 +231,26 @@ public class TenantsController : Controller
             {
                 _context.Update(tenant);
                 await _context.SaveChangesAsync();
+
+                // Sync changes to ADO work item via Logic App
+                string? adoNote = null;
+                if (tenant.WorkItemId is not null and > 0)
+                {
+                    var adoError = await _logicAppService.UpdateWorkItemAsync(tenant);
+                    if (adoError != null)
+                    {
+                        _logger.LogWarning("ADO update failed for {TenantName}: {Error}", tenant.TenantName, adoError);
+                        adoNote = $" (ADO sync failed: {adoError})";
+                    }
+                    else
+                    {
+                        adoNote = $" ADO work item {tenant.WorkItemId} updated.";
+                    }
+                }
+
                 _logger.LogInformation("Tenant updated: {TenantName} by {User}", tenant.TenantName, GetUserEmail());
-                TempData["Message"] = $"Tenant {tenant.TenantName} was successfully updated!";
-                TempData["MessageLevel"] = "success";
+                TempData["Message"] = $"Tenant {tenant.TenantName} was successfully updated!{adoNote}";
+                TempData["MessageLevel"] = adoNote?.Contains("failed") == true ? "warning" : "success";
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -459,11 +479,11 @@ public class TenantsController : Controller
         }, "Value", "Text");
 
         // Ninjas from Users table (where Ninja = true)
-        var ninjas = await _context.Users
-            .Where(u => u.Ninja)
-            .OrderBy(u => u.Name)
-            .Select(u => new { Value = u.UserName, Text = u.Name + " (" + u.UserName + ")" })
-            .ToListAsync();
+            var ninjas = await _context.Users
+                .Where(u => u.Ninja)
+                .OrderBy(u => u.Name)
+                .Select(u => new { Value = u.UserName.Contains('@') ? u.UserName.Substring(0, u.UserName.IndexOf('@')) : u.UserName, Text = u.Name + " (" + (u.UserName.Contains('@') ? u.UserName.Substring(0, u.UserName.IndexOf('@')) : u.UserName) + ")" })
+                .ToListAsync();
         ViewBag.Ninjas = new SelectList(ninjas, "Value", "Text");
 
         // Regions from DB

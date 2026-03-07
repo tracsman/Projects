@@ -1,0 +1,145 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string" },
+            "workItemId": { "type": "integer" },
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "comment": { "type": "string" },
+            "assignedTo": { "type": "string" },
+            "areaPath": { "type": "string" },
+            "tags": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "actions": {
+    "Condition_Create_or_Update": {
+      "type": "If",
+      "runAfter": {},
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@triggerBody()?['action']",
+              "create"
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "Create_Work_Item": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": {
+              "connection": {
+                "name": "@parameters('$connections')['visualstudioteamservices']['connectionId']"
+              }
+            },
+            "method": "patch",
+            "path": "/One/_apis/wit/workitems/$Experiment",
+            "queries": { "account": "msazure" },
+            "body": {
+              "title": "@triggerBody()?['title']",
+              "description": "@triggerBody()?['description']",
+              "assignedTo": "@triggerBody()?['assignedTo']",
+              "areaPath": "@triggerBody()?['areaPath']",
+              "tags": "@triggerBody()?['tags']",
+              "iterationPath": "One"
+            }
+          }
+        },
+        "Create_work_item_comment": {
+          "type": "ApiConnection",
+          "runAfter": { "Create_Work_Item": [ "Succeeded" ] },
+          "inputs": {
+            "host": {
+              "connection": {
+                "name": "@parameters('$connections')['visualstudioteamservices']['connectionId']"
+              }
+            },
+            "method": "post",
+            "path": "/_apis/wit/workitems/@{encodeURIComponent(body('Create_Work_Item')?['id'])}/comments",
+            "queries": { "account": "msazure", "format": "markdown", "project": "One" },
+            "body": { "text": "@triggerBody()?['comment']" }
+          }
+        },
+        "Response_Create": {
+          "type": "Response",
+          "runAfter": { "Create_work_item_comment": [ "Succeeded" ] },
+          "inputs": {
+            "statusCode": 200,
+            "body": {
+              "workItemId": "@body('Create_Work_Item')?['id']",
+              "status": "created"
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Update_a_work_item": {
+            "type": "ApiConnection",
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['visualstudioteamservices']['connectionId']"
+                }
+              },
+              "method": "patch",
+              "path": "/_apis/wit/workitems/@{encodeURIComponent(triggerBody()?['workItemId'])}",
+              "queries": { "account": "msazure", "project": "One" },
+              "body": {
+                "title": "@triggerBody()?['title']",
+                "description": "<p class=\"editor-paragraph\">@{triggerBody()?['description']}</p>"
+              }
+            }
+          },
+          "Create_work_item_comment_1": {
+            "type": "ApiConnection",
+            "runAfter": { "Update_a_work_item": [ "Succeeded" ] },
+            "inputs": {
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['visualstudioteamservices']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/_apis/wit/workitems/@{encodeURIComponent(body('Update_a_work_item')?['id'])}/comments",
+              "queries": { "account": "msazure", "format": "markdown", "project": "One" },
+              "body": { "text": "@triggerBody()?['comment']" }
+            }
+          },
+          "Response": {
+            "type": "Response",
+            "kind": "Http",
+            "runAfter": { "Create_work_item_comment_1": [ "Succeeded" ] },
+            "inputs": {
+              "statusCode": 200,
+              "body": {
+                "workItemId": "@body('Update_a_work_item')?['id']",
+                "status": "updated"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$WebAppName = "testPathWeb-app"
+    [string]$WebAppName = "PathWeb"
 )
 
 $appUrl = "https://$WebAppName.azurewebsites.net"

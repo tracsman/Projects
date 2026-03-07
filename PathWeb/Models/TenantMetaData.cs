@@ -27,7 +27,7 @@ public class TenantMetaData
     [ValidServerPreference]
     public short TenantVersion { get; set; }
 
-    [Display(Name = "Ninja Owner")]
+    [Display(Name = "Ninja")]
     [Required]
     public string NinjaOwner { get; set; } = null!;
 
