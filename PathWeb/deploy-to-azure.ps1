@@ -26,7 +26,19 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("B1", "B2", "B3", "S1", "S2", "S3", "P1V2", "P2V2", "P3V2")]
-    [string]$Sku = "B1"
+    [string]$Sku = "B1",
+
+    [Parameter(Mandatory = $false)]
+    [string]$VNetName = "ER-Lab-Mgmt-VNet",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SubnetName = "appservice-integration",
+
+    [Parameter(Mandatory = $false)]
+    [string]$KeyVaultName = "LabSecrets",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CustomHostname = "www.pathlab.xyz"
 )
 
 # Set strict mode
@@ -66,6 +78,10 @@ Write-Host "  Location          : $Location"
 Write-Host "  App Service Plan  : $AppServicePlan"
 Write-Host "  Web App Name      : $WebAppName"
 Write-Host "  SKU               : $Sku"
+Write-Host "  VNet Name         : $VNetName"
+Write-Host "  Subnet Name       : $SubnetName"
+Write-Host "  Key Vault         : $KeyVaultName"
+Write-Host "  Custom Hostname   : $($CustomHostname ? $CustomHostname : '(none)')"
 Write-Host ""
 
 # Check if Azure PowerShell modules are installed
@@ -215,6 +231,68 @@ try {
     Write-Error "Failed to configure HTTPS: $_"
 }
 
+# Configure custom hostname and managed SSL certificate
+if ($CustomHostname) {
+    Write-Step "Configuring custom hostname '$CustomHostname'..."
+    try {
+        # Check if hostname is already bound
+        $existingHostnames = (Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName).HostNames
+        if ($CustomHostname -in $existingHostnames) {
+            Write-Info "Hostname '$CustomHostname' already bound"
+        } else {
+            New-AzWebAppHostNameBinding `
+                -ResourceGroupName $ResourceGroup `
+                -WebAppName $WebAppName `
+                -Name $CustomHostname `
+                -HostNameType "Verified" | Out-Null
+            Write-Success "Hostname '$CustomHostname' bound to app"
+        }
+
+        # Check if a managed certificate with SNI binding already exists
+        $sslStates = (Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName).HostNameSslStates
+        $hostSsl = $sslStates | Where-Object { $_.Name -eq $CustomHostname }
+
+        if ($hostSsl -and $hostSsl.SslState -eq "SniEnabled" -and $hostSsl.Thumbprint) {
+            Write-Info "Managed SSL certificate already bound for '$CustomHostname'"
+        } else {
+            Write-Step "Creating managed SSL certificate for '$CustomHostname'..."
+
+            # Create managed certificate via REST API
+            $certName = $CustomHostname
+            $serverFarmId = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/serverfarms/$AppServicePlan"
+            $certUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/certificates/${certName}?api-version=2022-09-01"
+            $certBody = @{
+                location   = $Location
+                properties = @{
+                    serverFarmId  = $serverFarmId
+                    canonicalName = $CustomHostname
+                }
+            } | ConvertTo-Json -Depth 5
+
+            $certResult = Invoke-AzRestMethod -Path $certUri -Method PUT -Payload $certBody
+            if ($certResult.StatusCode -in 200, 201) {
+                $certContent = $certResult.Content | ConvertFrom-Json
+                $thumbprint = $certContent.properties.thumbprint
+                Write-Success "Managed certificate created (thumbprint: $thumbprint)"
+
+                # Bind certificate with SNI SSL
+                Write-Step "Binding SSL certificate to '$CustomHostname'..."
+                New-AzWebAppSSLBinding `
+                    -ResourceGroupName $ResourceGroup `
+                    -WebAppName $WebAppName `
+                    -Name $CustomHostname `
+                    -Thumbprint $thumbprint `
+                    -SslState "SniEnabled" | Out-Null
+                Write-Success "SNI SSL binding configured for '$CustomHostname'"
+            } else {
+                Write-Error "Failed to create managed certificate (HTTP $($certResult.StatusCode)): $($certResult.Content)"
+            }
+        }
+    } catch {
+        Write-Error "Failed to configure custom hostname/SSL: $_"
+    }
+}
+
 # Enable Always On to prevent idle timeout cold starts
 Write-Step "Configuring Always On..."
 try {
@@ -237,40 +315,26 @@ try {
 # Configure Linux runtime stack for .NET 10
 Write-Step "Configuring .NET 10 runtime stack..."
 try {
-    $webAppResourceId = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/web"
+    $runtimeUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/web?api-version=2024-04-01"
 
-    $properties = @{
-        linuxFxVersion = "DOTNETCORE|10.0"
+    # GET current config to check existing value
+    $currentConfig = Invoke-AzRestMethod -Path $runtimeUri -Method GET
+    $currentFxVersion = ($currentConfig.Content | ConvertFrom-Json).properties.linuxFxVersion
+
+    if ($currentFxVersion -eq "DOTNETCORE|10.0") {
+        Write-Info ".NET 10 runtime already configured"
+    } else {
+        $runtimeBody = '{"properties":{"linuxFxVersion":"DOTNETCORE|10.0"}}'
+        $result = Invoke-AzRestMethod -Path $runtimeUri -Method PATCH -Payload $runtimeBody
+
+        if ($result.StatusCode -in 200, 201) {
+            Write-Success ".NET 10 runtime configured"
+        } else {
+            Write-Error "Failed to configure runtime (HTTP $($result.StatusCode)): $($result.Content)"
+        }
     }
-
-    Set-AzResource `
-        -ResourceId $webAppResourceId `
-        -Properties $properties `
-        -Force | Out-Null
-
-    Write-Success ".NET 10 runtime configured"
 } catch {
     Write-Error "Failed to configure runtime: $_"
-    Write-Info "Attempting alternative configuration method..."
-
-    # Alternative: Use REST API via Invoke-AzRestMethod
-    try {
-        $uri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/web?api-version=2022-03-01"
-        $body = @{
-            properties = @{
-                linuxFxVersion = "DOTNETCORE|10.0"
-            }
-        } | ConvertTo-Json
-
-        Invoke-AzRestMethod `
-            -Path $uri `
-            -Method PUT `
-            -Payload $body
-
-        Write-Success ".NET 10 runtime configured (via REST API)"
-    } catch {
-        Write-Error "All configuration methods failed. You may need to configure the runtime manually in the portal."
-    }
 }
 
 # Exclude /health and /warmup from Easy Auth so deploy/warmup scripts can reach them
@@ -317,9 +381,103 @@ try {
         $identity = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Select-Object -ExpandProperty Identity
         Write-Success "Managed Identity enabled (Principal: $($identity.PrincipalId))"
     }
-    Write-Info "Ensure this identity has been granted access to Azure SQL (CREATE USER [...] FROM EXTERNAL PROVIDER)"
+    Write-Info "Ensure this identity has been granted access to Azure SQL:"
+    Write-Info "  DROP USER IF EXISTS [$WebAppName]; CREATE USER [$WebAppName] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [$WebAppName];"
 } catch {
     Write-Info "Could not configure Managed Identity: $_"
+}
+
+# Enable Regional VNet Integration for outbound connectivity to management LAN
+Write-Step "Configuring VNet Integration..."
+try {
+    $subnetResourceId = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Network/virtualNetworks/$VNetName/subnets/$SubnetName"
+
+    $vnetConfigUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/networkConfig/virtualNetwork?api-version=2022-09-01"
+    $vnetResponse = Invoke-AzRestMethod -Path $vnetConfigUri -Method GET
+
+    $needsVnetUpdate = $true
+    if ($vnetResponse.StatusCode -eq 200) {
+        $vnetConfig = $vnetResponse.Content | ConvertFrom-Json
+        if ($vnetConfig.properties.subnetResourceId -eq $subnetResourceId) {
+            Write-Info "VNet Integration already configured for $VNetName/$SubnetName"
+            $needsVnetUpdate = $false
+        }
+    }
+
+    if ($needsVnetUpdate) {
+        $vnetBody = @{
+            id         = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/networkConfig/virtualNetwork"
+            properties = @{
+                subnetResourceId = $subnetResourceId
+                swiftSupported   = $true
+            }
+        } | ConvertTo-Json -Depth 5
+
+        $result = Invoke-AzRestMethod -Path $vnetConfigUri -Method PUT -Payload $vnetBody
+        if ($result.StatusCode -in 200, 201) {
+            Write-Success "VNet Integration enabled ($VNetName/$SubnetName)"
+            Write-Info "App Service outbound traffic now routes through the VNet"
+            Write-Info "Verify connectivity: TCP 22 (SSH) and 830 (NETCONF) to management LAN"
+        } else {
+            Write-Error "VNet Integration failed (HTTP $($result.StatusCode)): $($result.Content)"
+        }
+    }
+} catch {
+    Write-Error "Failed to configure VNet Integration: $_"
+}
+
+# Grant Managed Identity access to Key Vault for device credentials
+Write-Step "Configuring Key Vault access for Managed Identity..."
+try {
+    $identity = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Select-Object -ExpandProperty Identity
+    $principalId = $identity.PrincipalId
+
+    if (-not $principalId) {
+        Write-Error "Managed Identity not found — enable it before configuring Key Vault access"
+    } else {
+        # Key Vault Secrets User built-in role
+        $kvSecretsUserRoleId = "4633458b-17de-408a-b874-0445c86b69e6"
+        $kvScope = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+
+        $existingAssignment = Get-AzRoleAssignment -ObjectId $principalId -RoleDefinitionId $kvSecretsUserRoleId -Scope $kvScope -ErrorAction SilentlyContinue
+
+        if ($existingAssignment) {
+            Write-Info "Key Vault Secrets User role already assigned to Managed Identity on '$KeyVaultName'"
+        } else {
+            New-AzRoleAssignment -ObjectId $principalId -RoleDefinitionId $kvSecretsUserRoleId -Scope $kvScope | Out-Null
+            Write-Success "Key Vault Secrets User role assigned to Managed Identity on '$KeyVaultName'"
+        }
+
+        # Add Key Vault URI as app setting so the app knows where to find device credentials
+        $kvUri = "https://$KeyVaultName.vault.azure.net/"
+        $currentApp = Get-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName
+        $appSettings = @{}
+        foreach ($kvp in $currentApp.SiteConfig.AppSettings) {
+            $appSettings[$kvp.Name] = $kvp.Value
+        }
+
+        $sshUsername = "PathWebSvc"
+        $needsSettingsUpdate = $false
+
+        if ($appSettings['KeyVaultUri'] -ne $kvUri) {
+            $appSettings['KeyVaultUri'] = $kvUri
+            $needsSettingsUpdate = $true
+        }
+        if ($appSettings['DeviceCredentials__Username'] -ne $sshUsername) {
+            $appSettings['DeviceCredentials__Username'] = $sshUsername
+            $needsSettingsUpdate = $true
+        }
+
+        if ($needsSettingsUpdate) {
+            Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AppSettings $appSettings | Out-Null
+            Write-Success "App settings configured (KeyVaultUri=$kvUri, DeviceCredentials__Username=$sshUsername)"
+            Write-Info "At runtime the app reads the password from Key Vault secret '$sshUsername'"
+        } else {
+            Write-Info "KeyVaultUri and DeviceCredentials__Username app settings already configured"
+        }
+    }
+} catch {
+    Write-Info "Could not configure Key Vault access: $_"
 }
 
 # Configure Easy Auth with Entra ID and token store
@@ -535,6 +693,11 @@ Write-Host $appUrl -ForegroundColor Cyan
 Write-Host "Resource Group     : $ResourceGroup"
 Write-Host "Web App Name       : $WebAppName"
 Write-Host "Location           : $Location"
+Write-Host "VNet Integration   : $VNetName/$SubnetName"
+Write-Host "Key Vault          : $KeyVaultName"
+if ($CustomHostname) {
+    Write-Host "Custom Domain      : https://$CustomHostname"
+}
 if ($buildTime) {
     Write-Host "Build Timestamp    : $buildTime"
 }
@@ -542,6 +705,8 @@ Write-Host ""
 
 Write-Info "Next Steps:"
 Write-Host "  Browse to: $appUrl"
+Write-Host "  Verify SSH connectivity from App Service to management LAN (port 22/830)"
+Write-Host "  Create device credential secrets in Key Vault '$KeyVaultName'"
 Write-Host ""
 
 Write-Info "Useful PowerShell Commands:"

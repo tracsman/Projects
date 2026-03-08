@@ -121,7 +121,7 @@
 
     <h5>Deployment</h5>
     <ul>
-        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, enables Managed Identity, configures Easy Auth with Entra ID (using FIC), sets up logging, builds, and deploys the application.</li>
+        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, binds the custom hostname with a managed SSL certificate, enables Managed Identity, configures Easy Auth with Entra ID (using FIC), sets up logging, builds, and deploys the application.</li>
         <li><strong><code>deploy-logic-app.ps1</code>:</strong> Deploys the <code>PathWeb-ADO</code> Logic App and Azure DevOps API connection. After deployment, the ADO connection must be authorized via the Azure Portal with Entra ID credentials.</li>
         <li><strong><code>quick-deploy.ps1</code>:</strong> Fast redeployment — skips all infrastructure provisioning, just builds, packages, deploys, and warms up the app (including EF Core JIT compilation and Razor page pre-compilation).</li>
         <li><strong><code>Warmup.ps1</code>:</strong> Post-restart warmup — polls the <code>/warmup</code> endpoint to pre-compile EF Core and the DI pipeline, then touches all Razor pages to force JIT compilation.</li>
