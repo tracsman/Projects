@@ -52,7 +52,7 @@ public class ConfigGenerator
             List<string> strMessages = new List<string> { };
             
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateConfig", "Pulling Tenant from SQL");
-            Tenant tenant = await _context.Tenants.FindAsync(id);
+            Tenant tenant = await _context.Tenants.FindAsync(id) ?? throw new InvalidOperationException($"Tenant {id} not found");
             tenant.TenantVersion = (short)(tenant.TenantVersion + 1);
 
             // Assign or release public IPs for Microsoft peering before generating config
@@ -343,14 +343,14 @@ public class ConfigGenerator
             
             string strDB;
             string strRGName = $"{tenant.Lab}-Cust{tenant.TenantId}";
-            List<string> lstRawContacts = tenant.Contacts?.Split(',').ToList();
+            List<string> lstRawContacts = tenant.Contacts?.Split(',').ToList() ?? [];
             List<string> lstContacts = new List<string> { };
             foreach (string contact in lstRawContacts) { lstContacts.Add($"'{contact.Trim()}'"); }
             bool HasER = tenant.Ersku != "None";
-            bool HasPrivate = (Boolean)tenant.PvtPeering;
-            bool HasMicrosoft = (Boolean)tenant.Msftpeering;
+            bool HasPrivate = tenant.PvtPeering == true;
+            bool HasMicrosoft = tenant.Msftpeering == true;
             bool HasERGateway = tenant.ErgatewaySize != "None";
-            bool HasERFastPath = (Boolean)tenant.ErfastPath;
+            bool HasERFastPath = tenant.ErfastPath == true;
             bool HasVPNGateway = tenant.Vpngateway != "None";
             bool HasVPNAA = tenant.Vpnconfig == "Active-Active";
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
@@ -366,12 +366,12 @@ public class ConfigGenerator
             // For IPv6: First Hextet = fd: (RFC4193), Second Hextet is the network layer, Third Hextet = Tenant Number and subnet function
             // eg "fd:1:2:31FF"; fd=private, 1=Azure to Lab, 2=Ashburn lab, 31FF=Tenant number 31, FF indicates a P2P prefix remaining hextets are for the host segment
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Pulling Azure Region data from SQL");
-            Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion);
+            Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion) ?? throw new InvalidOperationException($"Region '{tenant.AzureRegion}' not found");
             string strVNetPrefix = $"10.{region.Ipv4}.{tenant.TenantId}";
             string strVNet6Prefix = $"fd:0:{region.Ipv6}:{tenant.TenantId}";
             string strP2P6Prefix = $"fd:1:{strLabOctet}:{tenant.TenantId}FF::";
 
-            string[] azVms = [tenant.AzVm1, tenant.AzVm2, tenant.AzVm3, tenant.AzVm4];
+            string[] azVms = [tenant.AzVm1 ?? "None", tenant.AzVm2 ?? "None", tenant.AzVm3 ?? "None", tenant.AzVm4 ?? "None"];
             int intVMCount = 0;
             bool HasAzureVM = false;
             string strVMOS = "$VMOS = @()\r\n";
@@ -430,8 +430,8 @@ public class ConfigGenerator
             if (HasMicrosoft)
             {
                 strDB += $"$MsftTags = '{tenant.Msfttags}'\r\n" +
-                         $"$MsftP2PA = '{GetP2P(tenant.Msftp2p, true)}'\r\n" +
-                         $"$MsftP2PB = '{GetP2P(tenant.Msftp2p, false)}'\r\n" +
+                         $"$MsftP2PA = '{GetP2P(tenant.Msftp2p!, true)}'\r\n" +
+                         $"$MsftP2PB = '{GetP2P(tenant.Msftp2p!, false)}'\r\n" +
                          $"$MsftASN = '{strASN}'\r\n" +
                          $"$MsftVLAN = {tenant.TenantId}1\r\n" +
                          $"$MsftNAT ='{tenant.Msftadv}'\r\n";
@@ -926,13 +926,13 @@ public class ConfigGenerator
             string strDeviceName = (tenant.Lab == "SEA") ? "SEA-SRX42-01" : "ASH-SRX42-01";
 
             bool HasERGateway = tenant.ErgatewaySize != "None";
-            bool HasPrivate = (Boolean)tenant.PvtPeering;
-            bool HasMicrosoft = (Boolean)tenant.Msftpeering;
+            bool HasPrivate = tenant.PvtPeering == true;
+            bool HasMicrosoft = tenant.Msftpeering == true;
             bool HasVPNGateway = tenant.Vpngateway != "None";
             bool HasVPNAA = tenant.Vpnconfig == "Active-Active";
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
 
-            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            string[] labVms = [tenant.LabVm1 ?? "None", tenant.LabVm2 ?? "None", tenant.LabVm3 ?? "None", tenant.LabVm4 ?? "None"];
             bool HasLabVM = labVms.Any(vm => vm != "None");
 
             if (HasVPNGateway || HasLabVM || HasMicrosoft)
@@ -958,7 +958,7 @@ public class ConfigGenerator
                 string strAzASN = "65515";                                                          // ASN for Azure
 
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Pulling Azure Region data from SQL");
-                Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion);                                // Region oject from SQL for the Octets related to this tenant's region
+                Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion) ?? throw new InvalidOperationException($"Region '{tenant.AzureRegion}' not found");
                 string strVpnBgpPriNIP;                                                             // Private IP BGP Neighbor in the Azure for primary BGP session
                 string strVpnBgpSecNIP;                                                             // Private IP BGP Neighbor in the Azure for secondary BGP session
                 if (HasVPNAA && HasERGateway)
@@ -977,7 +977,7 @@ public class ConfigGenerator
                     strVpnBgpSecNIP = "";
                 }
                 string strLabVpnBgpIP = $"192.168.{tenant.TenantId}.88";
-                string strERNATIP = tenant.Msftadv;                                                 // Public IP advertised to 8075 via ER Microsoft peering
+                string strERNATIP = tenant.Msftadv ?? string.Empty;
 
                 string strVPNEndPoint = ResolveVpnEndPoint(tenant);
 
@@ -1315,8 +1315,8 @@ public class ConfigGenerator
 
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
             bool HasVPNGateway = tenant.Vpngateway != "None";
-            bool HasPrivate = (Boolean)tenant.PvtPeering;
-            bool HasMicrosoft = (Boolean)tenant.Msftpeering;
+            bool HasPrivate = tenant.PvtPeering == true;
+            bool HasMicrosoft = tenant.Msftpeering == true;
 
             if (HasPrivate || HasMicrosoft)
             {
@@ -1347,7 +1347,7 @@ public class ConfigGenerator
                     strFWNIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::1";
                     if (HasMicrosoft)
                     {
-                        strMSFTIntIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 1);
+                        strMSFTIntIP = tenant.Msftp2p!.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 1);
                         strMSFTNIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 2);
                     }
 
@@ -1366,7 +1366,7 @@ public class ConfigGenerator
                     strFWNIPv6 = $"fd:2:{strThirdHextet}:{tenant.TenantId}FF::3";
                     if (HasMicrosoft)
                     {
-                        strMSFTIntIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 5);
+                        strMSFTIntIP = tenant.Msftp2p!.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 5);
                         strMSFTNIP = tenant.Msftp2p.Substring(0, tenant.Msftp2p.LastIndexOf('.') + 1) + (int.Parse(tenant.Msftp2p.Substring(tenant.Msftp2p.LastIndexOf('.') + 1, tenant.Msftp2p.LastIndexOf('/') - tenant.Msftp2p.LastIndexOf('.') - 1)) + 6);
                     }
 
@@ -1647,7 +1647,7 @@ public class ConfigGenerator
                 strDeviceName = (IsPrimary) ? "ASH-NX9K-01" : "ASH-NX9K-02";
             }
 
-            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            string[] labVms = [tenant.LabVm1 ?? "None", tenant.LabVm2 ?? "None", tenant.LabVm3 ?? "None", tenant.LabVm4 ?? "None"];
             bool HasLabVM = labVms.Any(vm => vm != "None");
 
             // Add banner, set variables
@@ -1707,7 +1707,7 @@ public class ConfigGenerator
             else
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateLabVMConfig", "Creating Lab VM Instructions");
-                string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+                string[] labVms = [tenant.LabVm1 ?? "None", tenant.LabVm2 ?? "None", tenant.LabVm3 ?? "None", tenant.LabVm4 ?? "None"];
                 int intVMCount = 0;
                 foreach (string vm in labVms)
                 {
@@ -1750,9 +1750,9 @@ public class ConfigGenerator
             // Set variables
             
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Pulling Azure Region data from SQL");
-            Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion);
+            Region region = await _context.Regions.FirstOrDefaultAsync(r => r.Region1 == tenant.AzureRegion) ?? throw new InvalidOperationException($"Region '{tenant.AzureRegion}' not found");
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateEMailConfig", "Pulling Ninja data from SQL");
-            User ninja = _context.Users.Where(u => u.UserName.Contains(tenant.NinjaOwner)).FirstOrDefault();
+            User ninja = _context.Users.Where(u => u.UserName.Contains(tenant.NinjaOwner)).FirstOrDefault() ?? throw new InvalidOperationException($"Ninja '{tenant.NinjaOwner}' not found");
             string strDB;
             string strRGName = $"{tenant.Lab}-Cust{tenant.TenantId}";
             var lab = GetLabConstants(tenant.Lab);
@@ -1761,21 +1761,21 @@ public class ConfigGenerator
             string strLabVpnEP = lab.VpnIP;
             string strLabPrefixv6 = lab.IPv6Prefix;
 
-            string[] labVms = [tenant.LabVm1, tenant.LabVm2, tenant.LabVm3, tenant.LabVm4];
+            string[] labVms = [tenant.LabVm1 ?? "None", tenant.LabVm2 ?? "None", tenant.LabVm3 ?? "None", tenant.LabVm4 ?? "None"];
             bool HasLabVM = labVms.Any(vm => vm != "None");
 
-            string[] azVms = [tenant.AzVm1, tenant.AzVm2, tenant.AzVm3, tenant.AzVm4];
+            string[] azVms = [tenant.AzVm1 ?? "None", tenant.AzVm2 ?? "None", tenant.AzVm3 ?? "None", tenant.AzVm4 ?? "None"];
             bool HasAzureVM = azVms.Any(vm => vm != "None");
 
             bool HasER = tenant.Ersku != "None";
-            bool HasPrivate = (Boolean)tenant.PvtPeering;
-            bool HasMicrosoft = (Boolean)tenant.Msftpeering;
+            bool HasPrivate = tenant.PvtPeering == true;
+            bool HasMicrosoft = tenant.Msftpeering == true;
             bool HasVPNGateway = tenant.Vpngateway != "None";
             bool HasVPNAA = tenant.Vpnconfig == "Active-Active";
             bool HasIPv6 = tenant.AddressFamily == "IPv6" || tenant.AddressFamily == "Dual";
 
             string strERSpeed = tenant.Erspeed < 1000 ? $"{tenant.Erspeed} Mbps" : $"{tenant.Erspeed / 1000} Gbps";
-            string strERRouteFilter = (tenant.Msfttags == "" ? "None requested" : tenant.Msfttags);
+            string strERRouteFilter = (tenant.Msfttags == "" ? "None requested" : tenant.Msfttags) ?? "None requested";
 
             string strVPNEndPoint = ResolveVpnEndPoint(tenant);
 
@@ -1893,8 +1893,8 @@ public class ConfigGenerator
                     strDB += $"        <tr><td><b>ER Gateway Size</b></td><td>{tenant.ErgatewaySize}</td></tr>\r\n";
 
                 }
-                strDB += $"        <tr><td><b>Private Peering</b></td><td>{((bool)tenant.PvtPeering ? "Enabled" : "Not Enabled")}</td></tr>\r\n" +
-                         $"        <tr><td><b>Microsoft Peering</b></td><td>{((bool)tenant.Msftpeering ? "Enabled" : "Not Enabled")}</td></tr>\r\n";
+                strDB += $"        <tr><td><b>Private Peering</b></td><td>{(tenant.PvtPeering == true ? "Enabled" : "Not Enabled")}</td></tr>\r\n" +
+                         $"        <tr><td><b>Microsoft Peering</b></td><td>{(tenant.Msftpeering == true ? "Enabled" : "Not Enabled")}</td></tr>\r\n";
 
                 if (HasMicrosoft)
                 {
@@ -2072,7 +2072,7 @@ public class ConfigGenerator
                 }
 
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.AssignPublicIP", "Pulling Public IPs from SQL");
-                string strRange = _context.PublicIps.Where(ip => ip.RangeType == strQueryType && ip.TenantGuid == tenant.TenantGuid).Select(ip => ip.Range).FirstOrDefault();
+                string? strRange = _context.PublicIps.Where(ip => ip.RangeType == strQueryType && ip.TenantGuid == tenant.TenantGuid).Select(ip => ip.Range).FirstOrDefault();
                 if (strRange != null)
                 {
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.AssignPublicIP", "Assigned range found, setting tenant to found range");
@@ -2088,7 +2088,7 @@ public class ConfigGenerator
                 else
                 {
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.AssignPublicIP", "Assigned range not found, pulling next available range");
-                    PublicIp ipRange = _context.PublicIps.Where(ip => ip.RangeType == strQueryType && ip.Lab == tenant.Lab && ip.AssignedBy == null).FirstOrDefault();
+                    PublicIp? ipRange = _context.PublicIps.Where(ip => ip.RangeType == strQueryType && ip.Lab == tenant.Lab && ip.AssignedBy == null).FirstOrDefault();
                     if (ipRange != null)
                     {
                         if (isP2P)
