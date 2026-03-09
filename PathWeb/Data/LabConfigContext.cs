@@ -16,6 +16,8 @@ public partial class LabConfigContext : DbContext
 
     public virtual DbSet<Device> Devices { get; set; }
 
+    public virtual DbSet<FieldHelp> FieldHelps { get; set; }
+
     public virtual DbSet<PublicIp> PublicIps { get; set; }
 
     public virtual DbSet<Region> Regions { get; set; }
@@ -43,6 +45,16 @@ public partial class LabConfigContext : DbContext
             entity.Property(e => e.NinjaOwner).HasMaxLength(50);
             entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
             entity.Property(e => e.TenantId).HasColumnName("TenantID");
+        });
+
+        modelBuilder.Entity<FieldHelp>(entity =>
+        {
+            entity.HasKey(e => e.FieldName);
+
+            entity.ToTable("FieldHelp");
+
+            entity.Property(e => e.FieldName).HasMaxLength(50);
+            entity.Property(e => e.HelpText).HasMaxLength(500);
         });
 
         modelBuilder.Entity<Device>(entity =>
