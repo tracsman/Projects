@@ -258,6 +258,11 @@ public class TenantsController : Controller
                     return NotFound();
                 throw;
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save tenant {TenantId} ({TenantName})", tenant.TenantGuid, tenant.TenantName);
+                throw;
+            }
             return RedirectToAction(nameof(Details), new { id = tenant.TenantGuid });
         }
 

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
@@ -26,6 +28,19 @@ builder.Services.AddScoped<ConfigGenerator>();
 // Register Logic App service for ADO work item integration
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<LogicAppService>();
+
+// Register SSH service for device connectivity
+var keyVaultUri = builder.Configuration["KeyVaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    builder.Services.AddSingleton(new SecretClient(new Uri(keyVaultUri), new DefaultAzureCredential()));
+}
+else
+{
+    // Local dev fallback — register a placeholder so DI doesn't fail at startup
+    builder.Services.AddSingleton(new SecretClient(new Uri("https://localhost/"), new DefaultAzureCredential()));
+}
+builder.Services.AddScoped<SshService>();
 
 // Check if running on Azure App Service with Easy Auth
 var isEasyAuth = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));

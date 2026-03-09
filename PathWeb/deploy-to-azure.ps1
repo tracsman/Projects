@@ -382,7 +382,7 @@ try {
         Write-Success "Managed Identity enabled (Principal: $($identity.PrincipalId))"
     }
     Write-Info "Ensure this identity has been granted access to Azure SQL:"
-    Write-Info "  DROP USER IF EXISTS [$WebAppName]; CREATE USER [$WebAppName] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [$WebAppName];"
+    Write-Info "  DROP USER IF EXISTS [$WebAppName]; CREATE USER [$WebAppName] FROM EXTERNAL PROVIDER; ALTER ROLE db_datareader ADD MEMBER [$WebAppName]; ALTER ROLE db_datawriter ADD MEMBER [$WebAppName];"
 } catch {
     Write-Info "Could not configure Managed Identity: $_"
 }
@@ -457,6 +457,7 @@ try {
         }
 
         $sshUsername = "PathWebSvc"
+        $logicAppTriggerUrl = "https://prod-15.westus2.logic.azure.com:443/workflows/aa6d3a4f104f4622a14b1c2be41a1d9b/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ljWGdEMn0V4KyjVF7Gqcseqc72xgMdU5JwUYRNvfKLQ"
         $needsSettingsUpdate = $false
 
         if ($appSettings['KeyVaultUri'] -ne $kvUri) {
@@ -467,13 +468,17 @@ try {
             $appSettings['DeviceCredentials__Username'] = $sshUsername
             $needsSettingsUpdate = $true
         }
+        if ($appSettings['LogicApp__TriggerUrl'] -ne $logicAppTriggerUrl) {
+            $appSettings['LogicApp__TriggerUrl'] = $logicAppTriggerUrl
+            $needsSettingsUpdate = $true
+        }
 
         if ($needsSettingsUpdate) {
             Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AppSettings $appSettings | Out-Null
-            Write-Success "App settings configured (KeyVaultUri=$kvUri, DeviceCredentials__Username=$sshUsername)"
+            Write-Success "App settings configured (KeyVaultUri, DeviceCredentials, LogicApp TriggerUrl)"
             Write-Info "At runtime the app reads the password from Key Vault secret '$sshUsername'"
         } else {
-            Write-Info "KeyVaultUri and DeviceCredentials__Username app settings already configured"
+            Write-Info "App settings already configured (KeyVaultUri, DeviceCredentials, LogicApp TriggerUrl)"
         }
     }
 } catch {
