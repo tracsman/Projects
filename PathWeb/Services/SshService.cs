@@ -72,66 +72,89 @@ public class SshService
     }
 
     /// <summary>
-    /// Connects to a device, detects the platform from the SSH banner, runs the appropriate
-    /// version command, and returns a short OS string like "Junos 21.1R1.11" or "NX-OS 9.3(8)".
+    /// Connects to a device, runs the appropriate version command based on the device name,
+    /// and returns a short OS string like "Junos 21.1R1.11" or "NX-OS 9.3(8)".
     /// </summary>
-    public async Task<(bool Success, string OsVersion)> DetectOsVersionAsync(string host)
+    public async Task<(bool Success, string OsVersion)> DetectOsVersionAsync(string host, string deviceName)
     {
         try
         {
             var (username, password) = await GetCredentialsAsync();
 
             using var client = new SshClient(host, 22, username, password);
-            client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(10);
+            client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(15);
 
+            // Cisco IOS-XE (ASR) may need older key exchange algorithms
             await Task.Run(() => client.Connect());
 
             if (!client.IsConnected)
                 return (false, "Connection failed");
 
-            var banner = client.ConnectionInfo.ServerVersion ?? "";
-            _logger.LogInformation("SSH banner for {Host}: {Banner}", host, banner);
+            _logger.LogInformation("Connected to {Host} ({Device}), detecting OS", host, deviceName);
 
+            // Determine platform from device name
+            var platform = DetectPlatform(deviceName);
             string osVersion;
 
-            if (banner.Contains("OpenSSH", StringComparison.OrdinalIgnoreCase))
+            switch (platform)
             {
-                // Juniper devices use OpenSSH
-                var result = client.RunCommand("show version | match \"Junos:\"");
-                var match = Regex.Match(result.Result, @"Junos:\s*(.+)");
-                osVersion = match.Success ? $"Junos {match.Groups[1].Value.Trim()}" : "Junos (unknown)";
-            }
-            else if (banner.Contains("Cisco", StringComparison.OrdinalIgnoreCase))
-            {
-                // Try NX-OS first (Nexus switches)
-                var result = client.RunCommand("show version | include \"NXOS\\|system:\"");
-                var nxMatch = Regex.Match(result.Result, @"(?:NXOS|system).*?version\s+(\S+)", RegexOptions.IgnoreCase);
-                if (nxMatch.Success)
-                {
-                    osVersion = $"NX-OS {nxMatch.Groups[1].Value}";
-                }
-                else
-                {
-                    // IOS-XE (ASR routers)
-                    result = client.RunCommand("show version | include Version");
-                    var iosMatch = Regex.Match(result.Result, @"Version\s+(\S+?)(?:,|\s|$)");
-                    osVersion = iosMatch.Success ? $"IOS-XE {iosMatch.Groups[1].Value}" : "Cisco (unknown)";
-                }
-            }
-            else
-            {
-                osVersion = $"Unknown ({banner})";
+                case "Juniper":
+                    var junosResult = client.RunCommand("show version | match \"Junos:\"");
+                    var junosMatch = Regex.Match(junosResult.Result, @"Junos:\s*(.+)");
+                    osVersion = junosMatch.Success ? $"Junos {junosMatch.Groups[1].Value.Trim()}" : "Junos (unknown)";
+                    break;
+
+                case "NX-OS":
+                    var nxResult = client.RunCommand("show version");
+                    // NX-9K format: "NXOS: version 7.0(3)I7(6)"
+                    // NX-3K format: "system:    version 6.0(2)U6(9)"
+                    var nxMatch = Regex.Match(nxResult.Result, @"(?:NXOS|system):\s*version\s+(\S+)", RegexOptions.IgnoreCase);
+                    osVersion = nxMatch.Success ? $"NX-OS {nxMatch.Groups[1].Value}" : "NX-OS (unknown)";
+                    break;
+
+                case "IOS-XE":
+                    var iosResult = client.RunCommand("show version");
+                    var iosMatch = Regex.Match(iosResult.Result, @"Cisco IOS XE Software, Version\s+(\S+)");
+                    osVersion = iosMatch.Success ? $"IOS-XE {iosMatch.Groups[1].Value}" : "IOS-XE (unknown)";
+                    break;
+
+                default:
+                    osVersion = $"Unknown platform";
+                    break;
             }
 
             client.Disconnect();
 
-            _logger.LogInformation("Detected OS for {Host}: {OsVersion}", host, osVersion);
+            _logger.LogInformation("Detected OS for {Device} ({Host}): {OsVersion}", deviceName, host, osVersion);
             return (true, osVersion);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "OS detection failed for {Host}", host);
+            _logger.LogError(ex, "OS detection failed for {Device} ({Host})", deviceName, host);
             return (false, $"Error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Determines the device platform from the device name using naming conventions.
+    /// MX/SRX = Juniper, NX = Cisco NX-OS (Nexus), ASR/ISR = Cisco IOS-XE.
+    /// </summary>
+    private static string DetectPlatform(string deviceName)
+    {
+        var upper = deviceName.ToUpperInvariant();
+
+        // Juniper: MX series routers, SRX series firewalls
+        if (upper.Contains("-MX") || upper.Contains("-SRX"))
+            return "Juniper";
+
+        // Cisco Nexus: NX9K, NX3K, NX5K, etc.
+        if (upper.Contains("-NX"))
+            return "NX-OS";
+
+        // Cisco IOS-XE: ASR, ISR, CSR, Cat series
+        if (upper.Contains("-ASR") || upper.Contains("-ISR") || upper.Contains("-CSR") || upper.Contains("-CAT"))
+            return "IOS-XE";
+
+        return "Unknown";
     }
 }

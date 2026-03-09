@@ -109,7 +109,12 @@
         <li><strong>LogicAppService:</strong> Integrates with Azure DevOps via an Azure Logic App to create and update Experiment work items in the <code>msazure/One</code> ADO project. The web app sends tenant data to a Logic App HTTP trigger, which uses the built-in ADO connector (authenticated with Entra ID credentials) to manage work items. Discussion comments are added to track request approvals and tenant edits.</li>
         <li><strong>AuthLevelService:</strong> Resolves the authenticated user's email to their AuthLevel from the database on every request, injecting it into <code>HttpContext.Items</code> for use by controllers and views.</li>
         <li><strong>EasyAuthAuthenticationHandler:</strong> Custom authentication handler that reads Easy Auth platform headers (<code>X-MS-CLIENT-PRINCIPAL</code>) and constructs a <code>ClaimsPrincipal</code> with the user's name, email, and identity.</li>
-        <li><strong>SshService:</strong> Provides SSH connectivity to on-premises network devices (routers, firewalls, switches) via the <code>SSH.NET</code> library. Credentials are retrieved at runtime from Azure Key Vault using the App Service Managed Identity — no passwords are stored in code or config. Connectivity is enabled by Regional VNet Integration, which routes outbound traffic from the App Service through the lab management VNet to on-premises devices via ExpressRoute.</li>
+        <li><strong>SshService:</strong> Provides SSH connectivity to on-premises network devices (routers, firewalls, switches) via the <code>SSH.NET</code> library. Credentials are retrieved at runtime from Azure Key Vault using the App Service Managed Identity — no passwords are stored in code or config. Connectivity is enabled by Regional VNet Integration, which routes outbound traffic from the App Service through the lab management VNet to on-premises devices via ExpressRoute. Features include:
+            <ul>
+                <li><strong>Run Command</strong> — send any CLI command to a device and view the output from the browser (<code>/Devices/RunCommand</code>).</li>
+                <li><strong>OS Detection</strong> — automatically SSHes into all network devices, detects the platform from device naming conventions (Juniper MX/SRX, Cisco Nexus, Cisco ASR), runs the appropriate version command, parses the output, and updates the <code>OS</code> column in the database.</li>
+            </ul>
+        </li>
     </ul>
 
     <h5>Azure DevOps Integration</h5>
@@ -141,6 +146,7 @@
     <h4>Roadmap</h4>
     <ul>
         <li><s>VNet Integration for SSH/NETCONF access to lab network devices</s> ✅</li>
+        <li><s>Device CLI tools (Run Command, OS version detection)</s> ✅</li>
         <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI) — in progress</li>
         <li>IP address management and assignment</li>
         <li>Workshop registration and management</li>
