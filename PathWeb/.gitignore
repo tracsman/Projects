@@ -50,3 +50,7 @@ packages/
 
 # Auto-generated files
 [Aa]uto[Gg]enerated/
+
+# App Service downloaded logs
+appservice-logs/
+appservice-logs.zip

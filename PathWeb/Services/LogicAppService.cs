@@ -67,7 +67,7 @@ public class LogicAppService
 
         var triggerUrl = _config["LogicApp:TriggerUrl"];
         if (string.IsNullOrEmpty(triggerUrl))
-            return null; // Silently skip if not configured
+            return "LogicApp:TriggerUrl not configured. ADO integration is disabled.";
 
         try
         {

@@ -95,7 +95,7 @@
     <ul>
         <li><strong>Tenants:</strong> Core entity representing a customer lab environment — includes ExpressRoute, VPN, VM, and addressing configuration for both Azure and on-premises resources.</li>
         <li><strong>Tenant Requests:</strong> Self-service lab request workflow — any authenticated user can submit a request, admins review and approve/reject from a queue.</li>
-        <li><strong>Devices:</strong> Inventory of physical network devices (routers, switches) in each lab location.</li>
+        <li><strong>Devices:</strong> Inventory of physical network devices (routers, firewalls, switches) in each lab location, with management IP addresses for SSH/NETCONF connectivity.</li>
         <li><strong>IP Addresses:</strong> Public IP address management and assignment tracking.</li>
         <li><strong>Config:</strong> Generated configuration data for each tenant (network device configs, PowerShell scripts).</li>
         <li><strong>Regions:</strong> Lookup table of Azure regions available for tenant deployments.</li>
@@ -109,6 +109,7 @@
         <li><strong>LogicAppService:</strong> Integrates with Azure DevOps via an Azure Logic App to create and update Experiment work items in the <code>msazure/One</code> ADO project. The web app sends tenant data to a Logic App HTTP trigger, which uses the built-in ADO connector (authenticated with Entra ID credentials) to manage work items. Discussion comments are added to track request approvals and tenant edits.</li>
         <li><strong>AuthLevelService:</strong> Resolves the authenticated user's email to their AuthLevel from the database on every request, injecting it into <code>HttpContext.Items</code> for use by controllers and views.</li>
         <li><strong>EasyAuthAuthenticationHandler:</strong> Custom authentication handler that reads Easy Auth platform headers (<code>X-MS-CLIENT-PRINCIPAL</code>) and constructs a <code>ClaimsPrincipal</code> with the user's name, email, and identity.</li>
+        <li><strong>SshService:</strong> Provides SSH connectivity to on-premises network devices (routers, firewalls, switches) via the <code>SSH.NET</code> library. Credentials are retrieved at runtime from Azure Key Vault using the App Service Managed Identity — no passwords are stored in code or config. Connectivity is enabled by Regional VNet Integration, which routes outbound traffic from the App Service through the lab management VNet to on-premises devices via ExpressRoute.</li>
     </ul>
 
     <h5>Azure DevOps Integration</h5>
@@ -121,7 +122,7 @@
 
     <h5>Deployment</h5>
     <ul>
-        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, binds the custom hostname with a managed SSL certificate, enables Managed Identity, configures Easy Auth with Entra ID (using FIC), sets up logging, builds, and deploys the application.</li>
+        <li><strong><code>deploy-to-azure.ps1</code>:</strong> Full deployment script — creates the resource group, App Service Plan, Web App, binds the custom hostname with a managed SSL certificate, enables Managed Identity, configures Regional VNet Integration (for SSH/NETCONF access to on-premises devices), grants Key Vault Secrets User access for device credentials, configures Easy Auth with Entra ID (using FIC), sets up logging, builds, and deploys the application.</li>
         <li><strong><code>deploy-logic-app.ps1</code>:</strong> Deploys the <code>PathWeb-ADO</code> Logic App and Azure DevOps API connection. After deployment, the ADO connection must be authorized via the Azure Portal with Entra ID credentials.</li>
         <li><strong><code>quick-deploy.ps1</code>:</strong> Fast redeployment — skips all infrastructure provisioning, just builds, packages, deploys, and warms up the app (including EF Core JIT compilation and Razor page pre-compilation).</li>
         <li><strong><code>Warmup.ps1</code>:</strong> Post-restart warmup — polls the <code>/warmup</code> endpoint to pre-compile EF Core and the DI pipeline, then touches all Razor pages to force JIT compilation.</li>
@@ -130,15 +131,17 @@
 
     <h5>NuGet Packages</h5>
     <ul>
-        <li><code>Azure.Identity</code> — <code>DefaultAzureCredential</code> for passwordless auth to Azure SQL</li>
+        <li><code>Azure.Identity</code> — <code>DefaultAzureCredential</code> for passwordless auth to Azure SQL and Key Vault</li>
+        <li><code>Azure.Security.KeyVault.Secrets</code> — retrieves device credentials from Azure Key Vault at runtime</li>
         <li><code>Microsoft.EntityFrameworkCore</code> + <code>SqlServer</code> — ORM and Azure SQL provider</li>
         <li><code>Microsoft.Identity.Web</code> — Entra ID / OIDC authentication for local development</li>
+        <li><code>SSH.NET</code> (Renci.SshNet) — SSH client library for connecting to on-premises network devices (CLI commands and NETCONF)</li>
     </ul>
 
     <h4>Roadmap</h4>
     <ul>
-        <li>VNet Integration for SSH/NETCONF access to lab network devices</li>
-        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI)</li>
+        <li><s>VNet Integration for SSH/NETCONF access to lab network devices</s> ✅</li>
+        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI) — in progress</li>
         <li>IP address management and assignment</li>
         <li>Workshop registration and management</li>
         <li>Automated Azure deployment orchestration</li>
