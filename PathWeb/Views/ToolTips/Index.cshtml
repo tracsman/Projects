@@ -1,0 +1,40 @@
+@model IEnumerable<PathWeb.Models.FieldHelp>
+@{
+    ViewData["Title"] = "Manage Tooltips";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>Edit the help text that appears when users hover the <i class="bi bi-info-circle text-primary"></i> icon next to field labels on Request and Tenant pages.</p>
+    <p>Changes take effect within 5 minutes (or immediately on next app restart).</p>
+</div>
+
+<form asp-action="Save" method="post">
+    <div class="d-flex gap-2 mb-3">
+        <button type="submit" class="btn btn-primary">Save All Changes</button>
+    </div>
+
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th style="width:180px">Field Name</th>
+                <th>Help Text</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tip in Model)
+            {
+                <tr>
+                    <td class="fw-bold align-middle">@tip.FieldName</td>
+                    <td>
+                        <textarea name="helpTexts[@tip.FieldName]" class="form-control" rows="2" maxlength="500">@tip.HelpText</textarea>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">Save All Changes</button>
+    </div>
+</form>

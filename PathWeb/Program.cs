@@ -29,6 +29,9 @@ builder.Services.AddScoped<ConfigGenerator>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<LogicAppService>();
 
+// Register memory cache for field help tooltips
+builder.Services.AddMemoryCache();
+
 // Register SSH service for device connectivity
 var keyVaultUri = builder.Configuration["KeyVaultUri"];
 if (!string.IsNullOrEmpty(keyVaultUri))

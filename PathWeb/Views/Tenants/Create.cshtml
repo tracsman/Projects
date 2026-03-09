@@ -25,7 +25,7 @@
         <div class="collapse show" id="collapseBasic">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label asp-for="Lab" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Lab" class="col-md-3 col-form-label fw-bold" field-help="Lab"></label>
                     <div class="col-md-9">
                         <select asp-for="Lab" asp-items="@ViewBag.Labs" class="form-select">
                             <option value="">- select Lab -</option>
@@ -46,7 +46,7 @@
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="NinjaOwner" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="NinjaOwner" class="col-md-3 col-form-label fw-bold" field-help="NinjaOwner"></label>
                     <div class="col-md-9">
                         <select asp-for="NinjaOwner" asp-items="@ViewBag.Ninjas" class="form-select">
                             <option value="">- select Ninja Owner -</option>
@@ -55,21 +55,21 @@
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Contacts" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Contacts" class="col-md-3 col-form-label fw-bold" field-help="Contacts"></label>
                     <div class="col-md-9">
                         <input asp-for="Contacts" class="form-control" placeholder="email@microsoft.com;email2@microsoft.com" />
                         <span asp-validation-for="Contacts" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="ReturnDate" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="ReturnDate" class="col-md-3 col-form-label fw-bold" field-help="ReturnDate"></label>
                     <div class="col-md-9">
                         <input asp-for="ReturnDate" class="form-control" type="date" />
                         <span asp-validation-for="ReturnDate" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Usage" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Usage" class="col-md-3 col-form-label fw-bold" field-help="Usage"></label>
                     <div class="col-md-9">
                         <textarea asp-for="Usage" class="form-control" rows="4"></textarea>
                         <span asp-validation-for="Usage" class="text-danger"></span>
@@ -87,7 +87,7 @@
         <div class="collapse show" id="collapseAzure">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label asp-for="AzureRegion" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AzureRegion" class="col-md-3 col-form-label fw-bold" field-help="AzureRegion"></label>
                     <div class="col-md-9">
                         <select asp-for="AzureRegion" asp-items="@ViewBag.Regions" class="form-select">
                             <option value="">- select Azure Region -</option>
@@ -96,63 +96,63 @@
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Ersku" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Ersku" class="col-md-3 col-form-label fw-bold" field-help="Ersku"></label>
                     <div class="col-md-9">
                         <select asp-for="Ersku" asp-items="@ViewBag.ErSkus" class="form-select"></select>
                         <span asp-validation-for="Ersku" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Erspeed" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Erspeed" class="col-md-3 col-form-label fw-bold" field-help="Erspeed"></label>
                     <div class="col-md-9">
                         <select asp-for="Erspeed" asp-items="@ViewBag.ErSpeeds" class="form-select"></select>
                         <span asp-validation-for="Erspeed" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="EruplinkPort" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="EruplinkPort" class="col-md-3 col-form-label fw-bold" field-help="EruplinkPort"></label>
                     <div class="col-md-9">
                         <select asp-for="EruplinkPort" asp-items="@ViewBag.ErUplinksSea" class="form-select"></select>
                         <span asp-validation-for="EruplinkPort" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="PvtPeering" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="PvtPeering" class="col-md-3 col-form-label fw-bold" field-help="PvtPeering"></label>
                     <div class="col-md-9">
                         <select asp-for="PvtPeering" asp-items="@ViewBag.BoolOptions" class="form-select"></select>
                         <span asp-validation-for="PvtPeering" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="ErgatewaySize" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="ErgatewaySize" class="col-md-3 col-form-label fw-bold" field-help="ErgatewaySize"></label>
                     <div class="col-md-9">
                         <select asp-for="ErgatewaySize" asp-items="@ViewBag.ErGateways" class="form-select"></select>
                         <span asp-validation-for="ErgatewaySize" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="ErfastPath" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="ErfastPath" class="col-md-3 col-form-label fw-bold" field-help="ErfastPath"></label>
                     <div class="col-md-9">
                         <select asp-for="ErfastPath" asp-items="@ViewBag.BoolOptions" class="form-select"></select>
                         <span asp-validation-for="ErfastPath" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Msftpeering" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Msftpeering" class="col-md-3 col-form-label fw-bold" field-help="Msftpeering"></label>
                     <div class="col-md-9">
                         <select asp-for="Msftpeering" asp-items="@ViewBag.BoolOptions" class="form-select"></select>
                         <span asp-validation-for="Msftpeering" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Msfttags" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Msfttags" class="col-md-3 col-form-label fw-bold" field-help="Msfttags"></label>
                     <div class="col-md-9">
                         <input asp-for="Msfttags" class="form-control" />
                         <span asp-validation-for="Msfttags" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Skey" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Skey" class="col-md-3 col-form-label fw-bold" field-help="Skey"></label>
                     <div class="col-md-9">
                         <input asp-for="Skey" class="form-control" />
                         <span asp-validation-for="Skey" class="text-danger"></span>
@@ -170,26 +170,26 @@
         <div class="collapse show" id="collapseVpn">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label asp-for="Vpngateway" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Vpngateway" class="col-md-3 col-form-label fw-bold" field-help="Vpngateway"></label>
                     <div class="col-md-9">
                         <select asp-for="Vpngateway" asp-items="@ViewBag.VpnGateways" class="form-select"></select>
                         <span asp-validation-for="Vpngateway" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Vpnbgp" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Vpnbgp" class="col-md-3 col-form-label fw-bold" field-help="Vpnbgp"></label>
                     <div class="col-md-9">
                         <select asp-for="Vpnbgp" asp-items="@ViewBag.BoolOptions" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="Vpnconfig" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="Vpnconfig" class="col-md-3 col-form-label fw-bold" field-help="Vpnconfig"></label>
                     <div class="col-md-9">
                         <select asp-for="Vpnconfig" asp-items="@ViewBag.VpnConfigs" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="VpnendPoint" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="VpnendPoint" class="col-md-3 col-form-label fw-bold" field-help="VpnendPoint"></label>
                     <div class="col-md-9">
                         <input asp-for="VpnendPoint" class="form-control" />
                         <span asp-validation-for="VpnendPoint" class="text-danger"></span>
@@ -207,59 +207,59 @@
         <div class="collapse show" id="collapseVm">
             <div class="card-body">
                 <div class="mb-3 row">
-                    <label asp-for="AddressFamily" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AddressFamily" class="col-md-3 col-form-label fw-bold" field-help="AddressFamily"></label>
                     <div class="col-md-9">
                         <select asp-for="AddressFamily" asp-items="@ViewBag.IpVersions" class="form-select"></select>
                         <span asp-validation-for="AddressFamily" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="AzVm1" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AzVm1" class="col-md-3 col-form-label fw-bold" field-help="AzVm1"></label>
                     <div class="col-md-9">
                         <select asp-for="AzVm1" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="AzVm2" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AzVm2" class="col-md-3 col-form-label fw-bold" field-help="AzVm2"></label>
                     <div class="col-md-9">
                         <select asp-for="AzVm2" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="AzVm3" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AzVm3" class="col-md-3 col-form-label fw-bold" field-help="AzVm3"></label>
                     <div class="col-md-9">
                         <select asp-for="AzVm3" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="AzVm4" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="AzVm4" class="col-md-3 col-form-label fw-bold" field-help="AzVm4"></label>
                     <div class="col-md-9">
                         <select asp-for="AzVm4" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="LabVm1" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="LabVm1" class="col-md-3 col-form-label fw-bold" field-help="LabVm1"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm1" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                         <span asp-validation-for="LabVm1" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="LabVm2" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="LabVm2" class="col-md-3 col-form-label fw-bold" field-help="LabVm2"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm2" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                         <span asp-validation-for="LabVm2" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="LabVm3" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="LabVm3" class="col-md-3 col-form-label fw-bold" field-help="LabVm3"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm3" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                         <span asp-validation-for="LabVm3" class="text-danger"></span>
                     </div>
                 </div>
                 <div class="mb-3 row">
-                    <label asp-for="LabVm4" class="col-md-3 col-form-label fw-bold"></label>
+                    <label asp-for="LabVm4" class="col-md-3 col-form-label fw-bold" field-help="LabVm4"></label>
                     <div class="col-md-9">
                         <select asp-for="LabVm4" asp-items="@ViewBag.VmOsList" class="form-select"></select>
                         <span asp-validation-for="LabVm4" class="text-danger"></span>
