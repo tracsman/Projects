@@ -9,11 +9,15 @@ namespace PathWeb.Controllers;
 public class DevicesController : Controller
 {
     private readonly LabConfigContext _context;
+    private readonly SshService _sshService;
     private readonly ILogger<DevicesController> _logger;
 
-    public DevicesController(LabConfigContext context, ILogger<DevicesController> logger)
+    private static readonly string[] NetworkDeviceTypes = ["Router", "Firewall", "Switch"];
+
+    public DevicesController(LabConfigContext context, SshService sshService, ILogger<DevicesController> logger)
     {
         _context = context;
+        _sshService = sshService;
         _logger = logger;
     }
 
@@ -123,5 +127,112 @@ public class DevicesController : Controller
             return RedirectToAction(nameof(Index));
         }
         return View(device);
+    }
+
+    public async Task<IActionResult> RunCommand()
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.DataAdmin)
+        {
+            _logger.LogWarning("Permission denied for Devices.RunCommand, user: {User}", GetUserEmail());
+            return View("PermissionError");
+        }
+
+        ViewBag.Devices = await GetNetworkDevices();
+        return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RunCommand(Guid deviceId, string command = "show version")
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.DataAdmin)
+        {
+            _logger.LogWarning("Permission denied for Devices.RunCommand [POST], user: {User}", GetUserEmail());
+            return View("PermissionError");
+        }
+
+        var device = await _context.Devices.FindAsync(deviceId);
+        if (device is null || string.IsNullOrEmpty(device.MgmtIpv4))
+        {
+            TempData["Message"] = "Device not found or has no management IP.";
+            TempData["MessageLevel"] = "danger";
+            ViewBag.Devices = await GetNetworkDevices();
+            return View();
+        }
+
+        _logger.LogInformation("RunCommand on {Device} ({Host}): {Command} by {User}",
+            device.Name, device.MgmtIpv4, command, GetUserEmail());
+
+        var (success, output) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, command);
+
+        ViewBag.Devices = await GetNetworkDevices();
+        ViewBag.SelectedDeviceId = deviceId;
+        ViewBag.Command = command;
+        ViewBag.DeviceName = device.Name;
+        ViewBag.DeviceIp = device.MgmtIpv4;
+        ViewBag.Success = success;
+        ViewBag.Output = output;
+
+        return View();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PopulateOs()
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.DataAdmin)
+        {
+            _logger.LogWarning("Permission denied for Devices.PopulateOs, user: {User}", GetUserEmail());
+            return View("PermissionError");
+        }
+
+        var devices = await _context.Devices
+            .Where(d => NetworkDeviceTypes.Contains(d.Type) && d.InService && d.MgmtIpv4 != null)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+
+        int updated = 0, failed = 0;
+        var errors = new List<string>();
+
+        foreach (var device in devices)
+        {
+            var (success, osVersion) = await _sshService.DetectOsVersionAsync(device.MgmtIpv4!, device.Name);
+            if (success)
+            {
+                device.Os = osVersion.Length > 30 ? osVersion[..30] : osVersion;
+                updated++;
+            }
+            else
+            {
+                errors.Add($"{device.Name}: {osVersion}");
+                failed++;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("PopulateOs completed: {Updated} updated, {Failed} failed, by {User}",
+            updated, failed, GetUserEmail());
+
+        if (failed == 0)
+        {
+            TempData["Message"] = $"OS versions updated for all {updated} devices.";
+            TempData["MessageLevel"] = "success";
+        }
+        else
+        {
+            TempData["Message"] = $"OS versions updated for {updated} devices. {failed} failed: {string.Join("; ", errors)}";
+            TempData["MessageLevel"] = "warning";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<List<Device>> GetNetworkDevices()
+    {
+        return await _context.Devices
+            .Where(d => NetworkDeviceTypes.Contains(d.Type) && d.InService && d.MgmtIpv4 != null)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
     }
 }

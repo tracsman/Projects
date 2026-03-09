@@ -1,0 +1,56 @@
+@{
+    ViewData["Title"] = "Run Command";
+    var devices = (List<PathWeb.Models.Device>)ViewBag.Devices;
+    Guid? selectedId = ViewBag.SelectedDeviceId;
+    string? command = ViewBag.Command;
+    string? deviceName = ViewBag.DeviceName;
+    string? deviceIp = ViewBag.DeviceIp;
+    bool? success = ViewBag.Success;
+    string? output = ViewBag.Output;
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2>@ViewData["Title"]</h2>
+            <p class="mb-0">Send a CLI command to a network device and view the output. Credentials are loaded from Key Vault.</p>
+        </div>
+        <a asp-action="Index" class="btn btn-outline-secondary">← Back to Devices</a>
+    </div>
+</div>
+
+<form method="post" asp-action="RunCommand">
+    <div class="row mb-3">
+        <div class="col-md-5">
+            <label for="deviceId" class="form-label fw-bold">Device</label>
+            <select name="deviceId" id="deviceId" class="form-select">
+                @foreach (var d in devices)
+                {
+                    <option value="@d.DeviceId" selected="@(selectedId == d.DeviceId)">
+                        @d.Name (@d.Type) — @d.MgmtIpv4
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label for="command" class="form-label fw-bold">Command</label>
+            <input type="text" name="command" id="command" class="form-control font-monospace"
+                   value="@(command ?? "show version")" />
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">Run</button>
+        </div>
+    </div>
+</form>
+
+@if (output != null)
+{
+    <div class="card mt-3">
+        <div class="card-header font-monospace @(success == true ? "bg-success-subtle" : "bg-danger-subtle")">
+            @(success == true ? "✅" : "❌") @deviceName (@deviceIp) — <code>@command</code>
+        </div>
+        <div class="card-body">
+            <pre class="mb-0" style="white-space: pre-wrap;">@output</pre>
+        </div>
+    </div>
+}
