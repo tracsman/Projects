@@ -13,13 +13,15 @@ public class TenantsController : Controller
     private readonly ILogger<TenantsController> _logger;
     private readonly ConfigGenerator _configGenerator;
     private readonly LogicAppService _logicAppService;
+    private readonly SshService _sshService;
 
-    public TenantsController(LabConfigContext context, ILogger<TenantsController> logger, ConfigGenerator configGenerator, LogicAppService logicAppService)
+    public TenantsController(LabConfigContext context, ILogger<TenantsController> logger, ConfigGenerator configGenerator, LogicAppService logicAppService, SshService sshService)
     {
         _context = context;
         _logger = logger;
         _configGenerator = configGenerator;
         _logicAppService = logicAppService;
+        _sshService = sshService;
     }
 
     private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
@@ -416,6 +418,73 @@ public class TenantsController : Controller
         }
 
         return RedirectToAction(nameof(Config), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyOffDevice(Guid tenantGuid, string configType)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
+            return Json(new { success = false, output = "Permission denied." });
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid);
+        if (tenant == null)
+            return Json(new { success = false, output = "Tenant not found." });
+
+        var device = await _context.Devices.FirstOrDefaultAsync(d => d.Name == configType);
+        if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
+            return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP." });
+
+        var searchPattern = $"Cust{tenant.TenantId}";
+        var platform = DetectPlatform(configType);
+
+        var command = platform switch
+        {
+            "Juniper" => $"show configuration | display set | match {searchPattern}",
+            "NX-OS" => $"show running-config | include {searchPattern}",
+            "IOS-XE" => $"show running-config | include {searchPattern}",
+            _ => null
+        };
+
+        if (command == null)
+            return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
+
+        _logger.LogInformation("VerifyOffDevice: {Device} ({Host}) searching for '{Pattern}' by {User}",
+            configType, device.MgmtIpv4, searchPattern, GetUserEmail());
+
+        var (sshSuccess, output) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, command);
+
+        if (!sshSuccess)
+            return Json(new { success = false, output = $"SSH failed: {output}" });
+
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var matchCount = lines.Length;
+
+        _logger.LogInformation("VerifyOffDevice: {Device} returned {MatchCount} matches for '{Pattern}'",
+            configType, matchCount, searchPattern);
+
+        return Json(new
+        {
+            success = true,
+            deviceName = configType,
+            searchPattern,
+            matchCount,
+            output = matchCount == 0
+                ? $"✔ Clean — no references to '{searchPattern}' found on {configType}."
+                : output
+        });
+    }
+
+    private static string DetectPlatform(string deviceName)
+    {
+        var upper = deviceName.ToUpperInvariant();
+        if (upper.Contains("-MX") || upper.Contains("-SRX"))
+            return "Juniper";
+        if (upper.Contains("-NX"))
+            return "NX-OS";
+        if (upper.Contains("-ASR") || upper.Contains("-ISR") || upper.Contains("-CSR") || upper.Contains("-CAT"))
+            return "IOS-XE";
+        return "Unknown";
     }
 
     private async Task<short> GetNextTenantId(string lab, short serverPreference)

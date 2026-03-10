@@ -99,14 +99,14 @@ else
                     else if (configType.Contains("SRX") || configType.Contains("MX") || configType.Contains("ASR") || configType.Contains("ISR") || configType.Contains("NX"))
                     {
                         <div class="input-group input-group-sm" style="width: auto;">
-                            <select class="form-select form-select-sm" id="action-@configType" disabled>
+                            <select class="form-select form-select-sm" id="action-@configType"@(authLevel < 8 ? " disabled" : "")>
                                 <option value="apply">Apply to Device</option>
                                 <option value="compare">Compare to Device</option>
                                 <option value="patch">Patch Device</option>
                                 <option value="remove">Remove from Device</option>
-                                <option value="verify">Verify on Device</option>
+                                <option value="verify" selected>Verify off Device</option>
                             </select>
-                            <button disabled class="btn btn-sm btn-outline-primary" onclick="runDeviceAction('@configType')" title="Run the selected action on the device">
+                            <button class="btn btn-sm btn-outline-primary" onclick="runDeviceAction('@configType')" title="Run the selected action on the device"@(authLevel < 8 ? " disabled" : "")>
                                 <i class="bi bi-play-fill"></i> Run
                             </button>
                         </div>
@@ -132,12 +132,85 @@ else
     </div>
 }
 
+@Html.AntiForgeryToken()
+
+<div class="modal fade" id="deviceResultModal" tabindex="-1" aria-labelledby="deviceResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deviceResultModalLabel">Device Action Result</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="deviceResultStatus" class="mb-2"></div>
+                <pre id="deviceResultOutput" class="bg-dark text-light p-3 rounded" style="max-height:400px; overflow:auto; white-space:pre-wrap;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         function runDeviceAction(configType) {
             var action = document.getElementById('action-' + configType).value;
-            // Placeholder - will be wired up to controller actions
-            alert('Action: ' + action + '\nDevice: ' + configType + '\n\nThis feature is coming soon!');
+            if (action === 'verify') {
+                verifyOffDevice(configType);
+            } else {
+                alert('Action: ' + action + '\nDevice: ' + configType + '\n\nThis feature is coming soon!');
+            }
+        }
+
+        function verifyOffDevice(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Running...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("VerifyOffDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+                var titleEl = document.getElementById('deviceResultModalLabel');
+
+                titleEl.textContent = 'Verify off Device: ' + configType;
+
+                if (data.success && data.matchCount === 0) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Found <strong>' + data.matchCount + '</strong> reference(s) to <code>' + data.searchPattern + '</code> on ' + data.deviceName + '.</div>';
+                    outputEl.textContent = data.output;
+                    outputEl.style.display = '';
+                } else {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                }
+
+                new bootstrap.Modal(document.getElementById('deviceResultModal')).show();
+            })
+            .catch(function (err) {
+                alert('Request failed: ' + err);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
         }
 
         function copyToClipboard(configType, btn) {
