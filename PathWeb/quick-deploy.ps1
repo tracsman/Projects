@@ -86,29 +86,40 @@ try {
     exit 1
 }
 
-# Wait for app to restart and warm up EF Core / DI
+# Restart the app to ensure the new build is picked up immediately
 $appUrl = "https://$WebAppName.azurewebsites.net"
+Write-Step "Restarting $WebAppName..."
+Restart-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Out-Null
+Write-Success "Restart initiated"
 
-Write-Step "Waiting for app restart and warming up EF Core..."
+# Wait for the NEW build to be live (compare build timestamps)
+Write-Step "Waiting for new build ($buildTime) to come online..."
 $ready = $false
-for ($i = 1; $i -le 36; $i++) {
+for ($i = 1; $i -le 60; $i++) {
     try {
         $response = Invoke-WebRequest -Uri "$appUrl/warmup" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
         $warmup = $response.Content | ConvertFrom-Json
-        Write-Success "App is warm (build: $($warmup.build), db: $($warmup.dbMs)ms)"
-        $ready = $true
-        break
+        if ($warmup.build -eq $buildTime) {
+            Write-Host ""
+            Write-Success "New build is live! (build: $($warmup.build), db: $($warmup.dbMs)ms)"
+            $ready = $true
+            break
+        } else {
+            Write-Host "." -NoNewline
+            Start-Sleep -Seconds 5
+        }
     } catch {
         Write-Host "." -NoNewline
         Start-Sleep -Seconds 5
     }
 }
 if (-not $ready) {
-    Write-Info "App did not respond to /warmup after 3 minutes, continuing anyway..."
+    Write-Info "New build did not appear after 5 minutes. Current build may still be swapping in."
 }
 
 Write-Step "Compiling Razor Pages..."
-$warmupPaths = @("/", "/Tenants", "/Addresses", "/Users",
+$warmupPaths = @("/", "/Tenants", "/Addresses", "/Devices",
+                  "/Users", "/ToolTips",
                   "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {

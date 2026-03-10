@@ -43,7 +43,8 @@ if (-not $ready) {
 
 # 2. Touch auth-protected routes to JIT-compile Razor Pages
 Write-Host "→ Compiling Razor Pages..." -ForegroundColor Cyan
-$warmupPaths = @("/", "/Tenants", "/Addresses", "/Users",
+$warmupPaths = @("/", "/Tenants", "/Addresses", "/Devices",
+                  "/Users", "/ToolTips",
                   "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {

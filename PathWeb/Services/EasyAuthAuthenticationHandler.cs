@@ -42,8 +42,9 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
 
             // Start with email as default
             var displayName = nameHeader;
+            var userEmail = nameHeader;
 
-            // Try to parse the full principal to get the actual name
+            // Try to parse the full principal to get the actual name and UPN
             var principalHeader = Request.Headers["X-MS-CLIENT-PRINCIPAL"].FirstOrDefault();
             if (!string.IsNullOrEmpty(principalHeader))
             {
@@ -67,6 +68,19 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
                             displayName = firstName;
                             Logger.LogInformation("Found full name '{FullName}', using first name '{FirstName}'", fullName, firstName);
                         }
+
+                        // Prefer the UPN (preferred_username or upn claim) over the header value
+                        // X-MS-CLIENT-PRINCIPAL-NAME can contain the friendly email (e.g., Fabrizio.Ferri@microsoft.com)
+                        // but preferred_username/upn always has the actual UPN (e.g., fabferri@microsoft.com)
+                        var upnClaim = principal.Claims.FirstOrDefault(c =>
+                            c.Type == "preferred_username" ||
+                            c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn")
+                            ?? principal.Claims.FirstOrDefault(c => c.Type == "upn");
+                        if (upnClaim != null && !string.IsNullOrEmpty(upnClaim.Value))
+                        {
+                            Logger.LogInformation("Using UPN '{Upn}' instead of header '{Header}'", upnClaim.Value, nameHeader);
+                            userEmail = upnClaim.Value;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -80,7 +94,7 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
             {
                 new Claim(ClaimTypes.Name, displayName),
                 new Claim(ClaimTypes.NameIdentifier, idHeader ?? "unknown"),
-                new Claim(ClaimTypes.Email, nameHeader)
+                new Claim(ClaimTypes.Email, userEmail)
             };
 
             var identity = new ClaimsIdentity(claims, "EasyAuth", ClaimTypes.Name, ClaimTypes.Role);

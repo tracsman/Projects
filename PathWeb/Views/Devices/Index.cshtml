@@ -18,7 +18,7 @@
                 <a asp-action="RunCommand" class="btn btn-primary">Run Command</a>
                 <form method="post" asp-action="PopulateOs">
                     <button type="submit" class="btn btn-outline-secondary w-100"
-                            onclick="return confirm('This will SSH into all network devices to detect their OS version. Continue?')">
+                            onclick="return confirm('This will SSH into all network devices to detect their OS version and save the results to the Devices table in SQL. Continue?')">
                         Update OS Versions
                     </button>
                 </form>
@@ -30,11 +30,21 @@
 <table class="table table-bordered">
     <thead class="table-dark">
         <tr>
-            <th class="text-center">Lab</th>
-            <th>Name</th>
-            <th class="text-center">Type</th>
-            <th>OS</th>
-            <th class="text-center">In Service</th>
+            <th class="text-center">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["LabSortParm"]" class="text-light text-decoration-none" title="Sort by Lab">Lab</a>
+            </th>
+            <th>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["NameSortParm"]" class="text-light text-decoration-none" title="Sort by Name">Name</a>
+            </th>
+            <th class="text-center">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["TypeSortParm"]" class="text-light text-decoration-none" title="Sort by Type">Type</a>
+            </th>
+            <th>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["OsSortParm"]" class="text-light text-decoration-none" title="Sort by OS">OS</a>
+            </th>
+            <th class="text-center">
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["InServiceSortParm"]" class="text-light text-decoration-none" title="Sort by In Service status">In Service</a>
+            </th>
             <th class="text-center">Action</th>
         </tr>
     </thead>
