@@ -1002,6 +1002,7 @@ public class ConfigGenerator
                 // Interfaces
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Setting interfaces");
                 strDB += "# Define Interfaces\r\n" +
+                         $"set interfaces reth3 unit {tenant.TenantId} description \"Cust{tenant.TenantId} to LAN\"\r\n" +
                          $"set interfaces reth3 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                          $"set interfaces reth3 unit {tenant.TenantId} family inet address {strREth3IntIP}/25\r\n" +
                          $"set interfaces reth3 unit {tenant.TenantId} family inet6 address {strREth3IntIPv6}/64\r\n";
@@ -1009,9 +1010,11 @@ public class ConfigGenerator
 
                 if (HasPrivate || HasMicrosoft)
                 {
-                    strDB += $"set interfaces reth1 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
+                    strDB += $"set interfaces reth1 unit {tenant.TenantId} description \"Cust{tenant.TenantId} to Primary Router\"\r\n" +
+                             $"set interfaces reth1 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                              $"set interfaces reth1 unit {tenant.TenantId} family inet address {strREth1IntIP}/31\r\n" +
                              (HasIPv6 ? $"set interfaces reth1 unit {tenant.TenantId} family inet6 address {strREth1IntIPv6}/127\r\n" : "") +
+                             $"set interfaces reth2 unit {tenant.TenantId} description \"Cust{tenant.TenantId} to Secondary Router\"\r\n" +
                              $"set interfaces reth2 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                              $"set interfaces reth2 unit {tenant.TenantId} family inet address {strREth2IntIP}/31\r\n" +
                              (HasIPv6 ? $"set interfaces reth2 unit {tenant.TenantId} family inet6 address {strREth2IntIPv6}/127\r\n" : "");
@@ -1021,7 +1024,9 @@ public class ConfigGenerator
 
                 if (HasVPNGateway)
                 {
-                    strDB += $"set interfaces lo0 unit {tenant.TenantId} family inet address {strLabVpnBgpIP}/32\r\n" +
+                    strDB += $"set interfaces lo0 unit {tenant.TenantId} description \"Cust{tenant.TenantId} VPN Loopback\"\r\n" +
+                             $"set interfaces lo0 unit {tenant.TenantId} family inet address {strLabVpnBgpIP}/32\r\n" +
+                             $"set interfaces st0 unit {tenant.TenantId}8 description \"Cust{tenant.TenantId} VPN Tunnel Primary\"\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}8 family inet mtu 1436\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}8 family inet address 169.254.{tenant.TenantId}.1/32\r\n";
                    _strDelete += $"delete interfaces lo0 unit {tenant.TenantId}\r\n" +
@@ -1031,7 +1036,8 @@ public class ConfigGenerator
 
                 if (HasVPNGateway && HasVPNAA)
                 {
-                    strDB += $"set interfaces st0 unit {tenant.TenantId}9 family inet mtu 1436\r\n" +
+                    strDB += $"set interfaces st0 unit {tenant.TenantId}9 description \"Cust{tenant.TenantId} VPN Tunnel Secondary\"\r\n" +
+                             $"set interfaces st0 unit {tenant.TenantId}9 family inet mtu 1436\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}9 family inet address 169.254.{tenant.TenantId}.2/32\r\n";
                    _strDelete += $"delete interfaces st0 unit {tenant.TenantId}9\r\n";
 
@@ -1409,10 +1415,11 @@ public class ConfigGenerator
                     // Create VRF, Internal Interfaces, and Internal BGP
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting internal interfaces");
                     strDB += "# Define Internal Interfaces\r\n" +
+                             $"set interfaces ae0 unit {tenant.TenantId} description \"Cust{tenant.TenantId} to Firewall\"\r\n" +
                              $"set interfaces ae0 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                              $"set interfaces ae0 unit {tenant.TenantId} family inet address {strFWIntIP}/31\r\n" +
                              (HasIPv6 ? $"set interfaces ae0 unit {tenant.TenantId} family inet6 address {strFWIntIPv6}/127\r\n" : "") +
-                             $"set routing-instances Cust{tenant.TenantId} description \"Customer {tenant.TenantId} VRF\"\r\n" +
+                             $"set routing-instances Cust{tenant.TenantId} description \"Cust{tenant.TenantId} VRF\"\r\n" +
                              $"set routing-instances Cust{tenant.TenantId} instance-type virtual-router\r\n" +
                              $"set routing-instances Cust{tenant.TenantId} interface ae0.{tenant.TenantId}\r\n" +
                              $"set routing-instances Cust{tenant.TenantId} protocols bgp group ibgp type internal\r\n" +
@@ -1436,7 +1443,7 @@ public class ConfigGenerator
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Private Peering interfaces and BGP");
                         strDB += "# Private Peering Config\r\n" +
-                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 description \"Customer {tenant.TenantId} Private Peering to Azure\"\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 description \"Cust{tenant.TenantId} Private Peering to Azure\"\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 vlan-tags outer {strOuterTag}\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 vlan-tags inner {tenant.TenantId}0\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}0 family inet address {strPvtIntIP}/30\r\n" +
@@ -1462,7 +1469,7 @@ public class ConfigGenerator
                     {
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Microsoft Peering interfaces and BGP");
                         strDB += "# Microsoft Peering Config\r\n" +
-                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 description \"Customer {tenant.TenantId} Microsoft Peering to Azure\"\r\n" +
+                                 $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 description \"Cust{tenant.TenantId} Microsoft Peering to Azure\"\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 vlan-tags outer {strOuterTag}\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 vlan-tags inner {tenant.TenantId}1\r\n" +
                                  $"set interfaces {strUplinkInt} unit {tenant.TenantId}1 family inet address {strMSFTIntIP}/30\r\n" +
@@ -1505,6 +1512,7 @@ public class ConfigGenerator
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting VRF");
                     strDB += "# Define VRF\r\n" +
                              $"vrf definition {tenant.TenantId}\r\n" +
+                             $" description Cust{tenant.TenantId} VRF\r\n" +
                              $" rd {strASN}:{tenant.TenantId}\r\n" +
                              " address-family ipv4\r\n" +
                              " address-family ipv6\r\n\r\n";
@@ -1515,7 +1523,7 @@ public class ConfigGenerator
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Private Peering interface");
                         strDB += "# Define Private ER Interface\r\n" +
                                  $"interface {strUplinkInt}.{tenant.TenantId}0\r\n" +
-                                 $" description Customer {tenant.TenantId} Private Peering to Azure\r\n" +
+                                 $" description Cust{tenant.TenantId} Private Peering to Azure\r\n" +
                                  $" encapsulation dot1Q {strOuterTag} second-dot1q {tenant.TenantId}0\r\n" +
                                  $" vrf forwarding {tenant.TenantId}\r\n" +
                                  $" ip address {strPvtIntIP} 255.255.255.252\r\n" +
@@ -1532,7 +1540,7 @@ public class ConfigGenerator
                         _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting ER Microsoft Peering interface");
                         strDB += "# Define Microsoft ER Interface\r\n" +
                                  $"interface {strUplinkInt}.{tenant.TenantId}1\r\n" +
-                                 $" description Customer {tenant.TenantId} Microsoft Peering to Azure\r\n" +
+                                 $" description Cust{tenant.TenantId} Microsoft Peering to Azure\r\n" +
                                  $" encapsulation dot1Q {strOuterTag} second-dot1q {tenant.TenantId}1\r\n" +
                                  $" vrf forwarding {tenant.TenantId}\r\n" +
                                  $" ip address {strMSFTIntIP} 255.255.255.252\r\n" +
@@ -1546,7 +1554,7 @@ public class ConfigGenerator
                     _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Setting Firewall interface");
                     strDB += "# Define Interface to Firewall\r\n" +
                              $"interface Port-channel1.{tenant.TenantId}\r\n" +
-                             $" description Customer {tenant.TenantId} to Firewall\r\n" +
+                             $" description Cust{tenant.TenantId} to Firewall\r\n" +
                              $" encapsulation dot1Q {tenant.TenantId}\r\n" +
                              $" vrf forwarding {tenant.TenantId}\r\n" +
                              $" ip address {strFWIntIP} 255.255.255.254\r\n" +
@@ -1668,7 +1676,7 @@ public class ConfigGenerator
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSwitchConfig", "Starting Switch Config");
                 strDB += "# Define VLAN\r\n" +
                          $"vlan {tenant.TenantId}\r\n" +
-                         $"  name Customer{tenant.TenantId}\r\n";
+                         $"  name Cust{tenant.TenantId}\r\n";
                _strDelete += $"no vlan {tenant.TenantId}\r\n\r\n";
             }
             else
