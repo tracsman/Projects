@@ -96,9 +96,20 @@ else
                     {
                         <button disabled class="btn btn-sm btn-outline-primary">Deploy to Provider</button>
                     }
-                    else if (configType.Contains("SRX") || configType.Contains("MX03") || configType.Contains("ASR") || configType.Contains("NX9K"))
+                    else if (configType.Contains("SRX") || configType.Contains("MX") || configType.Contains("ASR") || configType.Contains("ISR") || configType.Contains("NX"))
                     {
-                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Device</button>
+                        <div class="input-group input-group-sm" style="width: auto;">
+                            <select class="form-select form-select-sm" id="action-@configType" disabled>
+                                <option value="apply">Apply to Device</option>
+                                <option value="compare">Compare to Device</option>
+                                <option value="patch">Patch Device</option>
+                                <option value="remove">Remove from Device</option>
+                                <option value="verify">Verify on Device</option>
+                            </select>
+                            <button disabled class="btn btn-sm btn-outline-primary" onclick="runDeviceAction('@configType')" title="Run the selected action on the device">
+                                <i class="bi bi-play-fill"></i> Run
+                            </button>
+                        </div>
                     }
                     else if (configType == "BackoutConfig")
                     {
@@ -123,6 +134,12 @@ else
 
 @section Scripts {
     <script>
+        function runDeviceAction(configType) {
+            var action = document.getElementById('action-' + configType).value;
+            // Placeholder - will be wired up to controller actions
+            alert('Action: ' + action + '\nDevice: ' + configType + '\n\nThis feature is coming soon!');
+        }
+
         function copyToClipboard(configType, btn) {
             var textarea = document.getElementById(configType);
             if (textarea) {

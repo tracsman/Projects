@@ -98,6 +98,7 @@
         <li><strong>Devices:</strong> Inventory of physical network devices (routers, firewalls, switches) in each lab location, with management IP addresses for SSH/NETCONF connectivity.</li>
         <li><strong>IP Addresses:</strong> Public IP address management and assignment tracking.</li>
         <li><strong>Config:</strong> Generated configuration data for each tenant (network device configs, PowerShell scripts).</li>
+        <li><strong>FieldHelp:</strong> Tooltip help text for form fields — managed via the <strong>Admin → Tooltips</strong> page, displayed as <i class="bi bi-info-circle"></i> icons next to field labels on Request and Tenant forms.</li>
         <li><strong>Regions:</strong> Lookup table of Azure regions available for tenant deployments.</li>
         <li><strong>Settings:</strong> Application-level configuration values stored in the database.</li>
         <li><strong>Users:</strong> User directory with Ninja (admin) flags, display names, and AuthLevel assignments.</li>
@@ -112,7 +113,7 @@
         <li><strong>SshService:</strong> Provides SSH connectivity to on-premises network devices (routers, firewalls, switches) via the <code>SSH.NET</code> library. Credentials are retrieved at runtime from Azure Key Vault using the App Service Managed Identity — no passwords are stored in code or config. Connectivity is enabled by Regional VNet Integration, which routes outbound traffic from the App Service through the lab management VNet to on-premises devices via ExpressRoute. Features include:
             <ul>
                 <li><strong>Run Command</strong> — send any CLI command to a device and view the output from the browser (<code>/Devices/RunCommand</code>).</li>
-                <li><strong>OS Detection</strong> — automatically SSHes into all network devices, detects the platform from device naming conventions (Juniper MX/SRX, Cisco Nexus, Cisco ASR), runs the appropriate version command, parses the output, and updates the <code>OS</code> column in the database.</li>
+                <li><strong>OS Detection</strong> — automatically SSHes into all network devices, detects the platform from device naming conventions (Juniper MX/SRX, Cisco Nexus, Cisco ASR/ISR), runs the appropriate version command, parses the output, and updates the <code>OS</code> column in the database.</li>
             </ul>
         </li>
     </ul>
@@ -132,6 +133,7 @@
         <li><strong><code>quick-deploy.ps1</code>:</strong> Fast redeployment — skips all infrastructure provisioning, just builds, packages, deploys, and warms up the app (including EF Core JIT compilation and Razor page pre-compilation).</li>
         <li><strong><code>Warmup.ps1</code>:</strong> Post-restart warmup — polls the <code>/warmup</code> endpoint to pre-compile EF Core and the DI pipeline, then touches all Razor pages to force JIT compilation.</li>
         <li><strong>Health &amp; Diagnostics:</strong> <code>/health</code> and <code>/warmup</code> are excluded from Easy Auth so deployment and monitoring tools can reach them without authentication. <code>/diag</code> (authenticated) shows build info, environment, auth status, database connectivity, and tenant/request counts.</li>
+        <li><strong>Application Initialization:</strong> <code>web.config</code> configures IIS Application Initialization to automatically hit <code>/warmup</code> before routing user traffic on deployments, scale-outs, and restarts — eliminating cold-start delays. The warmup endpoint pre-compiles EF Core query plans, populates the tooltip cache, and validates SQL connectivity.</li>
     </ul>
 
     <h5>NuGet Packages</h5>
@@ -147,7 +149,18 @@
     <ul>
         <li><s>VNet Integration for SSH/NETCONF access to lab network devices</s> ✅</li>
         <li><s>Device CLI tools (Run Command, OS version detection)</s> ✅</li>
-        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI) — in progress</li>
+        <li><s>Sortable columns on Devices index page</s> ✅</li>
+        <li><s>Field-level tooltip help system with admin management page</s> ✅</li>
+        <li><s>Application Initialization for zero cold-start deployments</s> ✅</li>
+        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI) — in progress
+            <ul>
+                <li>Apply to Device — push tenant config to a device</li>
+                <li>Compare to Device — compare generated config against running config on device</li>
+                <li>Patch Device — apply only the differences to a device</li>
+                <li>Remove from Device — remove tenant config from a device</li>
+                <li>Verify on Device — check if any tenant config remains on a device</li>
+            </ul>
+        </li>
         <li>IP address management and assignment</li>
         <li>Workshop registration and management</li>
         <li>Automated Azure deployment orchestration</li>

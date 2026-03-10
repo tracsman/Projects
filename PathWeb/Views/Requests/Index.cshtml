@@ -2,50 +2,84 @@
 @{
     ViewData["Title"] = "My Lab Requests";
     bool isAdmin = ViewBag.IsAdmin == true;
+    int currentPage = ViewBag.CurrentPage;
+    int totalPages = ViewBag.TotalPages;
+    int totalCount = ViewBag.TotalCount;
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
     <h2>@(isAdmin ? "All Lab Requests" : ViewData["Title"])</h2>
-    <p>@(isAdmin ? "Showing all lab requests across all users." : "Showing your submitted lab requests and their current status.")</p>
+    <p>@(isAdmin ? "Showing all lab requests across all users." : "Showing lab requests you submitted or are listed as a contact on.")</p>
     <a asp-action="Create" class="btn btn-primary">Submit New Request</a>
 </div>
 
-<table class="table table-bordered">
-    <thead class="table-dark">
-        <tr>
-            <th class="text-center">Status</th>
-            <th>Lab</th>
-            @if (isAdmin)
-            {
-                <th>Requested By</th>
-            }
-            <th>Usage</th>
-            <th class="text-center">Requested</th>
-            <th class="text-center">Action</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var item in Model)
-        {
-            var badgeClass = item.Status switch
-            {
-                "Approved" => "bg-success",
-                "Rejected" => "bg-danger",
-                _ => "bg-warning text-dark"
-            };
+@if (!Model.Any())
+{
+    <div class="alert alert-info">
+        <h5>No lab requests found.</h5>
+        <p>Click <strong>Submit New Request</strong> above to request a lab environment.</p>
+    </div>
+}
+else
+{
+    <table class="table table-bordered">
+        <thead class="table-dark">
             <tr>
-                <td class="text-center"><span class="badge @badgeClass">@item.Status</span></td>
-                <td>@item.Lab</td>
+                <th class="text-center">Status</th>
+                <th>Lab</th>
                 @if (isAdmin)
                 {
-                    <td>@(((Dictionary<string, string>)ViewBag.UserNames).GetValueOrDefault(item.RequestedBy, item.RequestedBy))</td>
+                    <th>Requested By</th>
                 }
-                <td>@(item.Usage.Length > 60 ? item.Usage[..60] + "..." : item.Usage)</td>
-                <td class="text-center">@item.RequestedDate.ToString("yyyy-MM-dd")</td>
-                <td class="text-center">
-                    <a asp-action="Details" asp-route-id="@item.RequestId">Details</a>
-                </td>
+                <th>Usage</th>
+                <th class="text-center">Requested</th>
+                <th class="text-center">Action</th>
             </tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                var badgeClass = item.Status switch
+                {
+                    "Approved" => "bg-success",
+                    "Rejected" => "bg-danger",
+                    _ => "bg-warning text-dark"
+                };
+                <tr>
+                    <td class="text-center"><span class="badge @badgeClass">@item.Status</span></td>
+                    <td>@item.Lab</td>
+                    @if (isAdmin)
+                    {
+                        <td>@(((Dictionary<string, string>)ViewBag.UserNames).GetValueOrDefault(item.RequestedBy, item.RequestedBy))</td>
+                    }
+                    <td>@(item.Usage.Length > 60 ? item.Usage[..60] + "..." : item.Usage)</td>
+                    <td class="text-center">@item.RequestedDate.ToString("yyyy-MM-dd")</td>
+                    <td class="text-center">
+                        <a asp-action="Details" asp-route-id="@item.RequestId">Details</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (totalPages > 1)
+    {
+        <nav aria-label="Request list pagination">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)">Previous</a>
+                </li>
+                @for (int i = 1; i <= totalPages; i++)
+                {
+                    <li class="page-item @(i == currentPage ? "active" : "")">
+                        <a class="page-link" asp-action="Index" asp-route-page="@i">@i</a>
+                    </li>
+                }
+                <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)">Next</a>
+                </li>
+            </ul>
+        </nav>
+        <p class="text-center text-muted">Showing page @currentPage of @totalPages (@totalCount total requests)</p>
+    }
+}

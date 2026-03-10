@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using PathWeb.Data;
@@ -134,12 +135,42 @@ app.MapGet("/health", () =>
     return Results.Ok(new { status = "healthy", build = buildTime });
 }).AllowAnonymous();
 
-// Warmup endpoint - forces JIT compilation of EF Core model, DI pipeline, and validates SQL connectivity
-app.MapGet("/warmup", async (LabConfigContext db) =>
+// Warmup endpoint - forces JIT compilation of EF Core query plans, DI pipeline, and validates SQL connectivity
+app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache) =>
 {
     var sw = System.Diagnostics.Stopwatch.StartNew();
+
     // Resolving LabConfigContext compiles the EF Core model; SELECT 1 validates SQL connectivity
     _ = await db.Database.ExecuteSqlRawAsync("SELECT 1");
+
+    // Pre-compile the actual LINQ query shapes used by each page (Take(1) keeps data transfer minimal)
+    // Tenants Index: Where + OrderBy + ThenBy
+    _ = await db.Tenants.Where(t => t.DeletedDate == null).OrderBy(t => t.Lab).ThenBy(t => t.TenantId).Take(1).ToListAsync();
+    // Tenants reverse sorts
+    _ = await db.Tenants.Where(t => t.DeletedDate == null).OrderBy(t => t.NinjaOwner).Take(1).ToListAsync();
+    // Devices Index: OrderBy + ThenBy
+    _ = await db.Devices.OrderBy(d => d.Lab).ThenBy(d => d.Name).Take(1).ToListAsync();
+    // Users Index
+    _ = await db.Users.OrderBy(u => u.UserName).Take(1).ToListAsync();
+    // Requests Index: OrderByDescending + Where with Contains
+    _ = await db.TenantRequests.OrderByDescending(r => r.RequestedDate).Take(1).ToListAsync();
+    _ = await db.TenantRequests.Where(r => r.RequestedBy == "" || (r.Contacts != null && r.Contacts.Contains(""))).Take(1).ToListAsync();
+    // Regions dropdown
+    _ = await db.Regions.OrderBy(r => r.Region1).Take(1).ToListAsync();
+    // Config lookup
+    _ = await db.Configs.Where(c => c.TenantGuid == Guid.Empty).ToListAsync();
+    // Single entity lookups (FirstOrDefaultAsync / FindAsync patterns)
+    _ = await db.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == Guid.Empty);
+    _ = await db.Devices.FirstOrDefaultAsync(d => d.DeviceId == Guid.Empty);
+    _ = await db.Users.FirstOrDefaultAsync(u => u.UserName == "");
+    // IP Addresses
+    _ = await db.PublicIps.OrderBy(p => p.Lab).Take(1).ToListAsync();
+
+    // Pre-populate the FieldHelp tooltip cache
+    var helpDict = await db.FieldHelps.AsNoTracking()
+        .ToDictionaryAsync(f => f.FieldName, f => f.HelpText);
+    cache.Set("FieldHelpDictionary", helpDict, TimeSpan.FromMinutes(30));
+
     sw.Stop();
     var buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location)
         .ToString("yyyy-MM-dd HH:mm:ss");

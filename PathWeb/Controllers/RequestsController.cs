@@ -24,24 +24,40 @@ public class RequestsController : Controller
     private string GetUserEmail() => User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
                                      ?? User.Identity?.Name ?? "unknown";
 
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(int page = 1)
     {
         if (User.Identity?.IsAuthenticated != true)
             return Challenge();
 
         var email = GetUserEmail();
         var isAdmin = GetAuthLevel() >= (byte)AuthLevels.TenantAdmin;
+        const int pageSize = 25;
 
-        var requests = isAdmin
-            ? await _context.TenantRequests.OrderByDescending(r => r.RequestedDate).ToListAsync()
-            : await _context.TenantRequests
-                .Where(r => r.RequestedBy == email)
-                .OrderByDescending(r => r.RequestedDate)
-                .ToListAsync();
+        var query = _context.TenantRequests.AsQueryable();
+
+        if (!isAdmin)
+        {
+            // Show requests where the user is the requestor or listed in the Contacts field
+            query = query.Where(r => r.RequestedBy == email
+                || (r.Contacts != null && r.Contacts.Contains(email)));
+        }
+
+        var totalCount = await query.CountAsync();
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+        page = Math.Max(1, Math.Min(page, Math.Max(1, totalPages)));
+
+        var requests = await query
+            .OrderByDescending(r => r.RequestedDate)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
         ViewBag.IsAdmin = isAdmin;
+        ViewBag.CurrentPage = page;
+        ViewBag.TotalPages = totalPages;
+        ViewBag.TotalCount = totalCount;
         await SetUserDisplayNames(requests.Select(r => r.RequestedBy));
-        _logger.LogInformation("Requests.Index requested by {User}", email);
+        _logger.LogInformation("Requests.Index requested by {User}, page {Page}", email, page);
         return View(requests);
     }
 

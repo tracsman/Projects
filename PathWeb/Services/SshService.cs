@@ -151,8 +151,8 @@ public class SshService
         if (upper.Contains("-NX"))
             return "NX-OS";
 
-        // Cisco IOS-XE: ASR, ISR, CSR, Cat series
-        if (upper.Contains("-ASR") || upper.Contains("-ISR") || upper.Contains("-CSR") || upper.Contains("-CAT"))
+        // Cisco IOS-XE: ASR, ISR, CSR, Cat series, Access-In (ISR routers)
+        if (upper.Contains("-ASR") || upper.Contains("-ISR") || upper.Contains("-CSR") || upper.Contains("-CAT") || upper.Contains("-ACCESS-IN"))
             return "IOS-XE";
 
         return "Unknown";

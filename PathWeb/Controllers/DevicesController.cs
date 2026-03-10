@@ -12,7 +12,7 @@ public class DevicesController : Controller
     private readonly SshService _sshService;
     private readonly ILogger<DevicesController> _logger;
 
-    private static readonly string[] NetworkDeviceTypes = ["Router", "Firewall", "Switch"];
+    private static readonly string[] NetworkDeviceTypes = ["Router", "Firewall", "Switch", "Access-In"];
 
     public DevicesController(LabConfigContext context, SshService sshService, ILogger<DevicesController> logger)
     {
@@ -24,7 +24,7 @@ public class DevicesController : Controller
     private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
     private string GetUserEmail() => User.Identity?.Name ?? "unknown";
 
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(string? sortOrder)
     {
         if (GetAuthLevel() < (byte)AuthLevels.DataAdminReadOnly)
         {
@@ -32,9 +32,30 @@ public class DevicesController : Controller
             return View("PermissionError");
         }
 
-        _logger.LogInformation("Devices.Index requested by {User}", GetUserEmail());
-        var devices = await _context.Devices.OrderBy(d => d.Lab).ThenBy(d => d.Name).ToListAsync();
-        return View(devices);
+        ViewData["LabSortParm"] = sortOrder == "Lab" ? "Lab_desc" : "Lab";
+        ViewData["NameSortParm"] = sortOrder == "Name" ? "Name_desc" : "Name";
+        ViewData["TypeSortParm"] = sortOrder == "Type" ? "Type_desc" : "Type";
+        ViewData["OsSortParm"] = sortOrder == "OS" ? "OS_desc" : "OS";
+        ViewData["InServiceSortParm"] = sortOrder == "InService" ? "InService_desc" : "InService";
+
+        var devices = _context.Devices.AsQueryable();
+
+        devices = sortOrder switch
+        {
+            "Lab_desc" => devices.OrderByDescending(d => d.Lab).ThenByDescending(d => d.Name),
+            "Name" => devices.OrderBy(d => d.Name),
+            "Name_desc" => devices.OrderByDescending(d => d.Name),
+            "Type" => devices.OrderBy(d => d.Type).ThenBy(d => d.Lab).ThenBy(d => d.Name),
+            "Type_desc" => devices.OrderByDescending(d => d.Type).ThenByDescending(d => d.Lab).ThenByDescending(d => d.Name),
+            "OS" => devices.OrderBy(d => d.Os).ThenBy(d => d.Lab).ThenBy(d => d.Name),
+            "OS_desc" => devices.OrderByDescending(d => d.Os).ThenByDescending(d => d.Lab).ThenByDescending(d => d.Name),
+            "InService" => devices.OrderBy(d => d.InService).ThenBy(d => d.Lab).ThenBy(d => d.Name),
+            "InService_desc" => devices.OrderByDescending(d => d.InService).ThenByDescending(d => d.Lab).ThenByDescending(d => d.Name),
+            _ => devices.OrderBy(d => d.Lab).ThenBy(d => d.Name),
+        };
+
+        _logger.LogInformation("Devices.Index requested by {User}, sort: {Sort}", GetUserEmail(), sortOrder ?? "default");
+        return View(await devices.ToListAsync());
     }
 
     public async Task<IActionResult> Details(Guid? id)
