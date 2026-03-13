@@ -6,7 +6,7 @@ using PathWeb.Services;
 
 namespace PathWeb.Controllers;
 
-public class AddressesController : Controller
+public class AddressesController : BaseController
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<AddressesController> _logger;
@@ -16,9 +16,6 @@ public class AddressesController : Controller
         _context = context;
         _logger = logger;
     }
-
-    private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
-    private string GetUserEmail() => User.Identity?.Name ?? "unknown";
 
     public async Task<IActionResult> Index()
     {

@@ -7,7 +7,7 @@ using PathWeb.Services;
 
 namespace PathWeb.Controllers;
 
-public class ToolTipsController : Controller
+public class ToolTipsController : BaseController
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<ToolTipsController> _logger;
@@ -19,9 +19,6 @@ public class ToolTipsController : Controller
         _logger = logger;
         _cache = cache;
     }
-
-    private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
-    private string GetUserEmail() => User.Identity?.Name ?? "unknown";
 
     public async Task<IActionResult> Index()
     {

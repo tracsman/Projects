@@ -235,7 +235,7 @@ public class SshService
             _logger.LogInformation("Connected to {Host} ({Device}), detecting OS", host, deviceName);
 
             // Determine platform from device name
-            var platform = DetectPlatform(deviceName);
+            var platform = PlatformDetector.DetectPlatform(deviceName);
             string osVersion;
 
             switch (platform)
@@ -277,26 +277,4 @@ public class SshService
         }
     }
 
-    /// <summary>
-    /// Determines the device platform from the device name using naming conventions.
-    /// MX/SRX = Juniper, NX = Cisco NX-OS (Nexus), ASR/ISR = Cisco IOS-XE.
-    /// </summary>
-    private static string DetectPlatform(string deviceName)
-    {
-        var upper = deviceName.ToUpperInvariant();
-
-        // Juniper: MX series routers, SRX series firewalls
-        if (upper.Contains("-MX") || upper.Contains("-SRX"))
-            return "Juniper";
-
-        // Cisco Nexus: NX9K, NX3K, NX5K, etc.
-        if (upper.Contains("-NX"))
-            return "NX-OS";
-
-        // Cisco IOS-XE: ASR, ISR, CSR, Cat series, Access-In (ISR routers)
-        if (upper.Contains("-ASR") || upper.Contains("-ISR") || upper.Contains("-CSR") || upper.Contains("-CAT") || upper.Contains("-ACCESS-IN"))
-            return "IOS-XE";
-
-        return "Unknown";
     }
-}

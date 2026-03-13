@@ -6,7 +6,7 @@ using PathWeb.Services;
 
 namespace PathWeb.Controllers;
 
-public class DevicesController : Controller
+public class DevicesController : BaseController
 {
     private readonly LabConfigContext _context;
     private readonly SshService _sshService;
@@ -20,9 +20,6 @@ public class DevicesController : Controller
         _sshService = sshService;
         _logger = logger;
     }
-
-    private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
-    private string GetUserEmail() => User.Identity?.Name ?? "unknown";
 
     public async Task<IActionResult> Index(string? sortOrder)
     {

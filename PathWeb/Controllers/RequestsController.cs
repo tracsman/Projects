@@ -7,7 +7,7 @@ using PathWeb.Services;
 
 namespace PathWeb.Controllers;
 
-public class RequestsController : Controller
+public class RequestsController : BaseController
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<RequestsController> _logger;
@@ -19,10 +19,6 @@ public class RequestsController : Controller
         _logger = logger;
         _logicAppService = logicAppService;
     }
-
-    private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
-    private string GetUserEmail() => User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                                     ?? User.Identity?.Name ?? "unknown";
 
     public async Task<IActionResult> Index(int page = 1)
     {

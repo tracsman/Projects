@@ -114,8 +114,10 @@
             <ul>
                 <li><strong>Run Command</strong> — send any CLI command to a device and view the output from the browser (<code>/Devices/RunCommand</code>).</li>
                 <li><strong>OS Detection</strong> — automatically SSHes into all network devices, detects the platform from device naming conventions (Juniper MX/SRX, Cisco Nexus, Cisco ASR/ISR), runs the appropriate version command, parses the output, and updates the <code>OS</code> column in the database.</li>
+                <li><strong>Config Sessions</strong> — interactive <code>ShellStream</code>-based SSH sessions for pushing config to devices. Juniper: <code>load set terminal</code> → <code>commit check</code> → <code>show | compare</code> → <code>commit and-quit</code>. Cisco: <code>configure terminal</code> → apply lines → <code>end</code> → <code>wr</code>.</li>
             </ul>
         </li>
+        <li><strong>DbLoggerProvider:</strong> Custom <code>ILoggerProvider</code> that writes application log entries to the <code>AppLog</code> table in Azure SQL. Entries are buffered and flushed in batches every 5 seconds. Framework-level logs (ASP.NET Core, EF Core) are filtered out to keep signal-to-noise high. An admin log viewer (<code>/Logs</code>) provides level filtering, search, and pagination.</li>
     </ul>
 
     <h5>Azure DevOps Integration</h5>
@@ -152,19 +154,12 @@
         <li><s>Sortable columns on Devices index page</s> ✅</li>
         <li><s>Field-level tooltip help system with admin management page</s> ✅</li>
         <li><s>Application Initialization for zero cold-start deployments</s> ✅</li>
-        <li>Device configuration push service (Juniper NETCONF, Cisco SSH CLI) — in progress
-            <ul>
-                <li>Apply to Device — push tenant config to a device</li>
-                <li>Compare to Device — compare generated config against running config on device</li>
-                <li>Patch Device — apply only the differences to a device</li>
-                <li>Remove from Device — remove tenant config from a device</li>
-                <li>Verify on Device — check if any tenant config remains on a device</li>
-            </ul>
-        </li>
+        <li><s>Device configuration push service (Apply, Compare, Patch, Remove, Verify)</s> ✅</li>
+        <li><s>Admin log viewer with database-backed logging</s> ✅</li>
+        <li><s>Per-device backout configs for tenant teardown</s> ✅</li>
+        <li>Automated Azure deployment via Automation Runbooks</li>
         <li>IP address management and assignment</li>
         <li>Workshop registration and management</li>
-        <li>Automated Azure deployment orchestration</li>
-        <li>On-prem automation of VM creation and network device configuration</li>
     </ul>
 
     <h4>Known Issues</h4>

@@ -5,7 +5,7 @@ using PathWeb.Services;
 
 namespace PathWeb.Controllers;
 
-public class LogsController : Controller
+public class LogsController : BaseController
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<LogsController> _logger;
@@ -15,10 +15,6 @@ public class LogsController : Controller
         _context = context;
         _logger = logger;
     }
-
-    private byte GetAuthLevel() => (byte)(HttpContext.Items["AuthLevel"] ?? (byte)0);
-    private string GetUserEmail() => User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                                     ?? User.Identity?.Name ?? "unknown";
 
     public async Task<IActionResult> Index(string? level, string? search, int page = 1)
     {
