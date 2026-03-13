@@ -30,6 +30,8 @@ public partial class LabConfigContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<AppLog> AppLogs { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Config>(entity =>
@@ -285,6 +287,16 @@ public partial class LabConfigContext : DbContext
             entity.Property(e => e.AuthLevel).HasDefaultValue((byte)1, "DF_User_AuthLevel");
             entity.Property(e => e.Name).HasMaxLength(50);
             entity.Property(e => e.UserName).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<AppLog>(entity =>
+        {
+            entity.ToTable("AppLog");
+
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Level).HasMaxLength(15);
+            entity.Property(e => e.Category).HasMaxLength(256);
+            entity.Property(e => e.UserName).HasMaxLength(128);
         });
 
         OnModelCreatingPartial(modelBuilder);

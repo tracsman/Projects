@@ -99,6 +99,10 @@ else
 
 var app = builder.Build();
 
+// Register the database logger provider (must happen after Build so DI is available)
+app.Services.GetRequiredService<ILoggerFactory>()
+    .AddProvider(new DbLoggerProvider(app.Services.GetRequiredService<IServiceScopeFactory>()));
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -130,8 +134,7 @@ app.UseRouting();
 // Health check endpoint - returns build timestamp, placed before auth so it's always accessible
 app.MapGet("/health", () =>
 {
-    var buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location)
-        .ToString("yyyy-MM-dd HH:mm:ss");
+    var buildTime = GetBuildTimestamp();
     return Results.Ok(new { status = "healthy", build = buildTime });
 }).AllowAnonymous();
 
@@ -165,6 +168,8 @@ app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache) =>
     _ = await db.Users.FirstOrDefaultAsync(u => u.UserName == "");
     // IP Addresses
     _ = await db.PublicIps.OrderBy(p => p.Lab).Take(1).ToListAsync();
+    // Logs Index: OrderByDescending + Where with Level filter
+    _ = await db.AppLogs.OrderByDescending(l => l.Id).Take(1).ToListAsync();
 
     // Pre-populate the FieldHelp tooltip cache
     var helpDict = await db.FieldHelps.AsNoTracking()
@@ -172,8 +177,7 @@ app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache) =>
     cache.Set("FieldHelpDictionary", helpDict, TimeSpan.FromMinutes(30));
 
     sw.Stop();
-    var buildTime = System.IO.File.GetLastWriteTime(typeof(Program).Assembly.Location)
-        .ToString("yyyy-MM-dd HH:mm:ss");
+    var buildTime = GetBuildTimestamp();
     return Results.Ok(new { status = "warm", build = buildTime, dbMs = sw.ElapsedMilliseconds });
 }).AllowAnonymous();
 
@@ -182,7 +186,7 @@ app.MapGet("/diag", async (HttpContext ctx, LabConfigContext db, IConfiguration 
 {
     // Build info
     var assembly = typeof(Program).Assembly;
-    var buildTime = System.IO.File.GetLastWriteTime(assembly.Location).ToString("yyyy-MM-dd HH:mm:ss");
+    var buildTime = GetBuildTimestamp();
     var dotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
 
     // Environment
@@ -314,3 +318,24 @@ app.MapControllerRoute(
 app.MapRazorPages();
 
 app.Run();
+
+// Reads build timestamp from build.json (written by deploy script) for exact match during deploy verification.
+// Falls back to DLL LastWriteTime for local development where build.json doesn't exist.
+static string GetBuildTimestamp()
+{
+    try
+    {
+        var buildJsonPath = Path.Combine(AppContext.BaseDirectory, "build.json");
+        if (File.Exists(buildJsonPath))
+        {
+            var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(buildJsonPath));
+            if (json.RootElement.TryGetProperty("build", out var buildProp))
+                return buildProp.GetString() ?? FallbackBuildTime();
+        }
+    }
+    catch { }
+    return FallbackBuildTime();
+}
+
+static string FallbackBuildTime() =>
+    File.GetLastWriteTime(typeof(Program).Assembly.Location).ToString("yyyy-MM-dd HH:mm:ss");

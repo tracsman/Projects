@@ -1,20 +1,24 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using PathWeb.Data;
 
 namespace PathWeb.Services;
 
 /// <summary>
 /// Service that looks up a user's AuthLevel from the Users table in the database.
+/// Results are cached for 5 minutes to avoid a DB query on every request.
 /// </summary>
 public class AuthLevelService
 {
     private readonly LabConfigContext _context;
     private readonly ILogger<AuthLevelService> _logger;
+    private readonly IMemoryCache _cache;
 
-    public AuthLevelService(LabConfigContext context, ILogger<AuthLevelService> logger)
+    public AuthLevelService(LabConfigContext context, ILogger<AuthLevelService> logger, IMemoryCache cache)
     {
         _context = context;
         _logger = logger;
+        _cache = cache;
     }
 
     /// <summary>
@@ -29,6 +33,10 @@ public class AuthLevelService
             return (byte)AuthLevels.Reject;
         }
 
+        var cacheKey = $"AuthLevel:{userName.ToLowerInvariant()}";
+        if (_cache.TryGetValue(cacheKey, out byte cachedLevel))
+            return cachedLevel;
+
         try
         {
             var user = await _context.Users
@@ -41,7 +49,8 @@ public class AuthLevelService
                 return (byte)AuthLevels.Reject;
             }
 
-            _logger.LogInformation("User '{UserName}' has AuthLevel {AuthLevel}", userName, user.AuthLevel);
+            _logger.LogDebug("User '{UserName}' has AuthLevel {AuthLevel}", userName, user.AuthLevel);
+            _cache.Set(cacheKey, user.AuthLevel, TimeSpan.FromMinutes(5));
             return user.AuthLevel;
         }
         catch (Exception ex)
