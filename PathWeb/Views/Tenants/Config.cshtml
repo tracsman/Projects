@@ -146,6 +146,15 @@ else
                 <pre id="deviceResultOutput" class="bg-dark text-light p-3 rounded" style="max-height:400px; overflow:auto; white-space:pre-wrap;"></pre>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-warning d-none" id="applyNowBtn" onclick="executeApply()">
+                    <i class="bi bi-play-fill"></i> Apply Now
+                </button>
+                <button type="button" class="btn btn-danger d-none" id="patchNowBtn" onclick="executePatch()">
+                    <i class="bi bi-play-fill"></i> Patch Now
+                </button>
+                <button type="button" class="btn btn-danger d-none" id="removeNowBtn" onclick="executeRemove()">
+                    <i class="bi bi-trash"></i> Remove Now
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -158,9 +167,35 @@ else
             var action = document.getElementById('action-' + configType).value;
             if (action === 'verify') {
                 verifyOffDevice(configType);
+            } else if (action === 'compare') {
+                compareToDevice(configType);
+            } else if (action === 'apply') {
+                applyToDevice(configType);
+            } else if (action === 'patch') {
+                patchDevice(configType);
+            } else if (action === 'remove') {
+                removeFromDevice(configType);
             } else {
                 alert('Action: ' + action + '\nDevice: ' + configType + '\n\nThis feature is coming soon!');
             }
+        }
+
+        var _pendingApplyConfigType = null;
+        var _pendingPatchConfigType = null;
+        var _pendingRemoveConfigType = null;
+
+        function resetModal() {
+            var outputEl = document.getElementById('deviceResultOutput');
+            outputEl.className = 'bg-dark text-light p-3 rounded';
+            outputEl.style.background = '';
+            outputEl.style.padding = '';
+            outputEl.style.maxHeight = '400px';
+            document.getElementById('applyNowBtn').classList.add('d-none');
+            document.getElementById('patchNowBtn').classList.add('d-none');
+            document.getElementById('removeNowBtn').classList.add('d-none');
+            _pendingApplyConfigType = null;
+            _pendingPatchConfigType = null;
+            _pendingRemoveConfigType = null;
         }
 
         function verifyOffDevice(configType) {
@@ -187,6 +222,7 @@ else
                 var titleEl = document.getElementById('deviceResultModalLabel');
 
                 titleEl.textContent = 'Verify off Device: ' + configType;
+                resetModal();
 
                 if (data.success && data.matchCount === 0) {
                     statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>';
@@ -210,6 +246,537 @@ else
             .finally(function () {
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
+            });
+        }
+
+        function compareToDevice(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Comparing...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("CompareToDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+                var titleEl = document.getElementById('deviceResultModalLabel');
+
+                titleEl.textContent = 'Compare to Device: ' + configType;
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.isMatch) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Config matches — all <strong>' + data.matchedCount + '</strong> line(s) in the stored config are present on <strong>' + data.deviceName + '</strong> (and vice versa).</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    var html = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Differences found on <strong>' + data.deviceName + '</strong> — '
+                        + 'Stored: <strong>' + data.storedLineCount + '</strong> lines, '
+                        + 'Device: <strong>' + data.deviceLineCount + '</strong> lines, '
+                        + 'Matched: <strong>' + data.matchedCount + '</strong></div>';
+                    statusEl.innerHTML = html;
+
+                    var details = '';
+                    if (data.missingFromDevice.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-dash-circle"></i> Missing from device (' + data.missingFromDevice.length + '):</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ff6b6b;">';
+                        for (var i = 0; i < data.missingFromDevice.length; i++) {
+                            details += data.missingFromDevice[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.extraOnDevice.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-warning"><i class="bi bi-plus-circle"></i> Extra on device (' + data.extraOnDevice.length + '):</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ffd93d;">';
+                        for (var i = 0; i < data.extraOnDevice.length; i++) {
+                            details += data.extraOnDevice[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.matchedCount > 0) {
+                        details += '<div class="mt-2"><a class="text-success" data-bs-toggle="collapse" href="#compareMatchedLines" role="button" aria-expanded="false"><i class="bi bi-check-circle"></i> Matched lines (' + data.matchedCount + ') — click to expand</a>';
+                        details += '<div class="collapse" id="compareMatchedLines"><pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#6bff6b;">Lines matched successfully (not shown individually to keep output concise).</pre></div></div>';
+                    }
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = '';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+                }
+
+                new bootstrap.Modal(document.getElementById('deviceResultModal')).show();
+            })
+            .catch(function (err) {
+                alert('Request failed: ' + err);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        }
+
+        function applyToDevice(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Comparing...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("CompareToDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+                var titleEl = document.getElementById('deviceResultModalLabel');
+
+                titleEl.textContent = 'Apply to Device: ' + configType;
+                resetModal();
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.isMatch) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Already in sync — all <strong>' + data.matchedCount + '</strong> line(s) are present on <strong>' + data.deviceName + '</strong>. Nothing to apply.</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.missingFromDevice.length === 0) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> No missing lines — stored config is fully applied on <strong>' + data.deviceName + '</strong>.</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    statusEl.innerHTML = '<div class="alert alert-info mb-0"><i class="bi bi-arrow-up-circle-fill"></i> Ready to apply <strong>' + data.missingFromDevice.length + '</strong> missing line(s) to <strong>' + data.deviceName + '</strong>. Review below and click <strong>Apply Now</strong> to push.</div>';
+
+                    var details = '<div class="mt-2"><strong><i class="bi bi-arrow-up-circle"></i> Lines to apply (' + data.missingFromDevice.length + '):</strong>';
+                    details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:250px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#6bff6b;">';
+                    for (var i = 0; i < data.missingFromDevice.length; i++) {
+                        details += data.missingFromDevice[i] + '\n';
+                    }
+                    details += '</pre></div>';
+
+                    if (data.extraOnDevice.length > 0) {
+                        details += '<div class="mt-2"><small class="text-warning"><i class="bi bi-info-circle"></i> Note: ' + data.extraOnDevice.length + ' extra line(s) on device will not be removed (use Patch to sync fully).</small></div>';
+                    }
+
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = '';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+
+                    _pendingApplyConfigType = configType;
+                    document.getElementById('applyNowBtn').classList.remove('d-none');
+                }
+
+                new bootstrap.Modal(document.getElementById('deviceResultModal')).show();
+            })
+            .catch(function (err) {
+                alert('Request failed: ' + err);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        }
+
+        function executeApply() {
+            var configType = _pendingApplyConfigType;
+            if (!configType) return;
+
+            var applyBtn = document.getElementById('applyNowBtn');
+            applyBtn.disabled = true;
+            applyBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Applying...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("ApplyToDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+
+                applyBtn.classList.add('d-none');
+                _pendingApplyConfigType = null;
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Apply failed on <strong>' + configType + '</strong></div>';
+                    outputEl.className = 'p-2 rounded mt-1';
+                    outputEl.style.background = '#1a1a2e';
+                    outputEl.style.color = '#ff6b6b';
+                    outputEl.style.maxHeight = '400px';
+                    outputEl.style.overflow = 'auto';
+                    outputEl.style.whiteSpace = 'pre-wrap';
+                    outputEl.textContent = data.output;
+                    outputEl.style.display = '';
+                } else if (data.applied === false) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Successfully applied <strong>' + data.appliedCount + '</strong> line(s) to <strong>' + data.deviceName + '</strong>.</div>';
+
+                    var details = '';
+                    if (data.appliedLines && data.appliedLines.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-check-circle"></i> Applied lines:</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#6bff6b;">';
+                        for (var i = 0; i < data.appliedLines.length; i++) {
+                            details += data.appliedLines[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.transcript) {
+                        details += '<div class="mt-2"><a class="text-info" data-bs-toggle="collapse" href="#applyTranscript" role="button" aria-expanded="false"><i class="bi bi-terminal"></i> Session transcript — click to expand</a>';
+                        details += '<div class="collapse" id="applyTranscript"><pre class="p-2 rounded mt-1 mb-0" style="max-height:250px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#b0b0b0;">';
+                        details += data.transcript.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        details += '</pre></div></div>';
+                    }
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = details ? '' : 'none';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+                }
+            })
+            .catch(function (err) {
+                alert('Apply request failed: ' + err);
+            })
+            .finally(function () {
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = '<i class="bi bi-play-fill"></i> Apply Now';
+            });
+        }
+
+        function patchDevice(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Comparing...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("CompareToDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+                var titleEl = document.getElementById('deviceResultModalLabel');
+
+                titleEl.textContent = 'Patch Device: ' + configType;
+                resetModal();
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.isMatch) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Already in sync — all <strong>' + data.matchedCount + '</strong> line(s) match on <strong>' + data.deviceName + '</strong>. Nothing to patch.</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else if (data.missingFromDevice.length === 0 && data.extraOnDevice.length === 0) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Config is in sync on <strong>' + data.deviceName + '</strong>.</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    var summary = [];
+                    if (data.missingFromDevice.length > 0) summary.push('<strong>' + data.missingFromDevice.length + '</strong> line(s) to add');
+                    if (data.extraOnDevice.length > 0) summary.push('<strong>' + data.extraOnDevice.length + '</strong> line(s) to remove');
+                    statusEl.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Patch will sync <strong>' + data.deviceName + '</strong>: ' + summary.join(' and ') + '. Review below and click <strong>Patch Now</strong> to execute.</div>';
+
+                    var details = '';
+                    if (data.missingFromDevice.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-plus-circle"></i> Lines to add (' + data.missingFromDevice.length + '):</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#6bff6b;">';
+                        for (var i = 0; i < data.missingFromDevice.length; i++) {
+                            details += data.missingFromDevice[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.extraOnDevice.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-dash-circle"></i> Lines to remove (' + data.extraOnDevice.length + '):</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ff6b6b;">';
+                        for (var i = 0; i < data.extraOnDevice.length; i++) {
+                            details += data.extraOnDevice[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = '';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+
+                    _pendingPatchConfigType = configType;
+                    document.getElementById('patchNowBtn').classList.remove('d-none');
+                }
+
+                new bootstrap.Modal(document.getElementById('deviceResultModal')).show();
+            })
+            .catch(function (err) {
+                alert('Request failed: ' + err);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        }
+
+        function executePatch() {
+            var configType = _pendingPatchConfigType;
+            if (!configType) return;
+
+            var patchBtn = document.getElementById('patchNowBtn');
+            patchBtn.disabled = true;
+            patchBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Patching...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("PatchDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+
+                patchBtn.classList.add('d-none');
+                _pendingPatchConfigType = null;
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Patch failed on <strong>' + configType + '</strong></div>';
+                    outputEl.className = 'p-2 rounded mt-1';
+                    outputEl.style.background = '#1a1a2e';
+                    outputEl.style.color = '#ff6b6b';
+                    outputEl.style.maxHeight = '400px';
+                    outputEl.style.overflow = 'auto';
+                    outputEl.style.whiteSpace = 'pre-wrap';
+                    outputEl.textContent = data.output;
+                    outputEl.style.display = '';
+                } else if (data.patched === false) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    var summaryParts = [];
+                    if (data.addedCount > 0) summaryParts.push('added <strong>' + data.addedCount + '</strong>');
+                    if (data.removedCount > 0) summaryParts.push('removed <strong>' + data.removedCount + '</strong>');
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Patch complete on <strong>' + data.deviceName + '</strong> — ' + summaryParts.join(', ') + ' line(s).</div>';
+
+                    var details = '';
+                    if (data.addedLines && data.addedLines.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-plus-circle"></i> Added:</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:150px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#6bff6b;">';
+                        for (var i = 0; i < data.addedLines.length; i++) {
+                            details += data.addedLines[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.removedLines && data.removedLines.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-dash-circle"></i> Removed:</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:150px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ff6b6b;">';
+                        for (var i = 0; i < data.removedLines.length; i++) {
+                            details += data.removedLines[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.transcript) {
+                        details += '<div class="mt-2"><a class="text-info" data-bs-toggle="collapse" href="#patchTranscript" role="button" aria-expanded="false"><i class="bi bi-terminal"></i> Session transcript — click to expand</a>';
+                        details += '<div class="collapse" id="patchTranscript"><pre class="p-2 rounded mt-1 mb-0" style="max-height:250px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#b0b0b0;">';
+                        details += data.transcript.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        details += '</pre></div></div>';
+                    }
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = details ? '' : 'none';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+                }
+            })
+            .catch(function (err) {
+                alert('Patch request failed: ' + err);
+            })
+            .finally(function () {
+                patchBtn.disabled = false;
+                patchBtn.innerHTML = '<i class="bi bi-play-fill"></i> Patch Now';
+            });
+        }
+
+        function removeFromDevice(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Loading...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("PreviewRemoveFromDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+                var titleEl = document.getElementById('deviceResultModalLabel');
+
+                titleEl.textContent = 'Remove from Device: ' + configType;
+                resetModal();
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle-fill"></i> <strong>WARNING:</strong> This will remove <strong>' + data.removeCount + '</strong> backout line(s) from <strong>' + data.deviceName + '</strong>. This action cannot be undone. Review below and click <strong>Remove Now</strong> to execute.</div>';
+
+                    var details = '<div class="mt-2"><strong class="text-danger"><i class="bi bi-trash"></i> Lines to remove (' + data.removeCount + '):</strong>';
+                    details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:300px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ff6b6b;">';
+                    for (var i = 0; i < data.removeLines.length; i++) {
+                        details += data.removeLines[i] + '\n';
+                    }
+                    details += '</pre></div>';
+
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = '';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+
+                    _pendingRemoveConfigType = configType;
+                    document.getElementById('removeNowBtn').classList.remove('d-none');
+                }
+
+                new bootstrap.Modal(document.getElementById('deviceResultModal')).show();
+            })
+            .catch(function (err) {
+                alert('Request failed: ' + err);
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        }
+
+        function executeRemove() {
+            var configType = _pendingRemoveConfigType;
+            if (!configType) return;
+
+            var removeBtn = document.getElementById('removeNowBtn');
+            removeBtn.disabled = true;
+            removeBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Removing...';
+
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var tenantGuid = '@ViewData["TenantGuid"]';
+
+            fetch('@Url.Action("RemoveFromDevice", "Tenants")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: 'tenantGuid=' + encodeURIComponent(tenantGuid) + '&configType=' + encodeURIComponent(configType)
+            })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var statusEl = document.getElementById('deviceResultStatus');
+                var outputEl = document.getElementById('deviceResultOutput');
+
+                removeBtn.classList.add('d-none');
+                _pendingRemoveConfigType = null;
+
+                if (!data.success) {
+                    statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Remove failed on <strong>' + configType + '</strong></div>';
+                    outputEl.className = 'p-2 rounded mt-1';
+                    outputEl.style.background = '#1a1a2e';
+                    outputEl.style.color = '#ff6b6b';
+                    outputEl.style.maxHeight = '400px';
+                    outputEl.style.overflow = 'auto';
+                    outputEl.style.whiteSpace = 'pre-wrap';
+                    outputEl.textContent = data.output;
+                    outputEl.style.display = '';
+                } else if (data.removed === false) {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>';
+                    outputEl.textContent = '';
+                    outputEl.style.display = 'none';
+                } else {
+                    statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Successfully removed <strong>' + data.removedCount + '</strong> line(s) from <strong>' + data.deviceName + '</strong>.</div>';
+
+                    var details = '';
+                    if (data.removedLines && data.removedLines.length > 0) {
+                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-trash"></i> Removed:</strong>';
+                        details += '<pre class="p-2 rounded mt-1 mb-0" style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#ff6b6b;">';
+                        for (var i = 0; i < data.removedLines.length; i++) {
+                            details += data.removedLines[i] + '\n';
+                        }
+                        details += '</pre></div>';
+                    }
+                    if (data.transcript) {
+                        details += '<div class="mt-2"><a class="text-info" data-bs-toggle="collapse" href="#removeTranscript" role="button" aria-expanded="false"><i class="bi bi-terminal"></i> Session transcript — click to expand</a>';
+                        details += '<div class="collapse" id="removeTranscript"><pre class="p-2 rounded mt-1 mb-0" style="max-height:250px; overflow:auto; white-space:pre-wrap; background:#1a1a2e; color:#b0b0b0;">';
+                        details += data.transcript.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        details += '</pre></div></div>';
+                    }
+                    outputEl.innerHTML = details;
+                    outputEl.style.display = details ? '' : 'none';
+                    outputEl.classList.remove('bg-dark', 'text-light');
+                    outputEl.style.background = 'none';
+                    outputEl.style.padding = '0';
+                }
+            })
+            .catch(function (err) {
+                alert('Remove request failed: ' + err);
+            })
+            .finally(function () {
+                removeBtn.disabled = false;
+                removeBtn.innerHTML = '<i class="bi bi-trash"></i> Remove Now';
             });
         }
 

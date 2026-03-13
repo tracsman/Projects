@@ -196,11 +196,13 @@ public class ConfigGenerator
                         "# Run this script on any machine with the LabMod module installed.\r\n" +
                         "#\r\n\r\n" +
                         $"New-LabECX {tenant.TenantId} {labCity}\r\n";
+                var strBackout = "# Run this PowerShell script on any lab physical server.\r\n" +
+                              $"Remove-LabECX {tenant.TenantId} {labCity}\r\n\r\n";
                _strDelete += "#######\r\n" +
-                             "### Deprovision at ECX\r\n" +
-                             "#######\r\n" +
-                             "# Run this PowerShell script on any lab physical server.\r\n" +
-                             $"Remove-LabECX {tenant.TenantId} {labCity}\r\n\r\n\r\n";
+                              "### Deprovision at ECX\r\n" +
+                              "#######\r\n" +
+                              strBackout + "\r\n";
+                await SaveToSql("ServiceProviderInstructions-out", tenant, strBackout);
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSPConfig", "ECX ExpressRoute requested, Provision and Deprovision instructions set");
             }
             else
@@ -397,7 +399,6 @@ public class ConfigGenerator
                     $"$RGTagContact = '{tenant.Contacts}'\r\n" +
                     $"$RGTagNinja = '{tenant.NinjaOwner}'\r\n" +
                     $"$RGTagUsage = '{tenant.Usage.Substring(0, Math.Min(tenant.Usage.Length, 253))}'\r\n";
-           _strDelete += "#######\r\n### Remove Azure Resources\r\n#######\r\n";
 
             if (HasPrivate || HasAzureVM || HasVPNGateway)
             {
@@ -863,52 +864,54 @@ public class ConfigGenerator
 
             // Back out script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding backout script for Azure resources");
-           _strDelete += $"$RGName='{strRGName}'\r\n" +
-                         $"$UserName='{_userEmail.Split('@')[0]}'\r\n" +
-                         $"$TenantGUID='{tenant.TenantGuid}'\r\n";
+            var strBackout = $"$RGName='{strRGName}'\r\n" +
+                          $"$UserName='{_userEmail.Split('@')[0]}'\r\n" +
+                          $"$TenantGUID='{tenant.TenantGuid}'\r\n";
             if (HasERDirect)
             {
-               _strDelete += "$OkToDelete = $true\r\n\r\n";
+                strBackout += "$OkToDelete = $true\r\n\r\n";
             }
             else
             {
-               _strDelete += "$OkToDelete = $false\r\n\r\n" +
-                             "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                             "Write-Host 'Deleting ' -NoNewline -ForegroundColor Cyan\r\n" +
-                             "Write-Host $RGName -ForegroundColor Cyan\r\n" +
-                             "Write-Host '  Checking ER circuit..........' -NoNewline\r\n" +
-                             "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
-                             "Catch {Write-Host 'None found' -ForegroundColor Green\r\n" +
-                             "       $OkToDelete = $true}\r\n\r\n" +
-                             "If (-not $OkToDelete) {\r\n" +
-                             "    If ($circuit.ServiceProviderProvisioningState -contains 'Provisioned') {\r\n" +
-                             "        Write-Host 'Failed' -ForegroundColor Red\r\n" +
-                             "        Write-Warning 'An ExpressRoute Circuit in this resource group is still provisioned, and as such this delete opertaion cannot continue, get this circuit into the \"Not Provisioned\" state before running this script!'\r\n" +
-                             "        Return}\r\n" +
-                             "    Else {Write-Host 'NotProvisioned' -ForegroundColor Green\r\n" +
-                             "          $OkToDelete = $true}\r\n" +
-                             "}\r\n\r\n";
+                strBackout += "$OkToDelete = $false\r\n\r\n" +
+                              "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
+                              "Write-Host 'Deleting ' -NoNewline -ForegroundColor Cyan\r\n" +
+                              "Write-Host $RGName -ForegroundColor Cyan\r\n" +
+                              "Write-Host '  Checking ER circuit..........' -NoNewline\r\n" +
+                              "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
+                              "Catch {Write-Host 'None found' -ForegroundColor Green\r\n" +
+                              "       $OkToDelete = $true}\r\n\r\n" +
+                              "If (-not $OkToDelete) {\r\n" +
+                              "    If ($circuit.ServiceProviderProvisioningState -contains 'Provisioned') {\r\n" +
+                              "        Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                              "        Write-Warning 'An ExpressRoute Circuit in this resource group is still provisioned, and as such this delete opertaion cannot continue, get this circuit into the \"Not Provisioned\" state before running this script!'\r\n" +
+                              "        Return}\r\n" +
+                              "    Else {Write-Host 'NotProvisioned' -ForegroundColor Green\r\n" +
+                              "          $OkToDelete = $true}\r\n" +
+                              "}\r\n\r\n";
             }
-           _strDelete += "Try {Write-Host '  Pulling config for archive...' -NoNewline\r\n" +
-                         "     mkdir \"$env:TEMP\\ConfigGen\\\" -Force -ErrorAction Stop | Out-Null\r\n" +
-                         "     Export-AzResourceGroup -ResourceGroupName $RGName -Path \"$env:TEMP\\ConfigGen\\$TenantGUID\" -IncludeComments -SkipAllParameterization -Force -ErrorAction Stop | Out-Null\r\n" +
-                         "     Write-Host 'Archive File Created' -ForegroundColor Green}\r\n" +
-                         "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
-                         "       Write-Warning 'Pulling or creating config file failed, the resource group was not found or was not deleted.'\r\n" +
-                         "       Return}\r\n\r\n" +
-                         "Try {Write-Host '  Writing file to archive......' -NoNewline\r\n" +
-                         "     $sa = Get-AzStorageAccount -ResourceGroupName LabInfrastructure -Name labconfig\r\n" +
-                         "     $ctx = $sa.Context\r\n" +
-                         "     Set-AzStorageBlobContent -Context $ctx -Container archive -Blob \"$TenantGUID.json\" -File \"$env:TEMP\\ConfigGen\\$TenantGUID.json\" -Metadata @{ArchiveDate=(Get-Date -Format s);ArchiveBy=$UserName;ResourceGroup=$RGName} -Force | Out-Null\r\n" +
-                         "     Write-Host 'File saved' -ForegroundColor Green}\r\n" +
-                         "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
-                         "       Write-Warning 'Saving config to the archive storage account failed, the resource group was not deleted.'\r\n" +
-                         "       Return}\r\n\r\n" +
-                         "If ($OkToDelete) {Try {Get-AzResourceGroup -Name $RGName -ErrorAction Stop | Out-Null\r\n" +
-                         "                       Remove-AzResourceGroup -Name $RGName -Force -AsJob | Out-Null\r\n" +
-                         "                       Write-Host '  resource group deletion requested as a job (Run Get-Job to see status)'}\r\n" +
-                         "                  Catch {Write-Warning 'Something happened and the resource group was not found or was not deleted.'}\r\n" +
-                         "}\r\n\r\n\r\n";
+            strBackout += "Try {Write-Host '  Pulling config for archive...' -NoNewline\r\n" +
+                          "     mkdir \"$env:TEMP\\ConfigGen\\\" -Force -ErrorAction Stop | Out-Null\r\n" +
+                          "     Export-AzResourceGroup -ResourceGroupName $RGName -Path \"$env:TEMP\\ConfigGen\\$TenantGUID\" -IncludeComments -SkipAllParameterization -Force -ErrorAction Stop | Out-Null\r\n" +
+                          "     Write-Host 'Archive File Created' -ForegroundColor Green}\r\n" +
+                          "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                          "       Write-Warning 'Pulling or creating config file failed, the resource group was not found or was not deleted.'\r\n" +
+                          "       Return}\r\n\r\n" +
+                          "Try {Write-Host '  Writing file to archive......' -NoNewline\r\n" +
+                          "     $sa = Get-AzStorageAccount -ResourceGroupName LabInfrastructure -Name labconfig\r\n" +
+                          "     $ctx = $sa.Context\r\n" +
+                          "     Set-AzStorageBlobContent -Context $ctx -Container archive -Blob \"$TenantGUID.json\" -File \"$env:TEMP\\ConfigGen\\$TenantGUID.json\" -Metadata @{ArchiveDate=(Get-Date -Format s);ArchiveBy=$UserName;ResourceGroup=$RGName} -Force | Out-Null\r\n" +
+                          "     Write-Host 'File saved' -ForegroundColor Green}\r\n" +
+                          "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                          "       Write-Warning 'Saving config to the archive storage account failed, the resource group was not deleted.'\r\n" +
+                          "       Return}\r\n\r\n" +
+                          "If ($OkToDelete) {Try {Get-AzResourceGroup -Name $RGName -ErrorAction Stop | Out-Null\r\n" +
+                          "                       Remove-AzResourceGroup -Name $RGName -Force -AsJob | Out-Null\r\n" +
+                          "                       Write-Host '  resource group deletion requested as a job (Run Get-Job to see status)'}\r\n" +
+                          "                  Catch {Write-Warning 'Something happened and the resource group was not found or was not deleted.'}\r\n" +
+                          "}\r\n\r\n";
+           _strDelete += "#######\r\n### Remove Azure Resources\r\n#######\r\n" + strBackout + "\r\n";
+            await SaveToSql("CreateAzurePowerShell-out", tenant, strBackout);
             
             bool results = await SaveToSql("CreateAzurePowerShell", tenant, strDB);
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Azure PowerShell saved to SQL");
@@ -984,7 +987,7 @@ public class ConfigGenerator
                 // Add banner
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Starting Firewall Config");
                 strDB = "#######\r\n### Firewall\r\n#######\r\n\r\n";
-               _strDelete += "#######\r\n### Firewall\r\n#######\r\n\r\n";
+                var strBackout = "";
 
                 // Routing Options
                 strDB += "# Define Routing Options\r\n" +
@@ -994,7 +997,7 @@ public class ConfigGenerator
                          $"set routing-options rib-groups to-Cust{tenant.TenantId}-instance-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n" +
                          $"set routing-options rib-groups import-internet-routes import-rib Cust{tenant.TenantId}.inet.0\r\n" +
                          $"set routing-options rib-groups import-internet-routes-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n\r\n";
-               _strDelete += $"delete routing-options rib-groups to-Cust{tenant.TenantId}-instance\r\n" +
+               strBackout += $"delete routing-options rib-groups to-Cust{tenant.TenantId}-instance\r\n" +
                              $"delete routing-options rib-groups import-internet-routes import-rib Cust{tenant.TenantId}.inet.0\r\n" +
                              $"delete routing-options rib-groups to-Cust{tenant.TenantId}-instance-v6\r\n" +
                              $"delete routing-options rib-groups import-internet-routes-v6 import-rib Cust{tenant.TenantId}.inet6.0\r\n";
@@ -1006,7 +1009,7 @@ public class ConfigGenerator
                          $"set interfaces reth3 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                          $"set interfaces reth3 unit {tenant.TenantId} family inet address {strREth3IntIP}/25\r\n" +
                          $"set interfaces reth3 unit {tenant.TenantId} family inet6 address {strREth3IntIPv6}/64\r\n";
-               _strDelete += $"delete interfaces reth3 unit {tenant.TenantId}\r\n";
+               strBackout += $"delete interfaces reth3 unit {tenant.TenantId}\r\n";
 
                 if (HasPrivate || HasMicrosoft)
                 {
@@ -1018,7 +1021,7 @@ public class ConfigGenerator
                              $"set interfaces reth2 unit {tenant.TenantId} vlan-id {tenant.TenantId}\r\n" +
                              $"set interfaces reth2 unit {tenant.TenantId} family inet address {strREth2IntIP}/31\r\n" +
                              (HasIPv6 ? $"set interfaces reth2 unit {tenant.TenantId} family inet6 address {strREth2IntIPv6}/127\r\n" : "");
-                   _strDelete += $"delete interfaces reth1 unit {tenant.TenantId}\r\n" +
+                   strBackout += $"delete interfaces reth1 unit {tenant.TenantId}\r\n" +
                                  $"delete interfaces reth2 unit {tenant.TenantId}\r\n";
                 }
 
@@ -1029,7 +1032,7 @@ public class ConfigGenerator
                              $"set interfaces st0 unit {tenant.TenantId}8 description \"Cust{tenant.TenantId} VPN Tunnel Primary\"\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}8 family inet mtu 1436\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}8 family inet address 169.254.{tenant.TenantId}.1/32\r\n";
-                   _strDelete += $"delete interfaces lo0 unit {tenant.TenantId}\r\n" +
+                   strBackout += $"delete interfaces lo0 unit {tenant.TenantId}\r\n" +
                                  $"delete interfaces st0 unit {tenant.TenantId}8\r\n";
 
                 }
@@ -1039,7 +1042,7 @@ public class ConfigGenerator
                     strDB += $"set interfaces st0 unit {tenant.TenantId}9 description \"Cust{tenant.TenantId} VPN Tunnel Secondary\"\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}9 family inet mtu 1436\r\n" +
                              $"set interfaces st0 unit {tenant.TenantId}9 family inet address 169.254.{tenant.TenantId}.2/32\r\n";
-                   _strDelete += $"delete interfaces st0 unit {tenant.TenantId}9\r\n";
+                   strBackout += $"delete interfaces st0 unit {tenant.TenantId}9\r\n";
 
                 }
                 strDB += "\r\n";
@@ -1052,7 +1055,7 @@ public class ConfigGenerator
                          $"set routing-instances Cust{tenant.TenantId} routing-options interface-routes rib-group inet to-Cust{tenant.TenantId}-instance\r\n" +
                          $"set routing-instances Cust{tenant.TenantId} routing-options interface-routes rib-group inet6 to-Cust{tenant.TenantId}-instance-v6\r\n" +
                          $"set routing-instances Cust{tenant.TenantId} routing-options instance-import import-internet-routes\r\n";
-               _strDelete += $"delete routing-instances Cust{tenant.TenantId}\r\n";
+               strBackout += $"delete routing-instances Cust{tenant.TenantId}\r\n";
 
 
                 if (HasPrivate || HasMicrosoft)
@@ -1108,13 +1111,13 @@ public class ConfigGenerator
                 strDB += "# Define Policy Options\r\n" +
                          $"set policy-options policy-statement Cust{tenant.TenantId}-onprem term pvt from interface reth3.{tenant.TenantId}\r\n" +
                          $"set policy-options policy-statement Cust{tenant.TenantId}-onprem term pvt then accept\r\n";
-               _strDelete += $"delete policy-options policy-statement Cust{tenant.TenantId}-onprem\r\n";
+               strBackout += $"delete policy-options policy-statement Cust{tenant.TenantId}-onprem\r\n";
 
                 if (HasMicrosoft)
                 {
                     strDB += $"set policy-options policy-statement Cust{tenant.TenantId}-nat term msft-peering from route-filter {strERNATIP} exact\r\n" +
                              $"set policy-options policy-statement Cust{tenant.TenantId}-nat term msft-peering then accept\r\n";
-                   _strDelete += $"delete policy-options policy-statement Cust{tenant.TenantId}-nat\r\n";
+                   strBackout += $"delete policy-options policy-statement Cust{tenant.TenantId}-nat\r\n";
 
                 }
                 strDB += "\r\n";
@@ -1137,7 +1140,7 @@ public class ConfigGenerator
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 ike gateway gw_Cust{tenant.TenantId}_1\r\n" +
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 ike ipsec-policy azure_ipsec_policy\r\n" +
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1 establish-tunnels immediately\r\n\r\n";
-                   _strDelete += $"delete security ike gateway gw_Cust{tenant.TenantId}_1\r\n" +
+                   strBackout += $"delete security ike gateway gw_Cust{tenant.TenantId}_1\r\n" +
                                  $"delete security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_1\r\n";
                 }
 
@@ -1156,7 +1159,7 @@ public class ConfigGenerator
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 ike gateway gw_Cust{tenant.TenantId}_2\r\n" +
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 ike ipsec-policy azure_ipsec_policy\r\n" +
                              $"set security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2 establish-tunnels immediately\r\n";
-                   _strDelete += $"delete security ike gateway gw_Cust{tenant.TenantId}_2\r\n" +
+                   strBackout += $"delete security ike gateway gw_Cust{tenant.TenantId}_2\r\n" +
                                  $"delete security ipsec vpn vpn_Azure_Cust{tenant.TenantId}_2\r\n";
                 }
                 if (HasVPNGateway) { strDB += "\r\n"; }
@@ -1168,7 +1171,7 @@ public class ConfigGenerator
                          $"set security zones security-zone Cust{tenant.TenantId} host-inbound-traffic system-services traceroute\r\n" +
                          $"set security zones security-zone Cust{tenant.TenantId} host-inbound-traffic protocols bgp\r\n" +
                          $"set security zones security-zone Cust{tenant.TenantId} interfaces reth3.{tenant.TenantId}\r\n";
-               _strDelete += $"delete security zones security-zone Cust{tenant.TenantId}\r\n";
+               strBackout += $"delete security zones security-zone Cust{tenant.TenantId}\r\n";
 
                 if (HasPrivate || HasMicrosoft)
                 {
@@ -1197,7 +1200,7 @@ public class ConfigGenerator
                          $"set security nat source rule-set Cust{tenant.TenantId}_InternetNAT rule Internet{tenant.TenantId}-NAT then source-nat pool Internet-Out\r\n" +
                          $"set security nat source rule-set Cust{tenant.TenantId}_ER from zone Cust{tenant.TenantId}\r\n" +
                          $"set security nat source rule-set Cust{tenant.TenantId}_ER to zone Cust{tenant.TenantId}\r\n";
-               _strDelete += $"delete security nat source rule-set Cust{tenant.TenantId}_InternetNAT\r\n" +
+               strBackout += $"delete security nat source rule-set Cust{tenant.TenantId}_InternetNAT\r\n" +
                              $"delete security nat source rule-set Cust{tenant.TenantId}_ER\r\n";
 
                 if (HasPrivate || HasVPNGateway)
@@ -1212,7 +1215,7 @@ public class ConfigGenerator
                     strDB += $"set security nat source pool Cust{tenant.TenantId}_ToMSFT address {strERNATIP}\r\n" +
                              $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT match destination-address 0.0.0.0/0\r\n" +
                              $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT then source-nat pool Cust{tenant.TenantId}_ToMSFT\r\n";
-                   _strDelete += $"delete security nat source pool Cust{tenant.TenantId}_ToMSFT\r\n" +
+                   strBackout += $"delete security nat source pool Cust{tenant.TenantId}_ToMSFT\r\n" +
                                  $"delete security nat source rule-set Cust{tenant.TenantId}_ER\r\n";
                 }
                 strDB += "\r\n";
@@ -1240,7 +1243,7 @@ public class ConfigGenerator
                             {
                                 strDB += $"set security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP} then static-nat prefix mapped-port 22\r\n";
                             }
-                           _strDelete += $"delete security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP}\r\n";
+                           strBackout += $"delete security nat static rule-set incoming-cust-nat rule Cust{tenant.TenantId}_{intVMIP}\r\n";
 
                             // v6 Inbound NATs
                             //if (HasIPv6)
@@ -1283,16 +1286,19 @@ public class ConfigGenerator
                          $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match application junos-rdp\r\n" +
                          $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt match application junos-ssh\r\n" +
                          $"set security policies from-zone internet to-zone Cust{tenant.TenantId} policy allow-inbound-mgmt then permit\r\n\r\n";
-               _strDelete += $"delete security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId}\r\n" +
-                             $"delete security policies from-zone Cust{tenant.TenantId} to-zone internet\r\n" +
-                             $"delete security policies from-zone internet to-zone Cust{tenant.TenantId}\r\n\r\n";
-            }
-            else
-            {
-                _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Firewall config not required");
-                strDB = "#######\r\n### Firewall\r\n#######\r\n\r\nNeither VPN nor Lab VMs requested, no firewall config required\r\n\r\n";
-               _strDelete += "#######\r\n### Firewall\r\n#######\r\n\r\nNeither VPN nor Lab VMs requested, no firewall config required\r\n\r\n";
-            }
+                   strBackout += $"delete security policies from-zone Cust{tenant.TenantId} to-zone Cust{tenant.TenantId}\r\n" +
+                                 $"delete security policies from-zone Cust{tenant.TenantId} to-zone internet\r\n" +
+                                 $"delete security policies from-zone internet to-zone Cust{tenant.TenantId}\r\n\r\n";
+                   _strDelete += "#######\r\n### Firewall\r\n#######\r\n\r\n" + strBackout;
+                   await SaveToSql($"{strDeviceName}-out", tenant, strBackout);
+               }
+               else
+               {
+                   _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Firewall config not required");
+                   strDB = "#######\r\n### Firewall\r\n#######\r\n\r\nNeither VPN nor Lab VMs requested, no firewall config required\r\n\r\n";
+                  _strDelete += "#######\r\n### Firewall\r\n#######\r\n\r\nNeither VPN nor Lab VMs requested, no firewall config required\r\n\r\n";
+                   await SaveToSql($"{strDeviceName}-out", tenant, "");
+               }
 
             bool results = await SaveToSql(strDeviceName, tenant, strDB);
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateFirewallConfig", "Firewall Config saved to SQL");
@@ -1380,7 +1386,7 @@ public class ConfigGenerator
                 }
 
                 // Start the delete config string
-               _strDelete += "# Delete VRF and Interfaces\r\n";
+                var strBackout = "# Delete VRF and Interfaces\r\n";
 
                 if (tenant.Lab == "SEA")
                 {
@@ -1435,7 +1441,7 @@ public class ConfigGenerator
                     }
                     strDB += "\r\n";
 
-                   _strDelete += $"delete interfaces ae0 unit {tenant.TenantId}\r\n" +
+                   strBackout += $"delete interfaces ae0 unit {tenant.TenantId}\r\n" +
                                  $"delete routing-instances Cust{tenant.TenantId}\r\n";
 
                     // Add Private Peering Interface and BGP if needed
@@ -1461,7 +1467,7 @@ public class ConfigGenerator
                         }
                         strDB += "\r\n";
 
-                       _strDelete += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}0\r\n";
+                       strBackout += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}0\r\n";
                     }
 
                     // Add Microsoft Peering Interface and BGP if needed
@@ -1479,7 +1485,7 @@ public class ConfigGenerator
                                  $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection minimum-interval 300\r\n" +
                                  $"set routing-instances Cust{tenant.TenantId} protocols bgp group ebgp bfd-liveness-detection multiplier 3\r\n\r\n";
 
-                       _strDelete += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}1\r\n\r\n";
+                       strBackout += $"delete interfaces {strUplinkInt} unit {tenant.TenantId}1\r\n\r\n";
                     }
                 }
                 else
@@ -1531,7 +1537,7 @@ public class ConfigGenerator
                                  " bfd interval 300 min_rx 300 multiplier 3\r\n" +
                                  " no bfd echo\r\n" +
                                  " no shutdown\r\n\r\n";
-                       _strDelete += $"no interface {strUplinkInt}.{tenant.TenantId}0\r\n";
+                       strBackout += $"no interface {strUplinkInt}.{tenant.TenantId}0\r\n";
                     }
 
                     // Add Microsoft Peering Interface if needed
@@ -1547,7 +1553,7 @@ public class ConfigGenerator
                                  " bfd interval 300 min_rx 300 multiplier 3\r\n" +
                                  " no bfd echo\r\n" +
                                  " no shutdown\r\n\r\n";
-                       _strDelete += $"no interface {strUplinkInt}.{tenant.TenantId}1\r\n";
+                       strBackout += $"no interface {strUplinkInt}.{tenant.TenantId}1\r\n";
                     }
 
                     // Add Firewall Config
@@ -1560,7 +1566,7 @@ public class ConfigGenerator
                              $" ip address {strFWIntIP} 255.255.255.254\r\n" +
                              (HasIPv6 ? $" ipv6 address {strFWIntIPv6}/127\r\n" : "") +
                              " no shutdown\r\n\r\n";
-                   _strDelete += $"no interface Port-channel1.{tenant.TenantId}\r\n";
+                   strBackout += $"no interface Port-channel1.{tenant.TenantId}\r\n";
 
                     // Add Route Map
                     if (HasVPNGateway)
@@ -1569,7 +1575,7 @@ public class ConfigGenerator
                         strDB += "# Define Route Map\r\n" +
                                  $"route-map Cust{tenant.TenantId} permit 10\r\n" +
                                  "  set local-preference 150\r\n\r\n";
-                       _strDelete += $"no route-map Cust{tenant.TenantId}\r\n";
+                       strBackout += $"no route-map Cust{tenant.TenantId}\r\n";
                     }
 
                     // Add BGP
@@ -1612,27 +1618,30 @@ public class ConfigGenerator
                     }
 
                     strDB += " exit-address-family\r\n\r\n";
-                   _strDelete += $"router bgp {strASN}\r\n" +
+                   strBackout += $"router bgp {strASN}\r\n" +
                                  $" no address-family ipv4 vrf {tenant.TenantId}\r\n" +
                                  $"no vrf definition {tenant.TenantId}\r\n\r\n";
                 }
-               _strDelete += "\r\n";
+               strBackout += "\r\n";
+                _strDelete += strBackout;
+                await SaveToSql($"{strDeviceName}-out", tenant, strBackout);
             }
             else
             {
+                var routerLabel = IsPrimary ? "Primary" : "Secondary";
                 if (IsPrimary)
                 {
                     strDB = "#######\r\n### Primary Router\r\n#######\r\n\r\n";
-                   _strDelete += "#######\r\n### Primary Router\r\n#######\r\n\r\n";
                 }
                 else
                 {
                     strDB = "#######\r\n### Primary Router\r\n#######\r\n\r\n";
-                   _strDelete += "#######\r\n### Primary Router\r\n#######\r\n\r\n";
                 }
+                _strDelete += $"#######\r\n### {routerLabel} Router\r\n#######\r\n\r\n" +
+                              "ExpressRoute peerings, Pvt or MSFT, were not requested, no router backout config required\r\n\r\n";
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Router config not required");
                 strDB += "ExpressRoute peerings, Pvt or MSFT, were not requested, no router config required\r\n\r\n";
-               _strDelete += "ExpressRoute peerings, Pvt or MSFT, were not requested, no router backout config required\r\n\r\n";
+                await SaveToSql($"{strDeviceName}-out", tenant, "");
             }
             bool results = await SaveToSql(strDeviceName, tenant, strDB);
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateRouterConfig", "Router Config saved to SQL");
@@ -1659,16 +1668,8 @@ public class ConfigGenerator
             bool HasLabVM = labVms.Any(vm => vm != "None");
 
             // Add banner, set variables
-            if (IsPrimary)
-            {
-                strDB = "#######\r\n### Primary Nexus\r\n#######\r\n\r\n";
-               _strDelete += "#######\r\n### Primary Nexus\r\n#######\r\n\r\n";
-            }
-            else
-            {
-                strDB = "#######\r\n### Secondary Nexus\r\n#######\r\n\r\n";
-               _strDelete += "#######\r\n### Secondary Nexus\r\n#######\r\n\r\n";
-            }
+            var switchLabel = IsPrimary ? "Primary" : "Secondary";
+            strDB = $"#######\r\n### {switchLabel} Nexus\r\n#######\r\n\r\n";
 
             if (HasLabVM)
             {
@@ -1677,13 +1678,16 @@ public class ConfigGenerator
                 strDB += "# Define VLAN\r\n" +
                          $"vlan {tenant.TenantId}\r\n" +
                          $"  name Cust{tenant.TenantId}\r\n";
-               _strDelete += $"no vlan {tenant.TenantId}\r\n\r\n";
+                var strBackout = $"no vlan {tenant.TenantId}\r\n\r\n";
+               _strDelete += $"#######\r\n### {switchLabel} Nexus\r\n#######\r\n\r\n" + strBackout;
+                await SaveToSql($"{strDeviceName}-out", tenant, strBackout);
             }
             else
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSwitchConfig", "Lab VMs not requested, no switch config required");
                 strDB += "Lab VMs not requested, no switch config required\r\n\r\n";
-               _strDelete += "Lab VMs not requested, no switch backout config required\r\n\r\n";
+               _strDelete += $"#######\r\n### {switchLabel} Nexus\r\n#######\r\n\r\nLab VMs not requested, no switch backout config required\r\n\r\n";
+                await SaveToSql($"{strDeviceName}-out", tenant, "");
             }
             bool results = await SaveToSql(strDeviceName, tenant, strDB);
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateSwitchConfig", "Switch Config saved to SQL");
@@ -1738,11 +1742,13 @@ public class ConfigGenerator
 
                 if (intVMCount > 0)
                 {
+                    var strBackout = $"# Run this script in elevated PS on ***{strServer}***.\r\n" +
+                                  $"Remove-LabVM {tenant.TenantId}\r\n\r\n";
                    _strDelete += "#######\r\n" +
-                                 "### Remove Lab VMs\r\n" +
-                                 "#######\r\n" +
-                                 $"# Run this script in elevated PS on ***{strServer}***.\r\n" +
-                                 $"Remove-LabVM {tenant.TenantId}\r\n\r\n\r\n";
+                                  "### Remove Lab VMs\r\n" +
+                                  "#######\r\n" +
+                                  strBackout + "\r\n";
+                    await SaveToSql("LabVMPowerShell-out", tenant, strBackout);
                 }
             }
             bool results = await SaveToSql("LabVMPowerShell", tenant, strDB);

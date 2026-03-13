@@ -119,7 +119,7 @@ if (-not $ready) {
 
 Write-Step "Compiling Razor Pages..."
 $warmupPaths = @("/", "/Tenants", "/Addresses", "/Devices",
-                  "/Users", "/ToolTips",
+                  "/Users", "/ToolTips", "/Logs",
                   "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {

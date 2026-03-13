@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
-    <None Include="PathWeb\Tools\QueryTenants\QueryTenants.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,12 +25,4 @@
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Areas\About\Controllers\" />
-    <Folder Include="Areas\IPAddresses\Controllers\" />
-    <Folder Include="Areas\Tenants\Controllers\" />
-    <Folder Include="Areas\Users\Controllers\" />
-    <Folder Include="Authentication\" />
-  </ItemGroup>
-
-</Project>
+  </Project>

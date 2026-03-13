@@ -66,7 +66,7 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
                             var fullName = nameClaim.Value;
                             var firstName = fullName.Split(' ')[0];
                             displayName = firstName;
-                            Logger.LogInformation("Found full name '{FullName}', using first name '{FirstName}'", fullName, firstName);
+                            Logger.LogDebug("Found full name '{FullName}', using first name '{FirstName}'", fullName, firstName);
                         }
 
                         // Prefer the UPN (preferred_username or upn claim) over the header value
@@ -78,7 +78,7 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
                             ?? principal.Claims.FirstOrDefault(c => c.Type == "upn");
                         if (upnClaim != null && !string.IsNullOrEmpty(upnClaim.Value))
                         {
-                            Logger.LogInformation("Using UPN '{Upn}' instead of header '{Header}'", upnClaim.Value, nameHeader);
+                            Logger.LogDebug("Using UPN '{Upn}' instead of header '{Header}'", upnClaim.Value, nameHeader);
                             userEmail = upnClaim.Value;
                         }
                     }
@@ -101,7 +101,7 @@ public class EasyAuthAuthenticationHandler : AuthenticationHandler<Authenticatio
             var claimsPrincipal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(claimsPrincipal, "EasyAuth");
 
-            Logger.LogInformation("Authenticated user: {Name}", displayName);
+            Logger.LogDebug("Authenticated user: {Name}", displayName);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
         catch (Exception ex)

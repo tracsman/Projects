@@ -1,0 +1,144 @@
+@model IEnumerable<PathWeb.Models.AppLog>
+@{
+    ViewData["Title"] = "Application Logs";
+    byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+    var currentLevel = ViewData["CurrentLevel"]?.ToString() ?? "";
+    var currentSearch = ViewData["CurrentSearch"]?.ToString() ?? "";
+    var currentPage = (int)(ViewData["CurrentPage"] ?? 1);
+    var totalPages = (int)(ViewData["TotalPages"] ?? 1);
+    var totalCount = (int)(ViewData["TotalCount"] ?? 0);
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p id="logSummary">Showing @totalCount log entries. Filter by level or search by message, category, or user.</p>
+</div>
+
+<form method="get" class="row g-2 mb-3 align-items-end">
+    <div class="col-auto">
+        <label class="form-label mb-0">Level</label>
+        <select name="level" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">All Levels</option>
+            <option value="Information" selected="@(currentLevel == "Information")">ℹ️ Information</option>
+            <option value="Warning" selected="@(currentLevel == "Warning")">⚠️ Warning</option>
+            <option value="Error" selected="@(currentLevel == "Error")">❌ Error</option>
+            <option value="Critical" selected="@(currentLevel == "Critical")">🔥 Critical</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label mb-0">Search</label>
+        <div class="input-group input-group-sm">
+            <input type="text" name="search" class="form-control" value="@currentSearch" placeholder="message, category, or user..." />
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshLogs(this)" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+            @if (!string.IsNullOrEmpty(currentSearch) || !string.IsNullOrEmpty(currentLevel))
+            {
+                <a href="@Url.Action("Index")" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+            }
+        </div>
+    </div>
+    <div class="col-auto ms-auto text-muted small align-self-end">
+        Page @currentPage of @totalPages
+    </div>
+</form>
+
+<div id="logContent">
+<table class="table table-sm table-hover align-middle" style="font-size: 0.875rem;">
+    <thead>
+        <tr>
+            <th style="width:160px;">Timestamp (UTC)</th>
+            <th style="width:100px;">Level</th>
+            <th style="width:200px;">Category</th>
+            <th>Message</th>
+            <th style="width:140px;">User</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var log in Model)
+        {
+            var rowClass = log.Level switch
+            {
+                "Error" => "table-danger",
+                "Critical" => "table-danger fw-bold",
+                "Warning" => "table-warning",
+                _ => ""
+            };
+            var badge = log.Level switch
+            {
+                "Information" => "bg-info text-dark",
+                "Warning" => "bg-warning text-dark",
+                "Error" => "bg-danger",
+                "Critical" => "bg-danger",
+                _ => "bg-secondary"
+            };
+            var shortCategory = log.Category.Contains('.')
+                ? log.Category[(log.Category.LastIndexOf('.') + 1)..]
+                : log.Category;
+            <tr class="@rowClass">
+                <td class="text-nowrap font-monospace" style="font-size: 0.8rem;">@log.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td><span class="badge @badge">@log.Level</span></td>
+                <td title="@log.Category"><small class="text-muted">@shortCategory</small></td>
+                <td style="word-break: break-word;">@log.Message</td>
+                <td><small>@log.UserName</small></td>
+            </tr>
+        }
+        @if (!Model.Any())
+        {
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">No log entries found.</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (totalPages > 1)
+{
+    <nav>
+        <ul class="pagination pagination-sm justify-content-center">
+            <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { level = currentLevel, search = currentSearch, page = currentPage - 1 })">Previous</a>
+            </li>
+            @for (var p = Math.Max(1, currentPage - 3); p <= Math.Min(totalPages, currentPage + 3); p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" href="@Url.Action("Index", new { level = currentLevel, search = currentSearch, page = p })">@p</a>
+                </li>
+            }
+            <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                <a class="page-link" href="@Url.Action("Index", new { level = currentLevel, search = currentSearch, page = currentPage + 1 })">Next</a>
+            </li>
+        </ul>
+    </nav>
+}
+</div>
+
+@section Scripts {
+    <script>
+        function refreshLogs(btn) {
+            var icon = btn.querySelector('i');
+            icon.classList.add('spin');
+            btn.disabled = true;
+
+            var url = window.location.href;
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    var parser = new DOMParser();
+                    var doc = parser.parseFromString(html, 'text/html');
+                    var newContent = doc.getElementById('logContent');
+                    var newSummary = doc.getElementById('logSummary');
+                    if (newContent) document.getElementById('logContent').innerHTML = newContent.innerHTML;
+                    if (newSummary) document.getElementById('logSummary').innerHTML = newSummary.innerHTML;
+                })
+                .catch(function (err) { console.error('Refresh failed:', err); })
+                .finally(function () {
+                    icon.classList.remove('spin');
+                    btn.disabled = false;
+                });
+        }
+    </script>
+    <style>
+        .spin { animation: spin 0.8s linear infinite; }
+        @@keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+}
