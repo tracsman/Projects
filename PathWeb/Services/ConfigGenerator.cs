@@ -53,7 +53,7 @@ public class ConfigGenerator
             
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateConfig", "Pulling Tenant from SQL");
             Tenant tenant = await _context.Tenants.FindAsync(id) ?? throw new InvalidOperationException($"Tenant {id} not found");
-            tenant.TenantVersion = (short)(tenant.TenantVersion + 1);
+            tenant.ConfigVersion = (short)(tenant.ConfigVersion + 1);
 
             // Assign or release public IPs for Microsoft peering before generating config
             string p2pResult = await AssignPublicIp(tenant, true);
@@ -318,12 +318,9 @@ public class ConfigGenerator
                              "-PeeringLocation $ERLocation -SkuFamily MeteredData -SkuTier $ERSku -ErrorAction Stop}\r\n\r\n";
                 }
 
-                // Get New SKey and copy to clipboard
-                strDB += "# Copy Service Key to clipboard\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Copying Service Key to Clipboard' -ForegroundColor Cyan\r\n" +
-                         "$er.ServiceKey | Set-Clipboard\r\n" +
-                         "Write-Host 'The Service Key is now in the clipboard, please paste into the xls asap.' -ForegroundColor Green\r\n\r\n";
+            // Get New SKey and copy to clipboard
+                strDB += "# End Nicely\r\n" +
+                         "Write-Output\r\n\r\n";
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateERConfig", "PowerShell strings created");
             }
             else
@@ -2015,7 +2012,7 @@ public class ConfigGenerator
         {
             if (backout)
             {
-                var configs = _context.Configs.Where(c => c.TenantGuid == tenant.TenantGuid && c.TenantVersion == tenant.TenantVersion);
+                var configs = _context.Configs.Where(c => c.TenantGuid == tenant.TenantGuid && c.ConfigVersion == tenant.ConfigVersion);
                 _context.Configs.RemoveRange(configs);
                 await _context.SaveChangesAsync();
             }
@@ -2028,7 +2025,7 @@ public class ConfigGenerator
                     ConfigType = configType,
                     TenantGuid = tenant.TenantGuid,
                     TenantId = tenant.TenantId,
-                    TenantVersion = tenant.TenantVersion,
+                    ConfigVersion = tenant.ConfigVersion,
                     NinjaOwner = tenant.NinjaOwner,
                     Config1 = strDB,
                     CreatedDate = DateTime.Now,

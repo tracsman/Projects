@@ -25,7 +25,7 @@ public class TenantMetaData
     [Display(Name = "Server Preference")]
     [Required]
     [ValidServerPreference]
-    public short TenantVersion { get; set; }
+    public short ConfigVersion { get; set; }
 
     [Display(Name = "Ninja")]
     [Required]
@@ -186,7 +186,7 @@ public class ValidServerPreferenceAttribute : ValidationAttribute
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         var model = (Tenant)validationContext.ObjectInstance;
-        if (model.TenantId == 0 && (model.TenantVersion > 6 || model.TenantVersion < 0))
+        if (model.TenantId == 0 && (model.ConfigVersion > 6 || model.ConfigVersion < 0))
             return new ValidationResult("Pick 0 - 6");
         return ValidationResult.Success;
     }

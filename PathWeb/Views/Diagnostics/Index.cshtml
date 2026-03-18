@@ -1,0 +1,260 @@
+@{
+    ViewData["Title"] = ViewData["Title"] ?? "Diagnostics";
+    var deepRequested = (bool?)ViewData["DeepRequested"] ?? false;
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <h2 class="mb-1">@ViewData["Title"]</h2>
+            <p class="mb-0 text-body-secondary">Interactive view over the raw <code>/diag</code> JSON snapshot.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a id="diagRawLink" class="btn btn-outline-secondary" href="~/diag">Raw JSON</a>
+            <button type="button" class="btn btn-primary" id="diagRefreshBtn">
+                <i class="bi bi-arrow-repeat"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="container mb-3">
+    <div class="card">
+        <div class="card-body d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <div>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="diagDeepToggle" @(deepRequested ? "checked" : "")>
+                    <label class="form-check-label" for="diagDeepToggle">Run deep probes</label>
+                </div>
+                <div class="small text-body-secondary">Deep mode performs live checks against Azure Automation, Key Vault, and the Logic App host.</div>
+            </div>
+            <div class="small text-body-secondary text-end" id="diagMeta">Waiting to load diagnostics...</div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div id="diagStatus" class="mb-3"></div>
+    <div id="diagSummary" class="row g-3 mb-3"></div>
+    <div id="diagSections"></div>
+</div>
+
+@section Scripts {
+    <script>
+        const deepToggle = document.getElementById('diagDeepToggle');
+        const refreshBtn = document.getElementById('diagRefreshBtn');
+        const rawLink = document.getElementById('diagRawLink');
+        const statusEl = document.getElementById('diagStatus');
+        const summaryEl = document.getElementById('diagSummary');
+        const sectionsEl = document.getElementById('diagSections');
+        const metaEl = document.getElementById('diagMeta');
+        const diagBaseUrl = '@Url.Content("~/diag")';
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatKey(key) {
+            return key
+                .replace(/([a-z])([A-Z])/g, '$1 $2')
+                .replace(/[_-]+/g, ' ')
+                .replace(/\b\w/g, function (match) { return match.toUpperCase(); });
+        }
+
+        function formatValue(value) {
+            if (value === null || value === undefined) return '<span class="text-body-secondary">(none)</span>';
+            if (typeof value === 'boolean') return value ? '<span class="badge text-bg-success">True</span>' : '<span class="badge text-bg-secondary">False</span>';
+            if (typeof value === 'number') return escapeHtml(value);
+            if (typeof value === 'string') {
+                return value.length === 0
+                    ? '<span class="text-body-secondary">(empty)</span>'
+                    : '<span class="font-monospace">' + escapeHtml(value) + '</span>';
+            }
+
+            return '<span class="text-body-secondary">' + escapeHtml(JSON.stringify(value)) + '</span>';
+        }
+
+        function isPrimitive(value) {
+            return value === null || value === undefined || ['string', 'number', 'boolean'].includes(typeof value);
+        }
+
+        function renderPrimitiveTable(obj) {
+            const entries = Object.entries(obj).filter(function (entry) { return isPrimitive(entry[1]); });
+            if (!entries.length) return '';
+
+            return '<div class="table-responsive"><table class="table table-sm align-middle mb-0">'
+                + '<tbody>'
+                + entries.map(function (entry) {
+                    return '<tr><th style="width: 240px;">' + escapeHtml(formatKey(entry[0])) + '</th><td>' + formatValue(entry[1]) + '</td></tr>';
+                }).join('')
+                + '</tbody></table></div>';
+        }
+
+        function renderArray(items, keyPath) {
+            if (!items || !items.length) {
+                return '<div class="text-body-secondary">No items.</div>';
+            }
+
+            if (items.every(isPrimitive)) {
+                return '<ul class="list-group list-group-flush">'
+                    + items.map(function (item) {
+                        return '<li class="list-group-item px-0">' + formatValue(item) + '</li>';
+                    }).join('')
+                    + '</ul>';
+            }
+
+            return items.map(function (item, index) {
+                return '<div class="card mb-2"><div class="card-header py-2"><strong>' + escapeHtml(formatKey(keyPath)) + ' #' + (index + 1) + '</strong></div><div class="card-body py-2">'
+                    + renderValue(item, keyPath + '-' + index)
+                    + '</div></div>';
+            }).join('');
+        }
+
+        function renderObject(obj, keyPath) {
+            if (!obj || typeof obj !== 'object') {
+                return formatValue(obj);
+            }
+
+            const primitiveTable = renderPrimitiveTable(obj);
+            const nestedEntries = Object.entries(obj).filter(function (entry) { return !isPrimitive(entry[1]); });
+            const nestedHtml = nestedEntries.map(function (entry) {
+                const childKey = entry[0];
+                const childValue = entry[1];
+                return '<div class="mt-3"><h6 class="mb-2">' + escapeHtml(formatKey(childKey)) + '</h6>' + renderValue(childValue, keyPath + '-' + childKey) + '</div>';
+            }).join('');
+
+            return primitiveTable + nestedHtml;
+        }
+
+        function renderValue(value, keyPath) {
+            if (Array.isArray(value)) {
+                return renderArray(value, keyPath);
+            }
+
+            if (isPrimitive(value)) {
+                return formatValue(value);
+            }
+
+            return renderObject(value, keyPath);
+        }
+
+        function updateLinks() {
+            const deep = deepToggle.checked;
+            const url = deep ? diagBaseUrl + '?deep=true' : diagBaseUrl;
+            rawLink.href = url;
+
+            const pageUrl = new URL(window.location.href);
+            if (deep) {
+                pageUrl.searchParams.set('deep', 'true');
+            } else {
+                pageUrl.searchParams.delete('deep');
+            }
+            window.history.replaceState({}, '', pageUrl.toString());
+        }
+
+        function renderStatus(snapshot) {
+            const warnings = snapshot.configuration && Array.isArray(snapshot.configuration.warnings)
+                ? snapshot.configuration.warnings
+                : [];
+
+            if (warnings.length) {
+                statusEl.innerHTML = '<div class="alert alert-warning mb-0"><div class="fw-semibold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Configuration warnings</div><ul class="mb-0">'
+                    + warnings.map(function (warning) { return '<li>' + escapeHtml(warning) + '</li>'; }).join('')
+                    + '</ul></div>';
+                return;
+            }
+
+            statusEl.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> No configuration warnings reported.</div>';
+        }
+
+        function renderSummary(snapshot) {
+            const cards = [
+                {
+                    label: 'Build',
+                    value: snapshot.build || '(unknown)',
+                    emphasis: 'primary'
+                },
+                {
+                    label: 'Database',
+                    value: snapshot.database && snapshot.database.status ? snapshot.database.status : '(unknown)',
+                    emphasis: snapshot.database && snapshot.database.status === 'connected' ? 'success' : 'danger'
+                },
+                {
+                    label: 'Automation',
+                    value: snapshot.automation ? ((snapshot.automation.running || 0) + ' running / ' + (snapshot.automation.failed || 0) + ' failed') : '(unknown)',
+                    emphasis: 'warning'
+                },
+                {
+                    label: 'User',
+                    value: snapshot.auth ? (snapshot.auth.email || snapshot.auth.user || '(unknown)') : '(unknown)',
+                    emphasis: 'info'
+                }
+            ];
+
+            summaryEl.innerHTML = cards.map(function (card) {
+                return '<div class="col-md-6 col-xl-3"><div class="card h-100 border-' + card.emphasis + '"><div class="card-body">'
+                    + '<div class="text-body-secondary small mb-1">' + escapeHtml(card.label) + '</div>'
+                    + '<div class="fw-semibold">' + escapeHtml(card.value) + '</div>'
+                    + '</div></div></div>';
+            }).join('');
+        }
+
+        function renderSections(snapshot) {
+            sectionsEl.innerHTML = Object.entries(snapshot)
+                .filter(function (entry) { return entry[0] !== 'build'; })
+                .map(function (entry) {
+                    return '<div class="card mb-3">'
+                        + '<div class="card-header"><strong>' + escapeHtml(formatKey(entry[0])) + '</strong></div>'
+                        + '<div class="card-body">' + renderValue(entry[1], entry[0]) + '</div>'
+                        + '</div>';
+                }).join('');
+        }
+
+        async function loadDiagnostics() {
+            updateLinks();
+            refreshBtn.disabled = true;
+            metaEl.textContent = 'Loading diagnostics...';
+            summaryEl.innerHTML = '';
+            sectionsEl.innerHTML = '';
+            statusEl.innerHTML = '<div class="alert alert-info mb-0"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading diagnostics...</div>';
+
+            const started = performance.now();
+            const url = rawLink.href;
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Diagnostics request failed: ' + response.status + ' ' + response.statusText);
+                }
+
+                const snapshot = await response.json();
+                renderStatus(snapshot);
+                renderSummary(snapshot);
+                renderSections(snapshot);
+
+                const elapsed = Math.round(performance.now() - started);
+                metaEl.textContent = 'Loaded in ' + elapsed + ' ms · ' + new Date().toLocaleString() + (deepToggle.checked ? ' · deep mode' : '');
+            } catch (err) {
+                const message = err && err.message ? err.message : String(err);
+                statusEl.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + escapeHtml(message) + '</div>';
+                metaEl.textContent = 'Load failed · ' + new Date().toLocaleString();
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+
+        refreshBtn.addEventListener('click', loadDiagnostics);
+        deepToggle.addEventListener('change', loadDiagnostics);
+        document.addEventListener('DOMContentLoaded', loadDiagnostics);
+    </script>
+}

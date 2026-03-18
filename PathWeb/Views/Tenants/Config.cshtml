@@ -1,8 +1,44 @@
-@model IEnumerable<PathWeb.Models.Config>
+@model PathWeb.Models.TenantConfigViewModel
 @{
-    ViewData["Title"] = $"Tenant Configuration: {ViewData["TenantName"]}";
+    ViewData["Title"] = $"Tenant Configuration: {Model.TenantName}";
     byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
-    var contacts = ViewData["Contacts"]?.ToString() ?? "";
+    object ToAutomationClientModel(PathWeb.Models.AutomationRun run) => new
+    {
+        configType = run.ConfigType,
+        jobId = run.JobId,
+        runbookName = run.RunbookName,
+        status = run.Status,
+        isTerminal = run.CompletedDate != null || run.Status is "Completed" or "Failed" or "Stopped" or "Suspended",
+        output = run.LastOutput ?? string.Empty,
+        exception = run.LastException ?? string.Empty,
+        preparedScript = run.PreparedScript ?? string.Empty,
+        submittedBy = run.SubmittedBy,
+        submittedDate = run.SubmittedDate,
+        lastStatusDate = run.LastStatusDate,
+        completedDate = run.CompletedDate
+    };
+
+    var automationRuns = Model.AutomationRuns.ToDictionary(
+        kvp => kvp.Key,
+        kvp => ToAutomationClientModel(kvp.Value));
+    var automationHistory = Model.AutomationRunHistory.ToDictionary(
+        kvp => kvp.Key,
+        kvp => kvp.Value.Select(ToAutomationClientModel).ToList());
+    var deviceApplyRuns = Model.DeviceApplyRuns.ToDictionary(
+        kvp => kvp.Key,
+        kvp => new
+        {
+            configType = kvp.Value.ConfigType,
+            actionType = kvp.Value.ActionType,
+            success = kvp.Value.Success,
+            status = kvp.Value.Status,
+            submittedBy = kvp.Value.SubmittedBy,
+            submittedDate = kvp.Value.SubmittedDate,
+            output = kvp.Value.Output ?? string.Empty
+        });
+    var automationRunsJson = System.Text.Json.JsonSerializer.Serialize(automationRuns);
+    var automationHistoryJson = System.Text.Json.JsonSerializer.Serialize(automationHistory);
+    var deviceApplyRunsJson = System.Text.Json.JsonSerializer.Serialize(deviceApplyRuns);
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
@@ -10,7 +46,7 @@
     <p>Here are all the configuration components for this tenant.</p>
 </div>
 
-@if (!Model.Any())
+@if (!Model.Configs.Any())
 {
     <div class="alert alert-warning">
         <h5>There is no config on record for this tenant.</h5>
@@ -18,9 +54,9 @@
     <div class="d-flex gap-2">
         @if (authLevel >= 8)
         {
-            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Create Config</a>
+            <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
         }
-        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Back to Tenant</a>
         <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
     </div>
 }
@@ -29,9 +65,9 @@ else
     <div class="d-flex gap-2 mb-3">
         @if (authLevel >= 8)
         {
-            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Regenerate Config</a>
+            <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Regenerate Config</a>
         }
-        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Back to Tenant</a>
         <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
     </div>
 
@@ -61,7 +97,7 @@ else
     int GetOrder(string configType) =>
         configOrder.TryGetValue(configType, out var info) ? info.Order : 99;
 
-    var orderedConfigs = Model.OrderBy(c => GetOrder(c.ConfigType)).ToList();
+    var orderedConfigs = Model.Configs.OrderBy(c => GetOrder(c.ConfigType)).ToList();
 
     @foreach (var item in orderedConfigs)
     {
@@ -77,16 +113,29 @@ else
         }
 
         <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <strong>@label</strong>
-                <div class="d-flex gap-1">
+            <div class="card-header d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <strong>@label</strong>
+                    @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
+                    {
+                        <span class="badge text-bg-secondary d-none" id="automationStatusBadge-@configType"></span>
+                        <small class="text-body-secondary d-none" id="automationStatusText-@configType"></small>
+                    }
+                    else if (configType.Contains("SRX") || configType.Contains("MX") || configType.Contains("ASR") || configType.Contains("ISR") || configType.Contains("NX"))
+                    {
+                        <button type="button" class="badge text-bg-secondary border-0 d-none" id="deviceApplyStatusBadge-@configType" onclick="openDeviceApplyRunModal('@configType')"></button>
+                        <small class="text-body-secondary d-none" id="deviceApplyStatusText-@configType"></small>
+                    }
+                </div>
+                <div class="d-flex gap-1 flex-wrap">
                     @if (isEmail)
                     {
                         <button class="btn btn-sm btn-primary" onclick="downloadMail()">Download eMail</button>
                     }
                     else if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
                     {
-                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Azure</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="automationReopenBtn-@configType" onclick="openAutomationModal('@configType')"@(authLevel < 8 ? " disabled" : "")>Re-open</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="openAutomationModal('@configType')"@(authLevel < 8 ? " disabled" : "")>Deploy to Azure</button>
                     }
                     else if (configType == "LabVMPowerShell")
                     {
@@ -119,15 +168,26 @@ else
                 </div>
             </div>
             <textarea readonly rows="10" class="form-control border-0 rounded-0" id="@configType">@configContent</textarea>
+            @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
+            {
+                <div class="border-top px-3 py-2 bg-body-tertiary">
+                    <button class="btn btn-sm btn-link text-decoration-none px-0" type="button" data-bs-toggle="collapse" data-bs-target="#automationHistoryCollapse-@configType" aria-expanded="false" aria-controls="automationHistoryCollapse-@configType">
+                        <i class="bi bi-clock-history"></i> Recent runs
+                    </button>
+                    <div class="collapse mt-2" id="automationHistoryCollapse-@configType">
+                        <div id="automationHistory-@configType" class="small"></div>
+                    </div>
+                </div>
+            }
         </div>
     }
 
     <div class="d-flex gap-2 mt-3">
         @if (authLevel >= 8)
         {
-            <a asp-action="ConfigGen" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Regenerate Config</a>
+            <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Regenerate Config</a>
         }
-        <a asp-action="Details" asp-route-id="@ViewData["TenantGuid"]" class="btn btn-primary">Back to Tenant</a>
+        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Back to Tenant</a>
         <a asp-action="Index" class="btn btn-secondary">Back to Tenant List</a>
     </div>
 }
@@ -161,6 +221,30 @@ else
     </div>
 </div>
 
+<div class="modal fade" id="automationModal" tabindex="-1" aria-labelledby="automationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="automationModalLabel">Deploy to Azure</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="automationRunStatus" class="mb-2"></div>
+                <label for="automationScriptEditor" class="form-label"><strong>Runbook script (editable before submission)</strong></label>
+                <textarea id="automationScriptEditor" class="form-control font-monospace mb-3" rows="16" spellcheck="false"></textarea>
+                <label for="automationRunOutput" class="form-label"><strong>Runbook output</strong></label>
+                <pre id="automationRunOutput" class="bg-dark text-light p-3 rounded mb-0" style="max-height:350px; overflow:auto; white-space:pre-wrap;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="automationRunBtn" onclick="submitAutomationRun()">
+                    <i class="bi bi-cloud-upload"></i> Run in Automation
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         function runDeviceAction(configType) {
@@ -182,6 +266,13 @@ else
 
         var _pendingAction = null;
         var _pendingConfigType = null;
+        var _automationConfigType = null;
+        var _automationJobId = null;
+        var _automationPollTimer = null;
+        var _automationRuns = @Html.Raw(automationRunsJson);
+        var _automationHistory = @Html.Raw(automationHistoryJson);
+        var _deviceApplyRuns = @Html.Raw(deviceApplyRunsJson);
+        var _canRunAutomation = @(authLevel >= 8 ? "true" : "false");
 
         function resetModal() {
             var outputEl = document.getElementById('deviceResultOutput');
@@ -197,7 +288,7 @@ else
         }
 
         // Shared helpers
-        var _tenantGuid = '@ViewData["TenantGuid"]';
+        var _tenantGuid = '@Model.TenantGuid';
 
         function getToken() {
             return document.querySelector('input[name="__RequestVerificationToken"]').value;
@@ -274,6 +365,395 @@ else
             _pendingConfigType = configType;
             document.getElementById(btnId).classList.remove('d-none');
         }
+
+        function stopAutomationPolling() {
+            if (_automationPollTimer) {
+                clearTimeout(_automationPollTimer);
+                _automationPollTimer = null;
+            }
+        }
+
+        function resetAutomationModal() {
+            stopAutomationPolling();
+            document.getElementById('automationRunStatus').innerHTML = '';
+            document.getElementById('automationRunOutput').textContent = '';
+
+            var btn = document.getElementById('automationRunBtn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Run in Automation';
+        }
+
+        function setAutomationStatus(html) {
+            document.getElementById('automationRunStatus').innerHTML = html;
+        }
+
+        function getAutomationRun(configType) {
+            return _automationRuns[configType] || null;
+        }
+
+        function getDeviceApplyRun(configType) {
+            return _deviceApplyRuns[configType] || null;
+        }
+
+        function getAutomationHistory(configType) {
+            return _automationHistory[configType] || [];
+        }
+
+        function compareAutomationRuns(left, right) {
+            var leftDate = left && left.submittedDate ? new Date(left.submittedDate).getTime() : 0;
+            var rightDate = right && right.submittedDate ? new Date(right.submittedDate).getTime() : 0;
+            return rightDate - leftDate;
+        }
+
+        function findAutomationRun(configType, jobId) {
+            if (!jobId) return getAutomationRun(configType);
+
+            var history = getAutomationHistory(configType);
+            for (var i = 0; i < history.length; i++) {
+                if (history[i].jobId === jobId) {
+                    return history[i];
+                }
+            }
+
+            var latestRun = getAutomationRun(configType);
+            return latestRun && latestRun.jobId === jobId ? latestRun : null;
+        }
+
+        function setAutomationRun(run) {
+            if (!run || !run.configType) return;
+
+            _automationRuns[run.configType] = run;
+            var history = getAutomationHistory(run.configType).slice();
+            var existingIndex = -1;
+            for (var i = 0; i < history.length; i++) {
+                if (history[i].jobId === run.jobId) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0) {
+                history[existingIndex] = run;
+            } else {
+                history.unshift(run);
+            }
+
+            history.sort(compareAutomationRuns);
+            _automationHistory[run.configType] = history.slice(0, 5);
+            renderAutomationSummary(run.configType);
+            renderAutomationHistory(run.configType);
+        }
+
+        function setDeviceApplyRun(run) {
+            if (!run || !run.configType) return;
+            _deviceApplyRuns[run.configType] = run;
+            renderDeviceApplySummary(run.configType);
+        }
+
+        function getAutomationPresentation(status) {
+            if (status === 'Completed') return { badgeClass: 'text-bg-success', alertClass: 'alert-success', icon: 'bi-check-circle-fill' };
+            if (status === 'Failed' || status === 'Stopped' || status === 'Suspended') return { badgeClass: 'text-bg-danger', alertClass: 'alert-danger', icon: 'bi-x-circle-fill' };
+            if (status === 'Running' || status === 'New' || status === 'Queued') return { badgeClass: 'text-bg-warning', alertClass: 'alert-warning', icon: 'bi-hourglass-split' };
+            return { badgeClass: 'text-bg-secondary', alertClass: 'alert-info', icon: 'bi-info-circle-fill' };
+        }
+
+        function formatAutomationDate(value) {
+            if (!value) return '';
+            var date = new Date(value);
+            if (isNaN(date.getTime())) return '';
+            return date.toLocaleString();
+        }
+
+        function renderAutomationSummary(configType) {
+            var badge = document.getElementById('automationStatusBadge-' + configType);
+            var text = document.getElementById('automationStatusText-' + configType);
+            var reopenBtn = document.getElementById('automationReopenBtn-' + configType);
+            if (!badge || !text || !reopenBtn) return;
+
+            var run = getAutomationRun(configType);
+            if (!run) {
+                badge.className = 'badge text-bg-secondary d-none';
+                badge.textContent = '';
+                text.classList.add('d-none');
+                text.textContent = '';
+                reopenBtn.classList.add('d-none');
+                reopenBtn.textContent = 'Re-open';
+                return;
+            }
+
+            var presentation = getAutomationPresentation(run.status);
+            badge.className = 'badge ' + presentation.badgeClass;
+            badge.textContent = run.status || 'Unknown';
+
+            var summaryText = '';
+            if (run.completedDate) {
+                summaryText = 'Completed ' + formatAutomationDate(run.completedDate);
+            } else if (run.lastStatusDate) {
+                summaryText = 'Last checked ' + formatAutomationDate(run.lastStatusDate);
+            } else if (run.submittedDate) {
+                summaryText = 'Submitted ' + formatAutomationDate(run.submittedDate);
+            }
+
+            if (summaryText) {
+                text.textContent = summaryText;
+                text.classList.remove('d-none');
+            } else {
+                text.textContent = '';
+                text.classList.add('d-none');
+            }
+
+            reopenBtn.textContent = run.isTerminal ? 'View run' : 'Re-open';
+            reopenBtn.classList.remove('d-none');
+        }
+
+        function renderAllAutomationSummaries() {
+            renderAutomationSummary('CreateERPowerShell');
+            renderAutomationSummary('CreateAzurePowerShell');
+        }
+
+        function renderDeviceApplySummary(configType) {
+            var badge = document.getElementById('deviceApplyStatusBadge-' + configType);
+            var text = document.getElementById('deviceApplyStatusText-' + configType);
+            if (!badge || !text) return;
+
+            var run = getDeviceApplyRun(configType);
+            if (!run) {
+                badge.className = 'badge text-bg-secondary d-none';
+                badge.textContent = '';
+                text.classList.add('d-none');
+                text.textContent = '';
+                return;
+            }
+
+            badge.className = 'badge border-0 ' + (run.success ? 'text-bg-success' : 'text-bg-danger');
+            badge.textContent = run.status || (run.success ? 'Applied' : 'Apply Failed');
+            badge.title = 'Click to view the last apply result';
+            text.textContent = (run.success ? 'Completed ' : 'Failed ') + formatAutomationDate(run.submittedDate);
+            text.classList.remove('d-none');
+        }
+
+        function renderAllDeviceApplySummaries() {
+            Object.keys(_deviceApplyRuns).forEach(renderDeviceApplySummary);
+        }
+
+        function openDeviceApplyRunModal(configType) {
+            var run = getDeviceApplyRun(configType);
+            if (!run) return;
+
+            showModal('Last Apply to Device: ' + configType);
+            var statusClass = run.success ? 'alert-success' : 'alert-danger';
+            var statusIcon = run.success ? 'bi-check-circle-fill' : 'bi-x-circle-fill';
+            var submittedText = formatAutomationDate(run.submittedDate);
+            var byText = run.submittedBy ? ' by <strong>' + run.submittedBy + '</strong>' : '';
+            setStatus('<div class="alert ' + statusClass + ' mb-0"><i class="bi ' + statusIcon + '"></i> <strong>' + (run.status || 'Apply Result') + '</strong>' + (submittedText ? ' at ' + submittedText : '') + byText + '</div>');
+
+            var outputEl = document.getElementById('deviceResultOutput');
+            outputEl.className = 'bg-dark text-light p-3 rounded';
+            outputEl.style.background = '';
+            outputEl.style.padding = '';
+            outputEl.style.maxHeight = '400px';
+            outputEl.style.overflow = 'auto';
+            outputEl.style.whiteSpace = 'pre-wrap';
+            outputEl.textContent = run.output || 'No output captured for this apply attempt.';
+            outputEl.style.display = '';
+        }
+
+        function renderAutomationHistory(configType) {
+            var container = document.getElementById('automationHistory-' + configType);
+            if (!container) return;
+
+            var history = getAutomationHistory(configType);
+            if (!history.length) {
+                container.innerHTML = '<div class="text-body-secondary">No recent runs.</div>';
+                return;
+            }
+
+            var latestRun = getAutomationRun(configType);
+            var html = '<div class="list-group list-group-flush">';
+            for (var i = 0; i < history.length; i++) {
+                var run = history[i];
+                var presentation = getAutomationPresentation(run.status);
+                var runLabel = run.runbookName || run.jobId;
+                var submitted = formatAutomationDate(run.submittedDate);
+                var latestBadge = latestRun && latestRun.jobId === run.jobId ? '<span class="badge text-bg-primary-subtle text-primary-emphasis ms-2">Latest</span>' : '';
+                var openDisabled = _canRunAutomation ? '' : ' disabled';
+                html += '<div class="list-group-item px-0 py-2 border-0 border-bottom">'
+                    + '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">'
+                    + '<div>'
+                    + '<div class="d-flex align-items-center flex-wrap gap-2">'
+                    + '<span class="badge ' + presentation.badgeClass + '">' + (run.status || 'Unknown') + '</span>'
+                    + '<span class="fw-semibold">' + runLabel + '</span>'
+                    + latestBadge
+                    + '</div>'
+                    + '<div class="text-body-secondary small">' + (submitted || 'Unknown time') + ' · Job ' + run.jobId + '</div>'
+                    + '</div>'
+                    + '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="openAutomationModal(\'' + configType + '\', \'' + run.jobId + '\')"' + openDisabled + '>' + (run.isTerminal ? 'View' : 'Open') + '</button>'
+                    + '</div>'
+                    + '</div>';
+            }
+
+            container.innerHTML = html + '</div>';
+        }
+
+        function renderAllAutomationHistory() {
+            renderAutomationHistory('CreateERPowerShell');
+            renderAutomationHistory('CreateAzurePowerShell');
+        }
+
+        function renderAutomationRun(run, fallbackOutput) {
+            if (!run) return;
+
+            var presentation = getAutomationPresentation(run.status);
+            var submittedText = run.submittedDate ? '<div><small>Submitted ' + formatAutomationDate(run.submittedDate) + ' by ' + (run.submittedBy || 'unknown') + '</small></div>' : '';
+            var runbookText = run.runbookName ? 'Runbook <strong>' + run.runbookName + '</strong> — ' : '';
+            setAutomationStatus('<div class="alert ' + presentation.alertClass + ' mb-0"><i class="bi ' + presentation.icon + '"></i> ' + runbookText + 'job <code>' + run.jobId + '</code> status: <strong>' + (run.status || 'Unknown') + '</strong>' + submittedText + '</div>');
+
+            var text = run.output || fallbackOutput || '';
+            if (run.exception) {
+                text += (text ? '\n\n' : '') + 'EXCEPTION:\n' + run.exception;
+            }
+            document.getElementById('automationRunOutput').textContent = text;
+
+            var btn = document.getElementById('automationRunBtn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-run';
+        }
+
+        async function refreshAutomationSummaries() {
+            try {
+                var response = await fetch('@Url.Action("Latest", "Automation")?tenantGuid=' + encodeURIComponent(_tenantGuid));
+                var data = await response.json();
+                if (!data.success || !data.runs) return;
+
+                for (var i = 0; i < data.runs.length; i++) {
+                    setAutomationRun(data.runs[i]);
+                }
+
+                renderAllAutomationSummaries();
+            } catch (err) {
+                console.warn('Failed to refresh automation summaries', err);
+            }
+        }
+
+        function openAutomationModal(configType, jobId) {
+            var source = document.getElementById(configType);
+            if (!source) {
+                alert('Could not find config content for ' + configType);
+                return;
+            }
+
+            resetAutomationModal();
+            _automationConfigType = configType;
+            _automationJobId = null;
+            document.getElementById('automationModalLabel').textContent = 'Deploy to Azure: ' + configType;
+            var existingRun = findAutomationRun(configType, jobId);
+            document.getElementById('automationScriptEditor').value = existingRun && existingRun.preparedScript ? existingRun.preparedScript : source.value;
+
+            if (existingRun) {
+                _automationJobId = existingRun.jobId;
+                renderAutomationRun(existingRun, '');
+            } else {
+                setAutomationStatus('<div class="alert alert-info mb-0"><i class="bi bi-info-circle-fill"></i> Review the generated PowerShell, make any edits you want, then click <strong>Run in Automation</strong>. The runbook will execute using the Automation Account managed identity.</div>');
+            }
+
+            var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('automationModal'));
+            modal.show();
+
+            if (existingRun && !existingRun.isTerminal) {
+                pollAutomationJob();
+            }
+        }
+
+        async function submitAutomationRun() {
+            if (!_automationConfigType) return;
+
+            var btn = document.getElementById('automationRunBtn');
+            var editor = document.getElementById('automationScriptEditor');
+            setSpinner(btn, 'Submitting...');
+
+            try {
+                var response = await fetch('@Url.Action("Submit", "Automation")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': getToken()
+                    },
+                    body: JSON.stringify({
+                        tenantGuid: _tenantGuid,
+                        configType: _automationConfigType,
+                        scriptContent: editor.value
+                    })
+                });
+
+                var data = await response.json();
+                if (!data.success) {
+                    setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
+                    document.getElementById('automationRunOutput').textContent = data.output || '';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Run in Automation';
+                    return;
+                }
+
+                var run = data.run;
+                if (run && run.preparedScript) {
+                    editor.value = run.preparedScript;
+                }
+                if (run) {
+                    setAutomationRun(run);
+                    _automationJobId = run.jobId;
+                    renderAutomationRun(run, data.output || '');
+                }
+
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-run';
+
+                pollAutomationJob();
+            } catch (err) {
+                setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Submit failed: ' + err + '</div>');
+                document.getElementById('automationRunOutput').textContent = String(err);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Run in Automation';
+            }
+        }
+
+        async function pollAutomationJob() {
+            if (!_automationJobId) return;
+
+            try {
+                var response = await fetch('@Url.Action("Status", "Automation")?jobId=' + encodeURIComponent(_automationJobId));
+                var data = await response.json();
+
+                if (!data.success) {
+                    setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Poll failed: ' + data.output + '</div>');
+                    return;
+                }
+
+                if (data.run) {
+                    setAutomationRun(data.run);
+                    renderAutomationRun(data.run, '');
+                    _automationJobId = data.run.jobId;
+
+                    if (!data.run.isTerminal && document.getElementById('automationModal').classList.contains('show')) {
+                        _automationPollTimer = setTimeout(pollAutomationJob, 3000);
+                    }
+                }
+            } catch (err) {
+                setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Poll failed: ' + err + '</div>');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            renderAllAutomationSummaries();
+            renderAllAutomationHistory();
+            renderAllDeviceApplySummaries();
+            refreshAutomationSummaries();
+
+            document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {
+                stopAutomationPolling();
+                _automationConfigType = null;
+                _automationJobId = null;
+            });
+        });
 
         function verifyOffDevice(configType) {
             var btn = event.currentTarget;
@@ -374,6 +854,9 @@ else
             .then(function (data) {
                 applyBtn.classList.add('d-none');
                 _pendingConfigType = null;
+                if (data.applyRun) {
+                    setDeviceApplyRun(data.applyRun);
+                }
                 if (!data.success) {
                     setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Apply failed on <strong>' + configType + '</strong></div>');
                     setOutputError(data.output);
@@ -528,7 +1011,7 @@ else
             var mailBody = document.getElementById('eMailHTML');
             if (!mailBody) return;
 
-            var emailTo = '@Html.Raw(contacts)';
+            var emailTo = '@Html.Raw(Model.Contacts)';
             var emailSubject = 'Your PathLab Environment is Ready!';
             var emailCont = 'To: ' + emailTo + '\n'
                 + 'Subject: ' + emailSubject + '\n'
@@ -549,5 +1032,9 @@ else
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
+
+        document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {
+            resetAutomationModal();
+        });
     </script>
 }

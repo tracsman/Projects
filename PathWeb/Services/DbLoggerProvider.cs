@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
+using System.Security.Principal;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using PathWeb.Data;
 using PathWeb.Models;
 
@@ -12,6 +15,7 @@ namespace PathWeb.Services;
 public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ConcurrentQueue<AppLog> _queue = new();
     private readonly Timer _flushTimer;
     private readonly HashSet<string> _excludedPrefixes =
@@ -23,9 +27,10 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
         "System.Net.Http"
     ];
 
-    public DbLoggerProvider(IServiceScopeFactory scopeFactory)
+    public DbLoggerProvider(IServiceScopeFactory scopeFactory, IHttpContextAccessor httpContextAccessor)
     {
         _scopeFactory = scopeFactory;
+        _httpContextAccessor = httpContextAccessor;
         _flushTimer = new Timer(_ => Flush(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
@@ -33,8 +38,46 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
 
     public void Enqueue(AppLog entry) => _queue.Enqueue(entry);
 
+    public string? GetCurrentUserName()
+    {
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            var signedInUser = user.FindFirst(ClaimTypes.Email)?.Value
+                ?? user.Identity?.Name
+                ?? user.FindFirst(ClaimTypes.Upn)?.Value
+                ?? user.FindFirst("preferred_username")?.Value;
+
+            if (!string.IsNullOrWhiteSpace(signedInUser))
+                return TrimToLength(signedInUser, 128);
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            var processIdentity = WindowsIdentity.GetCurrent()?.Name;
+            if (!string.IsNullOrWhiteSpace(processIdentity))
+                return TrimToLength(processIdentity, 128);
+        }
+
+        var runningOnManagedIdentity =
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("IDENTITY_ENDPOINT")) ||
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MSI_ENDPOINT"));
+
+        if (runningOnManagedIdentity)
+        {
+            var siteName = Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") ?? "AppService";
+            return TrimToLength($"MI:{siteName}", 128);
+        }
+
+        var environmentUser = Environment.UserName;
+        return string.IsNullOrWhiteSpace(environmentUser) ? null : TrimToLength(environmentUser, 128);
+    }
+
     public bool IsExcluded(string categoryName) =>
         _excludedPrefixes.Any(p => categoryName.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+    private static string TrimToLength(string value, int maxLength) =>
+        value.Length > maxLength ? value[..maxLength] : value;
 
     private void Flush()
     {
@@ -101,7 +144,8 @@ public sealed class DbLogger : ILogger
             Timestamp = DateTime.UtcNow,
             Level = logLevel.ToString(),
             Category = _category.Length > 256 ? _category[..256] : _category,
-            Message = message
+            Message = message,
+            UserName = _provider.GetCurrentUserName()
         });
     }
 }

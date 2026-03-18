@@ -229,7 +229,7 @@ public class RequestsController : BaseController
             {
                 TenantGuid = Guid.NewGuid(),
                 TenantId = await GetNextTenantId(request.Lab, serverPreference),
-                TenantVersion = 0,
+                ConfigVersion = 0,
                 Lab = request.Lab,
                 NinjaOwner = adminEmail.Contains('@') ? adminEmail[..adminEmail.IndexOf('@')] : adminEmail,
                 Contacts = request.Contacts,

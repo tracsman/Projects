@@ -22,22 +22,54 @@
 - [x] **Per-device backout configs** — ConfigGenerator now saves individual `{ConfigType}-out` backout configs to SQL alongside the combined BackoutConfig
 - [x] **Remove from Device** — Two-phase remove: preview backout config from SQL `-out` records, confirm in modal, push via ShellStream
 - [x] **Code refactoring pass** — BaseController for shared helpers, PlatformDetector static class, DeviceActionsController extraction, Config.cshtml JS refactor (824→553 lines), About page updated
+- [x] **Automation run tracking** — Persist Azure Automation runs in SQL, show per-config status badges/re-open actions, restore long-running runbook state/output when revisiting the Config page, and show a small recent-run history list for Azure PowerShell configs
+- [x] **Harden health/warmup endpoints** — Bypass auth-level DB lookup for `/health` and `/warmup`, return structured warmup errors, and avoid Windows-only identity calls in the DB logger on non-Windows hosts
+- [x] **Expand `/diag` diagnostics** — Added automation, Logic App, Key Vault, device, logging, cache, table-presence, and configuration-warning sections, plus optional `deep=true` live probes for Azure Automation, Key Vault, and Logic App host reachability
+- [x] **Add `/diag/view` HTML diagnostics page** — Kept `/diag` as the JSON source, added a browser-friendly diagnostics viewer at `/diag/view`, and linked it from the admin menu
+- [x] **Show device apply status badges** — Persisted `Apply to Device` success/failure attempts in SQL and surfaced per-device status badges/timestamps on the Config page; the device badge is clickable to reopen the last apply result, and PowerShell recent-run sections now default collapsed
 
 ---
 
 ## 🔧 In Progress
 
-_(nothing currently in progress)_
+- [ ] **Deploy to Azure button** — Initial implementation complete: app config keys added, `AutomationService` + `AutomationController` added, Config page modal/UI wired for `CreateERPowerShell` / `CreateAzurePowerShell`. Next step: runtime test actual runbook submission and polling.
 
 ---
 
 ## 💡 Ideas / Future Work
 
+### Automation & Deployment (next up)
+
 - [ ] **Deploy to Azure button** — Execute CreateERPowerShell / CreateAzurePowerShell via Azure Automation Runbook
-- [ ] **Create Lab VMs button** — Execute LabVMPowerShell via Azure Automation Runbook
-- [ ] **Deploy to Provider button** — Wire up ServiceProviderInstructions delivery
-- [ ] **BackoutConfig TBD button** — Define what backout action should do
-- [ ] **Notification eMail** — Consider sending directly from the app vs download-only
+- [ ] **Create Lab VMs button** — Execute LabVMPowerShell on the target Hyper-V server via SSH:
+  - **Server prep (one-time per server):** Enable OpenSSH Server on each Windows Server 2026 Hyper-V host, configure the service account credentials in Key Vault (same pattern as network device creds)
+  - **LabMod module update:** Add a `-Password` (or `-Credential`) parameter to `New-LabVM` / `Remove-LabVM` so the script can run non-interactively via SSH instead of prompting for passwords
+  - **App code:** Look up target server from tenant config (e.g., `SEA-ER-04`), resolve its management IP, SSH in via existing `SshService`, run the LabVM PowerShell command, stream output to the modal
+- [ ] **Provision Provider button** — Copy-to-clipboard for now (admin runs `New-LabECX` locally). Future: install `LabMod` module in Azure Automation Account and run as a Runbook (requires ECX API credentials in Automation Account)
+- [ ] **BackoutConfig button** — Wire the BackoutConfig card's action button to execute the combined backout (Azure RG deletion + ECX deprovision + Lab VM removal)
+
+### Post-Deploy Automation
+
+- [ ] **Auto S-Key retrieval** — Button to auto-retrieve the ExpressRoute Service Key from Azure (via Resource ID or circuit name) and populate the config
+- [ ] **Auto VPN Endpoints** — Button to retrieve VPN gateway public IPs from Azure and update the firewall VPN config with actual endpoint addresses
+- [ ] **Post-deploy value injection** — Resolve placeholder values (e.g., `<REQUIRED-IP>`, S-TAGs) that are only known after Azure deployment:
+  - Firewall: replace VPN gateway `address <REQUIRED-IP>` in `gw_Cust{Id}` IKE gateway config with actual customer peer IP
+  - Router (both primary and secondary): replace S-TAG placeholders with actual outer VLAN tags from the ER circuit
+
+### Config & Tenant Features
+
+- [ ] **Notification eMail** — Send the tenant info email directly from the app (via Graph API or SMTP) instead of the current download-as-`.eml` approach
+- [ ] **Firewall Bypass mode** — Add a toggle to tenant create/edit that generates a simplified config path bypassing the firewall:
+  - New `FirewallBypass` boolean field on the Tenant table
+  - Generate VRF config directly on the Nexus switch (skip SRX)
+  - Firewall limited to RDP-to-VM and VM-to-internet policies only
+  - Static route on switch (or firewall) for Azure VNet addresses via ER
+- [ ] **View Released Tenants** — Browse released (deleted) tenants in read-only mode, including their generated configs. Option to clone a released tenant as a starting point for a new one.
+
+
+### Infrastructure / DevOps
+
+- [ ] **Storage access for post-install VM scripts** — Post-SFI: investigate whether the App Service Managed Identity can access the Scripts storage account directly, and pass credentials/SAS to VMs during provisioning
 
 ### Azure Automation Runbook — Plan of Record
 

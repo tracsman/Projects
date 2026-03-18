@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PathWeb.Data;
+using PathWeb.Models;
 using PathWeb.Services;
 
 namespace PathWeb.Controllers;
@@ -31,7 +32,10 @@ public class DeviceActionsController : BaseController
 
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Name == configType);
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
-            return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP." });
+        {
+            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", $"Device '{configType}' not found or has no management IP.");
+            return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP.", applyRun });
+        }
 
         var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
@@ -77,13 +81,17 @@ public class DeviceActionsController : BaseController
             return Json(new { success = false, output = "Tenant not found." });
 
         var config = await _context.Configs.FirstOrDefaultAsync(
-            c => c.TenantGuid == tenantGuid && c.TenantVersion == tenant.TenantVersion && c.ConfigType == configType);
+            c => c.TenantGuid == tenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == configType);
         if (config == null || string.IsNullOrEmpty(config.Config1))
             return Json(new { success = false, output = $"No stored config found for '{configType}'." });
 
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Name == configType);
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
-            return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP." });
+        {
+            var output = $"Device '{configType}' not found or has no management IP.";
+            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", output);
+            return Json(new { success = false, output, applyRun });
+        }
 
         var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
@@ -135,7 +143,7 @@ public class DeviceActionsController : BaseController
             return Json(new { success = false, output = "Tenant not found." });
 
         var config = await _context.Configs.FirstOrDefaultAsync(
-            c => c.TenantGuid == tenantGuid && c.TenantVersion == tenant.TenantVersion && c.ConfigType == configType);
+            c => c.TenantGuid == tenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == configType);
         if (config == null || string.IsNullOrEmpty(config.Config1))
             return Json(new { success = false, output = $"No stored config found for '{configType}'." });
 
@@ -148,11 +156,18 @@ public class DeviceActionsController : BaseController
 
         var showCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
         if (showCommand == null)
-            return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
+        {
+            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", $"Unknown platform for device '{configType}'.");
+            return Json(new { success = false, output = $"Unknown platform for device '{configType}'.", applyRun });
+        }
 
         var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, showCommand);
         if (!sshSuccess)
-            return Json(new { success = false, output = $"SSH failed during comparison: {sshOutput}" });
+        {
+            var output = $"SSH failed during comparison: {sshOutput}";
+            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", output);
+            return Json(new { success = false, output, applyRun });
+        }
 
         var storedSet = NormalizeConfigLines(config.Config1, platform);
         var deviceSet = NormalizeConfigLines(sshOutput, platform);
@@ -175,10 +190,13 @@ public class DeviceActionsController : BaseController
         if (!applySuccess)
         {
             _logger.LogWarning("ApplyToDevice: {Device} config session failed", configType);
-            return Json(new { success = false, output = transcript });
+            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", transcript);
+            return Json(new { success = false, output = transcript, applyRun });
         }
 
         _logger.LogInformation("ApplyToDevice: {Device} successfully applied {Count} lines", configType, linesToApply.Count);
+
+        var successRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, true, "Applied", transcript);
 
         return Json(new
         {
@@ -188,7 +206,8 @@ public class DeviceActionsController : BaseController
             appliedCount = linesToApply.Count,
             appliedLines = linesToApply,
             compareOutput,
-            transcript
+            transcript,
+            applyRun = successRun
         });
     }
 
@@ -204,7 +223,7 @@ public class DeviceActionsController : BaseController
             return Json(new { success = false, output = "Tenant not found." });
 
         var config = await _context.Configs.FirstOrDefaultAsync(
-            c => c.TenantGuid == tenantGuid && c.TenantVersion == tenant.TenantVersion && c.ConfigType == configType);
+            c => c.TenantGuid == tenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == configType);
         if (config == null || string.IsNullOrEmpty(config.Config1))
             return Json(new { success = false, output = $"No stored config found for '{configType}'." });
 
@@ -297,7 +316,7 @@ public class DeviceActionsController : BaseController
 
         var backoutConfigType = $"{configType}-out";
         var backout = await _context.Configs.FirstOrDefaultAsync(
-            c => c.TenantGuid == tenantGuid && c.TenantVersion == tenant.TenantVersion && c.ConfigType == backoutConfigType);
+            c => c.TenantGuid == tenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == backoutConfigType);
         if (backout == null || string.IsNullOrEmpty(backout.Config1))
             return Json(new { success = false, output = $"No backout config found for '{configType}'. Regenerate config to create it." });
 
@@ -336,7 +355,7 @@ public class DeviceActionsController : BaseController
 
         var backoutConfigType = $"{configType}-out";
         var backout = await _context.Configs.FirstOrDefaultAsync(
-            c => c.TenantGuid == tenantGuid && c.TenantVersion == tenant.TenantVersion && c.ConfigType == backoutConfigType);
+            c => c.TenantGuid == tenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == backoutConfigType);
         if (backout == null || string.IsNullOrEmpty(backout.Config1))
             return Json(new { success = false, output = $"No backout config found for '{configType}'." });
 
@@ -408,4 +427,35 @@ public class DeviceActionsController : BaseController
         }
         return result;
     }
+
+    private async Task<object> RecordDeviceApplyRunAsync(Guid tenantGuid, string configType, bool success, string status, string output)
+    {
+        var run = new DeviceActionRun
+        {
+            DeviceActionRunId = Guid.NewGuid(),
+            TenantGuid = tenantGuid,
+            ConfigType = configType,
+            ActionType = "Apply",
+            Success = success,
+            Status = status,
+            SubmittedBy = GetUserEmail(),
+            SubmittedDate = DateTime.UtcNow,
+            Output = output
+        };
+
+        _context.DeviceActionRuns.Add(run);
+        await _context.SaveChangesAsync();
+        return ToClientModel(run);
+    }
+
+    private static object ToClientModel(DeviceActionRun run) => new
+    {
+        configType = run.ConfigType,
+        actionType = run.ActionType,
+        success = run.Success,
+        status = run.Status,
+        submittedBy = run.SubmittedBy,
+        submittedDate = run.SubmittedDate,
+        output = run.Output ?? string.Empty
+    };
 }

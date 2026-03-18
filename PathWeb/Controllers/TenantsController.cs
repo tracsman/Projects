@@ -114,7 +114,7 @@ public class TenantsController : BaseController
         {
             TenantGuid = Guid.NewGuid(),
             TenantId = 0,
-            TenantVersion = 0,
+            ConfigVersion = 0,
             ReturnDate = DateOnly.FromDateTime(DateTime.Today.AddDays(7)),
             Ersku = "None",
             Erspeed = 50,
@@ -364,15 +364,38 @@ public class TenantsController : BaseController
         }
 
         var configs = await _context.Configs
-            .Where(c => c.TenantGuid == id && c.TenantVersion == tenant.TenantVersion)
+            .Where(c => c.TenantGuid == id && c.ConfigVersion == tenant.ConfigVersion)
             .ToListAsync();
 
-        ViewData["TenantGuid"] = id;
-        ViewData["TenantName"] = tenant.TenantName;
-        ViewData["Contacts"] = tenant.Contacts;
+        var latestAutomationRuns = await _context.AutomationRuns
+            .Where(r => r.TenantGuid == id)
+            .OrderByDescending(r => r.SubmittedDate)
+            .ToListAsync();
+
+        var latestDeviceApplyRuns = await _context.DeviceActionRuns
+            .Where(r => r.TenantGuid == id && r.ActionType == "Apply")
+            .OrderByDescending(r => r.SubmittedDate)
+            .ToListAsync();
+
+        var model = new TenantConfigViewModel
+        {
+            TenantGuid = id.Value,
+            TenantName = tenant.TenantName,
+            Contacts = tenant.Contacts ?? string.Empty,
+            Configs = configs,
+            AutomationRuns = latestAutomationRuns
+                .GroupBy(r => r.ConfigType)
+                .ToDictionary(g => g.Key, g => g.First()),
+            AutomationRunHistory = latestAutomationRuns
+                .GroupBy(r => r.ConfigType)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<AutomationRun>)g.Take(5).ToList()),
+            DeviceApplyRuns = latestDeviceApplyRuns
+                .GroupBy(r => r.ConfigType)
+                .ToDictionary(g => g.Key, g => g.First())
+        };
 
         _logger.LogInformation("Tenants.Config for {TenantName} ({ConfigCount} configs) by {User}", tenant.TenantName, configs.Count, GetUserEmail());
-        return View(configs);
+        return View(model);
     }
 
     public async Task<IActionResult> ConfigGen(Guid? id)

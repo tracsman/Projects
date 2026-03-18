@@ -32,6 +32,10 @@ public partial class LabConfigContext : DbContext
 
     public virtual DbSet<AppLog> AppLogs { get; set; }
 
+    public virtual DbSet<AutomationRun> AutomationRuns { get; set; }
+
+    public virtual DbSet<DeviceActionRun> DeviceActionRuns { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Config>(entity =>
@@ -43,6 +47,7 @@ public partial class LabConfigContext : DbContext
                 .HasColumnName("ConfigID");
             entity.Property(e => e.Config1).HasColumnName("Config");
             entity.Property(e => e.ConfigType).HasMaxLength(50);
+            entity.Property(e => e.ConfigVersion).HasColumnName("ConfigVersion");
             entity.Property(e => e.CreatedBy).HasMaxLength(50);
             entity.Property(e => e.NinjaOwner).HasMaxLength(50);
             entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
@@ -82,7 +87,7 @@ public partial class LabConfigContext : DbContext
                 .HasMaxLength(45)
                 .HasColumnName("MgmtIPv6");
             entity.Property(e => e.Os)
-                .HasMaxLength(30)
+                .HasMaxLength(50)
                 .HasColumnName("OS");
             entity.Property(e => e.InService)
                 .HasDefaultValue(true, "DF_Devices_InService");
@@ -159,6 +164,7 @@ public partial class LabConfigContext : DbContext
                 .HasColumnName("AzVM4");
             entity.Property(e => e.AzureRegion).HasMaxLength(50);
             entity.Property(e => e.Contacts).HasMaxLength(150);
+            entity.Property(e => e.ConfigVersion).HasColumnName("ConfigVersion");
             entity.Property(e => e.DeletedBy).HasMaxLength(50);
             entity.Property(e => e.ErfastPath).HasColumnName("ERFastPath");
             entity.Property(e => e.ErgatewaySize)
@@ -297,6 +303,44 @@ public partial class LabConfigContext : DbContext
             entity.Property(e => e.Level).HasMaxLength(15);
             entity.Property(e => e.Category).HasMaxLength(256);
             entity.Property(e => e.UserName).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<AutomationRun>(entity =>
+        {
+            entity.HasKey(e => e.AutomationRunId);
+
+            entity.ToTable("AutomationRun");
+
+            entity.HasIndex(e => e.JobId, "UX_AutomationRun_JobId").IsUnique();
+            entity.HasIndex(e => new { e.TenantGuid, e.ConfigType, e.SubmittedDate }, "IX_AutomationRun_TenantGuid_ConfigType_SubmittedDate");
+
+            entity.Property(e => e.AutomationRunId)
+                .HasDefaultValueSql("(newid())", "DF_AutomationRun_AutomationRunID")
+                .HasColumnName("AutomationRunID");
+            entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
+            entity.Property(e => e.ConfigType).HasMaxLength(50);
+            entity.Property(e => e.JobId).HasMaxLength(50);
+            entity.Property(e => e.RunbookName).HasMaxLength(128);
+            entity.Property(e => e.SubmittedBy).HasMaxLength(256);
+            entity.Property(e => e.Status).HasMaxLength(30);
+        });
+
+        modelBuilder.Entity<DeviceActionRun>(entity =>
+        {
+            entity.HasKey(e => e.DeviceActionRunId);
+
+            entity.ToTable("DeviceActionRun");
+
+            entity.HasIndex(e => new { e.TenantGuid, e.ConfigType, e.ActionType, e.SubmittedDate }, "IX_DeviceActionRun_TenantGuid_ConfigType_ActionType_SubmittedDate");
+
+            entity.Property(e => e.DeviceActionRunId)
+                .HasDefaultValueSql("(newid())", "DF_DeviceActionRun_DeviceActionRunID")
+                .HasColumnName("DeviceActionRunID");
+            entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
+            entity.Property(e => e.ConfigType).HasMaxLength(50);
+            entity.Property(e => e.ActionType).HasMaxLength(30);
+            entity.Property(e => e.Status).HasMaxLength(30);
+            entity.Property(e => e.SubmittedBy).HasMaxLength(256);
         });
 
         OnModelCreatingPartial(modelBuilder);

@@ -110,7 +110,7 @@
     <div class="card-body">
         <table class="table table-hover mb-0">
             <tr><th style="width:200px">Tenant GUID</th><td>@Model.TenantGuid</td></tr>
-            <tr><th>Tenant Version</th><td>@Model.TenantVersion</td></tr>
+            <tr><th>Config Version</th><td>@Model.ConfigVersion</td></tr>
             <tr><th>Work Item ID</th><td>@if (Model.WorkItemId.HasValue && Model.WorkItemId > 0)
                     {
                         var adoOrg = ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["AzureDevOps:OrgUrl"];

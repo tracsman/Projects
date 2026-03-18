@@ -13,7 +13,7 @@ public partial class Tenant
 
     public string TenantName => $"{Lab}-Cust{TenantId}";
 
-    public short TenantVersion { get; set; }
+    public short ConfigVersion { get; set; }
 
     public string NinjaOwner { get; set; } = null!;
 

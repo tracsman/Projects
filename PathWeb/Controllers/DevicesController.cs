@@ -126,14 +126,23 @@ public class DevicesController : BaseController
         if (id != device.DeviceId)
             return NotFound();
 
+        var existingDevice = await _context.Devices.FirstOrDefaultAsync(d => d.DeviceId == id);
+        if (existingDevice == null)
+            return NotFound();
+
         if (ModelState.IsValid)
         {
             try
             {
-                _context.Update(device);
+                existingDevice.MgmtIpv4 = device.MgmtIpv4;
+                existingDevice.MgmtIpv6 = device.MgmtIpv6;
+                existingDevice.Os = device.Os;
+                existingDevice.InService = device.InService;
+                existingDevice.Issues = device.Issues;
+
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Device updated: {DeviceName} by {User}", device.Name, GetUserEmail());
-                TempData["Message"] = $"Device {device.Name} was successfully updated!";
+                _logger.LogInformation("Device updated: {DeviceName} by {User}", existingDevice.Name, GetUserEmail());
+                TempData["Message"] = $"Device {existingDevice.Name} was successfully updated!";
                 TempData["MessageLevel"] = "success";
             }
             catch (DbUpdateConcurrencyException)
@@ -142,8 +151,27 @@ public class DevicesController : BaseController
                     return NotFound();
                 throw;
             }
-            return RedirectToAction(nameof(Index));
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "Database update failed while editing device {DeviceName} by {User}", existingDevice.Name, GetUserEmail());
+                ModelState.AddModelError(string.Empty, "Save failed. Check field lengths and values, then try again. OS must be 50 characters or fewer.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while editing device {DeviceName} by {User}", existingDevice.Name, GetUserEmail());
+                ModelState.AddModelError(string.Empty, "An unexpected error occurred while saving the device.");
+            }
+
+            if (ModelState.IsValid)
+                return RedirectToAction(nameof(Index));
+
+            device.Name = existingDevice.Name;
+            device.Type = existingDevice.Type;
+            device.Lab = existingDevice.Lab;
+            return View(device);
         }
+
+        _logger.LogWarning("Devices.Edit [POST] model validation failed for {DeviceName} by {User}", existingDevice.Name, GetUserEmail());
         return View(device);
     }
 

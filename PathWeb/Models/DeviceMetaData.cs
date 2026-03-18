@@ -29,13 +29,16 @@ public class DeviceMetaData
 
     [Display(Name = "Mgmt IPv4")]
     [ValidIPv4]
+    [StringLength(15)]
     public string? MgmtIpv4 { get; set; }
 
     [Display(Name = "Mgmt IPv6")]
     [ValidIPv6]
+    [StringLength(45)]
     public string? MgmtIpv6 { get; set; }
 
     [Display(Name = "OS")]
+    [StringLength(50, ErrorMessage = "OS must be 50 characters or fewer.")]
     public string? Os { get; set; }
 
     [Display(Name = "In Service")]
