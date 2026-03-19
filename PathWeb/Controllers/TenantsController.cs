@@ -377,6 +377,11 @@ public class TenantsController : BaseController
             .OrderByDescending(r => r.SubmittedDate)
             .ToListAsync();
 
+        var latestEmailSendRuns = await _context.EmailSendRuns
+            .Where(r => r.TenantGuid == id)
+            .OrderByDescending(r => r.SubmittedDate)
+            .ToListAsync();
+
         var model = new TenantConfigViewModel
         {
             TenantGuid = id.Value,
@@ -390,6 +395,9 @@ public class TenantsController : BaseController
                 .GroupBy(r => r.ConfigType)
                 .ToDictionary(g => g.Key, g => (IReadOnlyList<AutomationRun>)g.Take(5).ToList()),
             DeviceApplyRuns = latestDeviceApplyRuns
+                .GroupBy(r => r.ConfigType)
+                .ToDictionary(g => g.Key, g => g.First()),
+            EmailSendRuns = latestEmailSendRuns
                 .GroupBy(r => r.ConfigType)
                 .ToDictionary(g => g.Key, g => g.First())
         };

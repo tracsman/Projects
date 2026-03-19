@@ -36,6 +36,8 @@ public partial class LabConfigContext : DbContext
 
     public virtual DbSet<DeviceActionRun> DeviceActionRuns { get; set; }
 
+    public virtual DbSet<EmailSendRun> EmailSendRuns { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Config>(entity =>
@@ -341,6 +343,25 @@ public partial class LabConfigContext : DbContext
             entity.Property(e => e.ActionType).HasMaxLength(30);
             entity.Property(e => e.Status).HasMaxLength(30);
             entity.Property(e => e.SubmittedBy).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<EmailSendRun>(entity =>
+        {
+            entity.HasKey(e => e.EmailSendRunId);
+
+            entity.ToTable("EmailSendRun");
+
+            entity.HasIndex(e => new { e.TenantGuid, e.ConfigType, e.SubmittedDate }, "IX_EmailSendRun_TenantGuid_ConfigType_SubmittedDate");
+
+            entity.Property(e => e.EmailSendRunId)
+                .HasDefaultValueSql("(newid())", "DF_EmailSendRun_EmailSendRunID")
+                .HasColumnName("EmailSendRunID");
+            entity.Property(e => e.TenantGuid).HasColumnName("TenantGUID");
+            entity.Property(e => e.ConfigType).HasMaxLength(50);
+            entity.Property(e => e.Status).HasMaxLength(30);
+            entity.Property(e => e.SubmittedBy).HasMaxLength(256);
+            entity.Property(e => e.Recipient).HasMaxLength(512);
+            entity.Property(e => e.Subject).HasMaxLength(256);
         });
 
         OnModelCreatingPartial(modelBuilder);

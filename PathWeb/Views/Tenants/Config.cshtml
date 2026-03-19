@@ -36,9 +36,23 @@
             submittedDate = kvp.Value.SubmittedDate,
             output = kvp.Value.Output ?? string.Empty
         });
+    var emailSendRuns = Model.EmailSendRuns.ToDictionary(
+        kvp => kvp.Key,
+        kvp => new
+        {
+            configType = kvp.Value.ConfigType,
+            success = kvp.Value.Success,
+            status = kvp.Value.Status,
+            submittedBy = kvp.Value.SubmittedBy,
+            submittedDate = kvp.Value.SubmittedDate,
+            recipient = kvp.Value.Recipient ?? string.Empty,
+            subject = kvp.Value.Subject ?? string.Empty,
+            output = kvp.Value.Output ?? string.Empty
+        });
     var automationRunsJson = System.Text.Json.JsonSerializer.Serialize(automationRuns);
     var automationHistoryJson = System.Text.Json.JsonSerializer.Serialize(automationHistory);
     var deviceApplyRunsJson = System.Text.Json.JsonSerializer.Serialize(deviceApplyRuns);
+    var emailSendRunsJson = System.Text.Json.JsonSerializer.Serialize(emailSendRuns);
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
@@ -97,7 +111,10 @@ else
     int GetOrder(string configType) =>
         configOrder.TryGetValue(configType, out var info) ? info.Order : 99;
 
-    var orderedConfigs = Model.Configs.OrderBy(c => GetOrder(c.ConfigType)).ToList();
+    var orderedConfigs = Model.Configs
+        .Where(c => !c.ConfigType.EndsWith("-out", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(c => GetOrder(c.ConfigType))
+        .ToList();
 
     @foreach (var item in orderedConfigs)
     {
@@ -106,10 +123,10 @@ else
         var isEmail = configType == "eMailHTML";
         var configContent = item.Config1;
 
-        // For email, swap embedded image references for SharePoint links
+        // For email preview, swap CID image references for the app-hosted logo
         if (isEmail)
         {
-            configContent = configContent.Replace("cid:", "https://microsoft.sharepoint.com/teams/Pathfinders/SiteAssets/");
+            configContent = configContent.Replace("cid:pathweb-logo", Url.Content("~/images/PFLogo.png"), StringComparison.OrdinalIgnoreCase);
         }
 
         <div class="card mb-3">
@@ -121,6 +138,11 @@ else
                         <span class="badge text-bg-secondary d-none" id="automationStatusBadge-@configType"></span>
                         <small class="text-body-secondary d-none" id="automationStatusText-@configType"></small>
                     }
+                    else if (isEmail)
+                    {
+                        <button type="button" class="badge text-bg-secondary border-0 d-none" id="emailSendStatusBadge-@configType" onclick="openEmailSendRunModal('@configType')"></button>
+                        <small class="text-body-secondary d-none" id="emailSendStatusText-@configType"></small>
+                    }
                     else if (configType.Contains("SRX") || configType.Contains("MX") || configType.Contains("ASR") || configType.Contains("ISR") || configType.Contains("NX"))
                     {
                         <button type="button" class="badge text-bg-secondary border-0 d-none" id="deviceApplyStatusBadge-@configType" onclick="openDeviceApplyRunModal('@configType')"></button>
@@ -130,6 +152,7 @@ else
                 <div class="d-flex gap-1 flex-wrap">
                     @if (isEmail)
                     {
+                        <button class="btn btn-sm btn-outline-primary" onclick="sendNotificationEmail('@configType')"@(authLevel < 8 ? " disabled" : "")>Send Email</button>
                         <button class="btn btn-sm btn-primary" onclick="downloadMail()">Download eMail</button>
                     }
                     else if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
@@ -272,6 +295,7 @@ else
         var _automationRuns = @Html.Raw(automationRunsJson);
         var _automationHistory = @Html.Raw(automationHistoryJson);
         var _deviceApplyRuns = @Html.Raw(deviceApplyRunsJson);
+        var _emailSendRuns = @Html.Raw(emailSendRunsJson);
         var _canRunAutomation = @(authLevel >= 8 ? "true" : "false");
 
         function resetModal() {
@@ -395,6 +419,10 @@ else
             return _deviceApplyRuns[configType] || null;
         }
 
+        function getEmailSendRun(configType) {
+            return _emailSendRuns[configType] || null;
+        }
+
         function getAutomationHistory(configType) {
             return _automationHistory[configType] || [];
         }
@@ -448,6 +476,12 @@ else
             if (!run || !run.configType) return;
             _deviceApplyRuns[run.configType] = run;
             renderDeviceApplySummary(run.configType);
+        }
+
+        function setEmailSendRun(run) {
+            if (!run || !run.configType) return;
+            _emailSendRuns[run.configType] = run;
+            renderEmailSendSummary(run.configType);
         }
 
         function getAutomationPresentation(status) {
@@ -536,6 +570,31 @@ else
             Object.keys(_deviceApplyRuns).forEach(renderDeviceApplySummary);
         }
 
+        function renderEmailSendSummary(configType) {
+            var badge = document.getElementById('emailSendStatusBadge-' + configType);
+            var text = document.getElementById('emailSendStatusText-' + configType);
+            if (!badge || !text) return;
+
+            var run = getEmailSendRun(configType);
+            if (!run) {
+                badge.className = 'badge text-bg-secondary border-0 d-none';
+                badge.textContent = '';
+                text.classList.add('d-none');
+                text.textContent = '';
+                return;
+            }
+
+            badge.className = 'badge border-0 ' + (run.success ? 'text-bg-success' : 'text-bg-danger');
+            badge.textContent = run.status || (run.success ? 'Sent' : 'Send Failed');
+            badge.title = 'Click to view the last email send result';
+            text.textContent = (run.success ? 'Sent ' : 'Failed ') + formatAutomationDate(run.submittedDate);
+            text.classList.remove('d-none');
+        }
+
+        function renderAllEmailSendSummaries() {
+            Object.keys(_emailSendRuns).forEach(renderEmailSendSummary);
+        }
+
         function openDeviceApplyRunModal(configType) {
             var run = getDeviceApplyRun(configType);
             if (!run) return;
@@ -555,6 +614,29 @@ else
             outputEl.style.overflow = 'auto';
             outputEl.style.whiteSpace = 'pre-wrap';
             outputEl.textContent = run.output || 'No output captured for this apply attempt.';
+            outputEl.style.display = '';
+        }
+
+        function openEmailSendRunModal(configType) {
+            var run = getEmailSendRun(configType);
+            if (!run) return;
+
+            showModal('Last Notification Email: ' + configType);
+            var statusClass = run.success ? 'alert-success' : 'alert-danger';
+            var statusIcon = run.success ? 'bi-envelope-check-fill' : 'bi-envelope-x-fill';
+            var submittedText = formatAutomationDate(run.submittedDate);
+            var recipientText = run.recipient ? ' to <strong>' + run.recipient + '</strong>' : '';
+            var byText = run.submittedBy ? ' by <strong>' + run.submittedBy + '</strong>' : '';
+            setStatus('<div class="alert ' + statusClass + ' mb-0"><i class="bi ' + statusIcon + '"></i> <strong>' + (run.status || 'Email Result') + '</strong>' + recipientText + (submittedText ? ' at ' + submittedText : '') + byText + '</div>');
+
+            var outputEl = document.getElementById('deviceResultOutput');
+            outputEl.className = 'bg-dark text-light p-3 rounded';
+            outputEl.style.background = '';
+            outputEl.style.padding = '';
+            outputEl.style.maxHeight = '400px';
+            outputEl.style.overflow = 'auto';
+            outputEl.style.whiteSpace = 'pre-wrap';
+            outputEl.textContent = run.output || 'No output captured for this email send attempt.';
             outputEl.style.display = '';
         }
 
@@ -746,6 +828,7 @@ else
             renderAllAutomationSummaries();
             renderAllAutomationHistory();
             renderAllDeviceApplySummaries();
+            renderAllEmailSendSummaries();
             refreshAutomationSummaries();
 
             document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {
@@ -1031,6 +1114,38 @@ else
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        function sendNotificationEmail(configType) {
+            var btn = event.currentTarget;
+            var originalHtml = btn.innerHTML;
+            setSpinner(btn, 'Sending...');
+
+            postAction('@Url.Action("SendNotification", "Email")', configType)
+            .then(function (data) {
+                if (data.emailRun) {
+                    setEmailSendRun(data.emailRun);
+                }
+
+                showModal('Send Notification Email');
+                if (!data.success) {
+                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-envelope-x-fill"></i> Email send failed</div>');
+                    setOutputError(data.output || 'Notification email send failed.');
+                } else {
+                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-envelope-check-fill"></i> Notification email sent successfully.</div>');
+                    var outputEl = document.getElementById('deviceResultOutput');
+                    outputEl.className = 'bg-dark text-light p-3 rounded';
+                    outputEl.style.background = '';
+                    outputEl.style.padding = '';
+                    outputEl.style.maxHeight = '400px';
+                    outputEl.style.overflow = 'auto';
+                    outputEl.style.whiteSpace = 'pre-wrap';
+                    outputEl.textContent = data.output || 'Notification email sent.';
+                    outputEl.style.display = '';
+                }
+            })
+            .catch(function (err) { alert('Email send request failed: ' + err); })
+            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
         }
 
         document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {

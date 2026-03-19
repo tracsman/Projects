@@ -1820,7 +1820,7 @@ public class ConfigGenerator
                     "<body>\r\n" +
                     "    <table>\r\n" +
                     "        <tr height=150>\r\n" +
-                    "            <td style='width:160px;background:#0070C0;padding:15px 0px 5px 20px;'><img src='https://microsoft.sharepoint.com/teams/Pathfinders/SiteAssets/PFLogoEMail.png' alt='Pathfinder Badge'></td>\r\n" +
+                    "            <td style='width:160px;background:#0070C0;padding:15px 0px 5px 20px;'><img src='https://www.pathlab.xyz/email-assets/PFLogo.png' alt='Pathfinder Badge'></td>\r\n" +
                     "            <td style='width:600px;background:#0070C0;padding:0px 15px 0px 0px;'>\r\n" +
                     "                <p align=center><b><span class='h'>Your lab environment</span></b></p>\r\n" +
                     "                <p align=center><b><span class='h'>has been created!</span></b></p>\r\n" +

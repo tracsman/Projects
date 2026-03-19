@@ -337,8 +337,8 @@ try {
     Write-Error "Failed to configure runtime: $_"
 }
 
-# Exclude /health and /warmup from Easy Auth so deploy/warmup scripts can reach them
-Write-Step "Configuring Easy Auth exclusions for health and warmup endpoints..."
+# Exclude narrow operational/static paths from Easy Auth so warmup scripts and email logo rendering can reach them anonymously
+Write-Step "Configuring Easy Auth exclusions for health, warmup, and email-assets endpoints..."
 try {
     $authUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/authsettingsV2?api-version=2022-03-01"
 
@@ -353,7 +353,7 @@ try {
             $authConfig.properties | Add-Member -NotePropertyName globalValidation -NotePropertyValue @{} -Force
         }
 
-        $requiredPaths = @("/health", "/warmup")
+        $requiredPaths = @("/health", "/warmup", "/email-assets/*")
         $existingPaths = @($authConfig.properties.globalValidation.excludedPaths)
         if ($existingPaths.Count -eq 1 -and $null -eq $existingPaths[0]) { $existingPaths = @() }
         $missingPaths = @($requiredPaths | Where-Object { $_ -notin $existingPaths })
@@ -363,7 +363,7 @@ try {
             Invoke-AzRestMethod -Path $authUri -Method PUT -Payload ($authConfig | ConvertTo-Json -Depth 10) | Out-Null
             Write-Success "$($missingPaths -join ', ') excluded from Easy Auth"
         } else {
-            Write-Info "/health and /warmup already excluded from Easy Auth"
+            Write-Info "/health, /warmup, and /email-assets/* already excluded from Easy Auth"
         }
     }
 } catch {

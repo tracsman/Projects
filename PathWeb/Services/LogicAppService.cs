@@ -57,6 +57,45 @@ public class LogicAppService
         }
     }
 
+    public async Task<(bool Success, string? Error, string? ResponseBody)> SendNotificationEmailAsync(Tenant tenant, string subject, string htmlBody, string requestedBy)
+    {
+        var triggerUrl = _config["LogicApp:EmailTriggerUrl"];
+        if (string.IsNullOrEmpty(triggerUrl))
+            return (false, "LogicApp:EmailTriggerUrl not configured. Notification email integration is disabled.", null);
+
+        if (string.IsNullOrWhiteSpace(tenant.Contacts))
+            return (false, "Tenant has no contact email addresses configured.", null);
+
+        if (string.IsNullOrWhiteSpace(htmlBody))
+            return (false, "Notification email HTML is empty.", null);
+
+        try
+        {
+            htmlBody = htmlBody.Replace("cid:pathweb-logo", "https://www.pathlab.xyz/email-assets/PFLogo.png", StringComparison.OrdinalIgnoreCase);
+
+            var payload = new
+            {
+                to = tenant.Contacts,
+                subject,
+                htmlBody,
+                tenantName = tenant.TenantName,
+                requestedBy
+            };
+
+            var (body, error) = await PostToLogicApp(triggerUrl, payload);
+            if (error != null)
+                return (false, error, body);
+
+            _logger.LogInformation("Notification email sent for {TenantName} via Logic App to {Recipient}", tenant.TenantName, tenant.Contacts);
+            return (true, null, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send notification email for {TenantName}", tenant.TenantName);
+            return (false, $"{ex.GetType().Name}: {ex.Message}", null);
+        }
+    }
+
     /// <summary>
     /// Updates an existing ADO work item via the Logic App. Returns null on success, or error message.
     /// </summary>
@@ -237,4 +276,5 @@ public class LogicAppService
 
         sb.Append("</table>");
     }
+
 }

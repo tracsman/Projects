@@ -148,6 +148,39 @@ public class AutomationService
         }
     }
 
+    public async Task<bool> DeleteRunbookAsync(string runbookName, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(runbookName))
+            return false;
+
+        try
+        {
+            using var response = await SendRawAsync(
+                HttpMethod.Delete,
+                BuildAccountUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"),
+                null,
+                cancellationToken);
+
+            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _logger.LogInformation("Automation runbook {RunbookName} cleanup {Result}",
+                    runbookName,
+                    response.StatusCode == System.Net.HttpStatusCode.NotFound ? "skipped (already deleted)" : "completed");
+                return true;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("Failed to delete automation runbook {RunbookName}: {StatusCode} {Body}",
+                runbookName, response.StatusCode, body);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to clean up automation runbook {RunbookName}", runbookName);
+            return false;
+        }
+    }
+
     public async Task<AutomationProbeResult> ProbeAccountAsync(CancellationToken cancellationToken = default)
     {
         if (!IsConfigured)

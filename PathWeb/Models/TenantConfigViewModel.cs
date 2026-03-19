@@ -15,4 +15,6 @@ public sealed class TenantConfigViewModel
     public IReadOnlyDictionary<string, IReadOnlyList<AutomationRun>> AutomationRunHistory { get; set; } = new Dictionary<string, IReadOnlyList<AutomationRun>>();
 
     public IReadOnlyDictionary<string, DeviceActionRun> DeviceApplyRuns { get; set; } = new Dictionary<string, DeviceActionRun>();
+
+    public IReadOnlyDictionary<string, EmailSendRun> EmailSendRuns { get; set; } = new Dictionary<string, EmailSendRun>();
 }

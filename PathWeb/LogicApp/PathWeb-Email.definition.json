@@ -1,0 +1,108 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    }
+  },
+  "triggers": {
+    "manual": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "htmlBody": {
+              "type": "string"
+            },
+            "tenantName": {
+              "type": "string"
+            },
+            "requestedBy": {
+              "type": "string"
+            },
+            "inlineAttachments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Name": {
+                    "type": "string"
+                  },
+                  "ContentType": {
+                    "type": "string"
+                  },
+                  "ContentBytes": {
+                    "type": "string"
+                  },
+                  "ContentId": {
+                    "type": "string"
+                  },
+                  "IsInline": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "to",
+            "subject",
+            "htmlBody"
+          ]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Send_an_email_V2": {
+      "type": "ApiConnection",
+      "runAfter": {},
+      "inputs": {
+        "host": {
+          "connection": {
+            "name": "@parameters('$connections')['office365']['connectionId']"
+          }
+        },
+        "method": "post",
+        "path": "/v2/Mail",
+        "body": {
+          "To": "@triggerBody()?['to']",
+          "Subject": "@triggerBody()?['subject']",
+          "Body": "@triggerBody()?['htmlBody']",
+          "Attachments": "@triggerBody()?['inlineAttachments']",
+          "Importance": "Normal"
+        }
+      }
+    },
+    "Response": {
+      "type": "Response",
+      "kind": "Http",
+      "runAfter": {
+        "Send_an_email_V2": [
+          "Succeeded"
+        ]
+      },
+      "inputs": {
+        "statusCode": 200,
+        "body": {
+          "status": "sent",
+          "to": "@triggerBody()?['to']",
+          "subject": "@triggerBody()?['subject']",
+          "tenantName": "@triggerBody()?['tenantName']",
+          "requestedBy": "@triggerBody()?['requestedBy']"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

@@ -110,15 +110,28 @@ public class AutomationController : BaseController
         if (string.IsNullOrWhiteSpace(jobId))
             return Json(new { success = false, output = "Missing job ID." });
 
+        var trackedRun = await _context.AutomationRuns.FirstOrDefaultAsync(r => r.JobId == jobId);
+        if (trackedRun != null && (trackedRun.CompletedDate != null || IsTerminalStatus(trackedRun.Status)))
+        {
+            return Json(new
+            {
+                success = true,
+                run = ToClientModel(trackedRun)
+            });
+        }
+
         var result = await _automationService.GetJobStatusAsync(jobId);
         if (!result.Success)
             return Json(new { success = false, output = result.Error ?? "Failed to read job status." });
 
-        var trackedRun = await _context.AutomationRuns.FirstOrDefaultAsync(r => r.JobId == jobId);
         if (trackedRun != null)
         {
+            var wasTerminal = trackedRun.CompletedDate != null || IsTerminalStatus(trackedRun.Status);
             ApplyJobStatus(trackedRun, result);
             await _context.SaveChangesAsync();
+
+            if (!wasTerminal && result.IsTerminal)
+                await TryCleanupRunbookAsync(trackedRun.RunbookName);
         }
 
         return Json(new
@@ -164,6 +177,7 @@ public class AutomationController : BaseController
             .ToList();
 
         var changed = false;
+        var runbooksToCleanup = new List<string>();
         foreach (var run in runsByConfig.Where(r => !IsTerminalStatus(r.Status)))
         {
             var statusResult = await _automationService.GetJobStatusAsync(run.JobId);
@@ -173,12 +187,18 @@ public class AutomationController : BaseController
                 continue;
             }
 
+            var wasTerminal = run.CompletedDate != null || IsTerminalStatus(run.Status);
             ApplyJobStatus(run, statusResult);
+            if (!wasTerminal && statusResult.IsTerminal && !string.IsNullOrWhiteSpace(run.RunbookName))
+                runbooksToCleanup.Add(run.RunbookName);
             changed = true;
         }
 
         if (changed)
             await _context.SaveChangesAsync();
+
+        foreach (var runbookName in runbooksToCleanup.Distinct(StringComparer.OrdinalIgnoreCase))
+            await TryCleanupRunbookAsync(runbookName);
 
         return Json(new
         {
@@ -203,6 +223,16 @@ public class AutomationController : BaseController
 
         if (result.IsTerminal && run.CompletedDate == null)
             run.CompletedDate = DateTime.UtcNow;
+    }
+
+    private async Task TryCleanupRunbookAsync(string? runbookName)
+    {
+        if (string.IsNullOrWhiteSpace(runbookName))
+            return;
+
+        var deleted = await _automationService.DeleteRunbookAsync(runbookName);
+        if (!deleted)
+            _logger.LogWarning("Automation runbook cleanup did not complete for {RunbookName}", runbookName);
     }
 
     private static bool IsTerminalStatus(string? status) =>

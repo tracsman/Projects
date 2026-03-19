@@ -6,6 +6,9 @@
 - At the start of a new conversation, read TODO.md in the PathWeb project folder (Q:\Bin\git\Projects\PathWeb\TODO.md) for the current action-item list, completed work, and project notes. Update it as items are completed or new work is identified.
 - The Tenant metadata/display label for the temporary pre-save value represented by ConfigVersion=0 should remain 'Server Preference'; ConfigVersion is persisted terminology, but the create/edit UI concept here is still Server Preference and it is not saved to SQL in that form.
 
+## Naming Conventions
+- Use Azure connector/resource naming to follow the pattern `PathWeb-<purpose>-conn`, e.g., `PathWeb-ADO-conn`, instead of generic connector names.
+
 ## Workflow Automation Preferences
 - Prefer Azure Logic Apps over Power Automate for ADO integration workflow automation.
 

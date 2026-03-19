@@ -30,8 +30,10 @@
 param(
     [string]$ResourceGroup = "labinfrastructure",
     [string]$Location = "westus2",
-    [string]$LogicAppName = "PathWeb-ADO",
-    [string]$ConnectionName = "visualstudioteamservices-2",
+    [string]$AdoLogicAppName = "PathWeb-ADO",
+    [string]$AdoConnectionName = "PathWeb-ADO-conn",
+    [string]$EmailLogicAppName = "PathWeb-Email",
+    [string]$EmailConnectionName = "PathWeb-Email-conn",
     [string]$WebAppName = "PathWeb"
 )
 
@@ -57,125 +59,212 @@ Write-Success "Logged in as $($context.Account.Id)"
 
 $subscriptionId = $context.Subscription.Id
 
-# Resolve script directory and definition file
-$scriptDir = $PSScriptRoot
-$definitionFile = Join-Path $scriptDir "LogicApp" "PathWeb-ADO.definition.json"
-if (-not (Test-Path $definitionFile)) {
-    throw "Definition file not found: $definitionFile"
+function Get-DefinitionFile {
+    param([string]$FileName)
+
+    $file = Join-Path $PSScriptRoot "LogicApp" $FileName
+    if (-not (Test-Path $file)) {
+        throw "Definition file not found: $file"
+    }
+
+    Write-Success "Definition file found: $file"
+    return $file
 }
-Write-Success "Definition file found: $definitionFile"
 
-# Check/create the ADO API connection
-Write-Step "Checking Azure DevOps API connection '$ConnectionName'..."
-$connectionUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/connections/$ConnectionName`?api-version=2016-06-01"
-$connResponse = Invoke-AzRestMethod -Path $connectionUri -Method GET
+function Ensure-ApiConnection {
+    param(
+        [string]$Name,
+        [string]$ManagedApiName,
+        [string]$DisplayName
+    )
 
-$needsAuth = $false
-if ($connResponse.StatusCode -eq 200) {
-    $connStatus = ($connResponse.Content | ConvertFrom-Json).properties.statuses[0].status
-    if ($connStatus -eq "Connected") {
-        Write-Success "API connection exists and is authorized"
+    Write-Step "Checking API connection '$Name' ($ManagedApiName)..."
+    $connectionUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/connections/$Name`?api-version=2016-06-01"
+
+    try {
+        $connResponse = Invoke-AzRestMethod -Path $connectionUri -Method GET
+    } catch {
+        $connResponse = $null
+    }
+
+    $needsAuth = $false
+    if ($connResponse -and $connResponse.StatusCode -eq 200) {
+        $connStatus = ($connResponse.Content | ConvertFrom-Json).properties.statuses[0].status
+        if ($connStatus -eq "Connected") {
+            Write-Success "API connection '$Name' exists and is authorized"
+        } else {
+            Write-Info "API connection '$Name' exists but status is: $connStatus (needs authorization)"
+            $needsAuth = $true
+        }
     } else {
-        Write-Info "API connection exists but status is: $connStatus (needs authorization)"
+        Write-Step "Creating API connection '$Name'..."
+        $apiId = "/subscriptions/$subscriptionId/providers/Microsoft.Web/locations/$Location/managedApis/$ManagedApiName"
+        $connBody = @{
+            location = $Location
+            properties = @{
+                api = @{ id = $apiId }
+                displayName = $DisplayName
+            }
+        } | ConvertTo-Json -Depth 10
+
+        Invoke-AzRestMethod -Path $connectionUri -Method PUT -Payload $connBody | Out-Null
+        Write-Success "API connection '$Name' created"
         $needsAuth = $true
     }
-} else {
-    Write-Step "Creating API connection '$ConnectionName'..."
-    $apiId = "/subscriptions/$subscriptionId/providers/Microsoft.Web/locations/$Location/managedApis/visualstudioteamservices"
-    $connBody = @{
-        location = $Location
-        properties = @{
-            api = @{ id = $apiId }
-            displayName = "Azure DevOps (PathWeb)"
-        }
-    } | ConvertTo-Json -Depth 10
 
-    Invoke-AzRestMethod -Path $connectionUri -Method PUT -Payload $connBody | Out-Null
-    Write-Success "API connection created"
-    $needsAuth = $true
+    return @{
+        Name = $Name
+        ManagedApiName = $ManagedApiName
+        ConnectionId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/connections/$Name"
+        ApiId = "/subscriptions/$subscriptionId/providers/Microsoft.Web/locations/$Location/managedApis/$ManagedApiName"
+        NeedsAuth = $needsAuth
+    }
 }
 
-# Deploy the Logic App with the exported definition
-Write-Step "Deploying Logic App '$LogicAppName' from definition file..."
+function Deploy-LogicAppWorkflow {
+    param(
+        [string]$WorkflowName,
+        [string]$DefinitionFile,
+        [hashtable]$Connections
+    )
 
-$definition = Get-Content $definitionFile -Raw | ConvertFrom-Json -AsHashtable
+    Write-Step "Deploying Logic App '$WorkflowName' from definition file..."
+    $definition = Get-Content $DefinitionFile -Raw | ConvertFrom-Json -AsHashtable
 
-$connectionId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/connections/$ConnectionName"
-$apiId = "/subscriptions/$subscriptionId/providers/Microsoft.Web/locations/$Location/managedApis/visualstudioteamservices"
+    $connectionsValue = @{}
+    foreach ($alias in $Connections.Keys) {
+        $connection = $Connections[$alias]
+        $connectionsValue[$alias] = @{
+            connectionId = $connection.ConnectionId
+            connectionName = $connection.Name
+            id = $connection.ApiId
+        }
+    }
 
-$logicAppBody = @{
-    location = $Location
-    properties = @{
-        state = "Enabled"
-        definition = $definition
-        parameters = @{
-            "`$connections" = @{
-                value = @{
-                    visualstudioteamservices = @{
-                        connectionId = $connectionId
-                        connectionName = $ConnectionName
-                        id = $apiId
-                    }
-                    "visualstudioteamservices-1" = @{
-                        connectionId = $connectionId
-                        connectionName = $ConnectionName
-                        id = $apiId
-                    }
+    $logicAppBody = @{
+        location = $Location
+        properties = @{
+            state = "Enabled"
+            definition = $definition
+            parameters = @{
+                "`$connections" = @{
+                    value = $connectionsValue
                 }
             }
         }
+    } | ConvertTo-Json -Depth 30
+
+    $logicAppUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/workflows/$WorkflowName`?api-version=2019-05-01"
+    Invoke-AzRestMethod -Path $logicAppUri -Method PUT -Payload $logicAppBody | Out-Null
+    Write-Success "Logic App '$WorkflowName' deployed"
+}
+
+function Get-LogicAppTriggerUrl {
+    param([string]$WorkflowName)
+
+    Write-Step "Retrieving HTTP trigger URL for '$WorkflowName'..."
+    $callbackUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/workflows/$WorkflowName/triggers/manual/listCallbackUrl?api-version=2019-05-01"
+    $callbackResponse = Invoke-AzRestMethod -Path $callbackUri -Method POST
+    $callbackContent = $callbackResponse.Content | ConvertFrom-Json
+    $triggerUrl = $callbackContent.value
+    if (-not $triggerUrl) {
+        $triggerUrl = $callbackContent.properties.value
     }
-} | ConvertTo-Json -Depth 30
 
-$logicAppUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/workflows/$LogicAppName`?api-version=2019-05-01"
-Invoke-AzRestMethod -Path $logicAppUri -Method PUT -Payload $logicAppBody | Out-Null
-Write-Success "Logic App deployed"
+    return $triggerUrl
+}
 
-# Get the trigger URL
-Write-Step "Retrieving HTTP trigger URL..."
-$callbackUri = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Logic/workflows/$LogicAppName/triggers/manual/listCallbackUrl?api-version=2019-05-01"
-$callbackResponse = Invoke-AzRestMethod -Path $callbackUri -Method POST
-$callbackContent = $callbackResponse.Content | ConvertFrom-Json
-$triggerUrl = $callbackContent.value
-if (-not $triggerUrl) { $triggerUrl = $callbackContent.properties.value }
+function Get-WebAppSetting {
+    param([string]$SettingName)
 
-# Check if trigger URL is already configured in the web app
-$existingUrl = $null
-try {
-    $appSettings = (Invoke-AzRestMethod -Path "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/appsettings/list?api-version=2022-03-01" -Method POST).Content | ConvertFrom-Json
-    $existingUrl = $appSettings.properties.'LogicApp__TriggerUrl'
-} catch {}
+    try {
+        $appSettings = (Invoke-AzRestMethod -Path "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/appsettings/list?api-version=2022-03-01" -Method POST).Content | ConvertFrom-Json
+        return $appSettings.properties.$SettingName
+    } catch {
+        return $null
+    }
+}
 
-$triggerUrlChanged = $existingUrl -ne $triggerUrl
+$adoDefinitionFile = Get-DefinitionFile "PathWeb-ADO.definition.json"
+$emailDefinitionFile = Get-DefinitionFile "PathWeb-Email.definition.json"
+
+$adoConnection = Ensure-ApiConnection -Name $AdoConnectionName -ManagedApiName "visualstudioteamservices" -DisplayName "Azure DevOps (PathWeb)"
+$emailConnection = Ensure-ApiConnection -Name $EmailConnectionName -ManagedApiName "office365" -DisplayName "PathWeb Email"
+
+Deploy-LogicAppWorkflow -WorkflowName $AdoLogicAppName -DefinitionFile $adoDefinitionFile -Connections @{
+    visualstudioteamservices = $adoConnection
+    "visualstudioteamservices-1" = $adoConnection
+}
+
+Deploy-LogicAppWorkflow -WorkflowName $EmailLogicAppName -DefinitionFile $emailDefinitionFile -Connections @{
+    office365 = $emailConnection
+}
+
+$adoTriggerUrl = Get-LogicAppTriggerUrl -WorkflowName $AdoLogicAppName
+$emailTriggerUrl = Get-LogicAppTriggerUrl -WorkflowName $EmailLogicAppName
+
+$existingAdoUrl = Get-WebAppSetting -SettingName 'LogicApp__TriggerUrl'
+$existingEmailUrl = Get-WebAppSetting -SettingName 'LogicApp__EmailTriggerUrl'
+
+$adoTriggerUrlChanged = $existingAdoUrl -ne $adoTriggerUrl
+$emailTriggerUrlChanged = $existingEmailUrl -ne $emailTriggerUrl
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Magenta
 Write-Host "  Deployment Complete!" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
 Write-Host ""
-Write-Success "Logic App: $LogicAppName"
-Write-Success "Connection: $ConnectionName"
+Write-Success "ADO Logic App: $AdoLogicAppName"
+Write-Success "ADO Connection: $AdoConnectionName"
+Write-Success "Email Logic App: $EmailLogicAppName"
+Write-Success "Email Connection: $EmailConnectionName"
 
-if ($needsAuth) {
+if ($adoConnection.NeedsAuth) {
     Write-Host ""
     Write-Info "ACTION REQUIRED: Authorize the ADO connection"
-    Write-Host "  1. Go to: Azure Portal `u{2192} Logic App `u{2192} $LogicAppName `u{2192} Logic App Designer" -ForegroundColor White
+    Write-Host "  1. Go to: Azure Portal `u{2192} Logic App `u{2192} $AdoLogicAppName `u{2192} Logic App Designer" -ForegroundColor White
     Write-Host "  2. Click on a red/warning ADO action `u{2192} Sign in with your Entra ID credentials" -ForegroundColor White
     Write-Host "  3. Save the Logic App in the designer" -ForegroundColor White
 } else {
     Write-Success "ADO connection is authorized"
 }
 
-if ($triggerUrl) {
+if ($emailConnection.NeedsAuth) {
     Write-Host ""
-    if ($triggerUrlChanged) {
+    Write-Info "ACTION REQUIRED: Authorize the email connection"
+    Write-Host "  1. Go to: Azure Portal `u{2192} Logic App `u{2192} $EmailLogicAppName `u{2192} Logic App Designer" -ForegroundColor White
+    Write-Host "  2. Click the Send email action `u{2192} Sign in with the dedicated mailbox account" -ForegroundColor White
+    Write-Host "  3. Save the Logic App in the designer" -ForegroundColor White
+} else {
+    Write-Success "Email connection is authorized"
+}
+
+if ($adoTriggerUrl) {
+    Write-Host ""
+    if ($adoTriggerUrlChanged) {
         Write-Info "Trigger URL has changed. Update the App Service config:"
-        Write-Host "  Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AppSettings @{LogicApp__TriggerUrl='$triggerUrl'; OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID='1f8ac8e7-1665-4a19-974e-f609ce3a3ac1'}" -ForegroundColor White
+        Write-Host "  Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AppSettings @{LogicApp__TriggerUrl='$adoTriggerUrl'; OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID='1f8ac8e7-1665-4a19-974e-f609ce3a3ac1'}" -ForegroundColor White
     } else {
         Write-Success "Trigger URL is already configured in $WebAppName"
     }
 } else {
-    Write-Info "Could not retrieve trigger URL. Get it from: Azure Portal `u{2192} Logic App `u{2192} $LogicAppName `u{2192} Overview"
+    Write-Info "Could not retrieve ADO trigger URL. Get it from: Azure Portal `u{2192} Logic App `u{2192} $AdoLogicAppName `u{2192} Overview"
+}
+
+if ($emailTriggerUrl) {
+    Write-Host ""
+    if ($emailTriggerUrlChanged) {
+        Write-Info "Email trigger URL is ready for later app integration:"
+        Write-Host "  Set-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName -AppSettings @{LogicApp__EmailTriggerUrl='$emailTriggerUrl'}" -ForegroundColor White
+    } else {
+        Write-Success "Email trigger URL is already configured in $WebAppName"
+    }
+
+    Write-Host ""
+    Write-Info "Test the email Logic App with:"
+    Write-Host "  .\test-email-logic-app.ps1 -TriggerUrl '$emailTriggerUrl' -To 'you@example.com'" -ForegroundColor White
+} else {
+    Write-Info "Could not retrieve email trigger URL. Get it from: Azure Portal `u{2192} Logic App `u{2192} $EmailLogicAppName `u{2192} Overview"
 }
 
 Write-Host ""
