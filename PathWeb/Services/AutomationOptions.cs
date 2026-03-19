@@ -6,7 +6,7 @@ public class AutomationOptions
     public string ResourceGroupName { get; set; } = string.Empty;
     public string AccountName { get; set; } = string.Empty;
     public string Location { get; set; } = string.Empty;
-    public string ApiVersion { get; set; } = "2023-11-01";
+    public string ApiVersion { get; set; } = "2024-10-23";
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(SubscriptionId) &&

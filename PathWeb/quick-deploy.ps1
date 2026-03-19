@@ -117,9 +117,10 @@ if (-not $ready) {
     Write-Info "New build did not appear after 5 minutes. Current build may still be swapping in."
 }
 
-Write-Step "Compiling Razor Pages..."
+Write-Step "Compiling MVC/Razor views..."
 $warmupPaths = @("/", "/Tenants", "/Addresses", "/Devices",
                   "/Users", "/ToolTips", "/Logs",
+                  "/Requests/Queue", "/Settings", "/diag/view",
                   "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {

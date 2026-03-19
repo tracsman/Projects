@@ -14,10 +14,13 @@ namespace PathWeb.Services;
 /// </summary>
 public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
 {
+    private static readonly TimeSpan SettingsRefreshInterval = TimeSpan.FromMinutes(1);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ConcurrentQueue<AppLog> _queue = new();
     private readonly Timer _flushTimer;
+    private readonly object _settingsLock = new();
     private readonly HashSet<string> _excludedPrefixes =
     [
         "Microsoft.AspNetCore",
@@ -26,6 +29,8 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
         "Microsoft.Extensions",
         "System.Net.Http"
     ];
+    private LoggingSettingsSnapshot _loggingSettings = new();
+    private DateTime _loggingSettingsLoadedUtc = DateTime.MinValue;
 
     public DbLoggerProvider(IServiceScopeFactory scopeFactory, IHttpContextAccessor httpContextAccessor)
     {
@@ -76,8 +81,71 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
     public bool IsExcluded(string categoryName) =>
         _excludedPrefixes.Any(p => categoryName.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
+    public bool IsEnabled(string categoryName, LogLevel logLevel)
+    {
+        if (logLevel == LogLevel.None || IsExcluded(categoryName))
+            return false;
+
+        var settings = GetLoggingSettings();
+        var minimumLevel = ResolveMinimumLevel(settings, categoryName);
+        return minimumLevel != LogLevel.None && logLevel >= minimumLevel;
+    }
+
     private static string TrimToLength(string value, int maxLength) =>
         value.Length > maxLength ? value[..maxLength] : value;
+
+    private LoggingSettingsSnapshot GetLoggingSettings()
+    {
+        if (DateTime.UtcNow - _loggingSettingsLoadedUtc < SettingsRefreshInterval)
+            return _loggingSettings;
+
+        lock (_settingsLock)
+        {
+            if (DateTime.UtcNow - _loggingSettingsLoadedUtc < SettingsRefreshInterval)
+                return _loggingSettings;
+
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
+                _loggingSettings = settingsService.GetLoggingSettingsAsync().GetAwaiter().GetResult();
+                _loggingSettingsLoadedUtc = DateTime.UtcNow;
+            }
+            catch
+            {
+                if (_loggingSettingsLoadedUtc == DateTime.MinValue)
+                {
+                    _loggingSettings = new LoggingSettingsSnapshot();
+                    _loggingSettingsLoadedUtc = DateTime.UtcNow;
+                }
+            }
+        }
+
+        return _loggingSettings;
+    }
+
+    private static LogLevel ResolveMinimumLevel(LoggingSettingsSnapshot settings, string categoryName)
+    {
+        var candidate = categoryName;
+        while (!string.IsNullOrWhiteSpace(candidate))
+        {
+            if (settings.CategoryLevels.TryGetValue(candidate, out var configuredLevel) &&
+                Enum.TryParse<LogLevel>(configuredLevel, true, out var parsedLevel))
+            {
+                return parsedLevel;
+            }
+
+            var lastDot = candidate.LastIndexOf('.');
+            if (lastDot < 0)
+                break;
+
+            candidate = candidate[..lastDot];
+        }
+
+        return Enum.TryParse<LogLevel>(settings.DefaultLevel, true, out var defaultLevel)
+            ? defaultLevel
+            : LogLevel.Information;
+    }
 
     private void Flush()
     {
@@ -126,8 +194,7 @@ public sealed class DbLogger : ILogger
         _category = category;
     }
 
-    public bool IsEnabled(LogLevel logLevel) =>
-        logLevel >= LogLevel.Information && !_provider.IsExcluded(_category);
+    public bool IsEnabled(LogLevel logLevel) => _provider.IsEnabled(_category, logLevel);
 
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 

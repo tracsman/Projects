@@ -1,0 +1,222 @@
+@model PathWeb.Models.SettingsViewModel
+@{
+    ViewData["Title"] = "Settings";
+    var logLevels = new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" };
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+    <p>Administrative settings for PathWeb.</p>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form asp-action="Index" method="post">
+            @Html.AntiForgeryToken()
+            <div class="form-check form-switch mb-3">
+                @if (Model.CanEdit)
+                {
+                    <input asp-for="AutoDeleteRunbooks" class="form-check-input" role="switch" />
+                }
+                else
+                {
+                    <input asp-for="AutoDeleteRunbooks" class="form-check-input" role="switch" disabled />
+                }
+                <label asp-for="AutoDeleteRunbooks" class="form-check-label fw-semibold">Auto Delete Runbooks</label>
+            </div>
+
+            <div class="text-body-secondary mb-3">
+                When enabled, completed Azure Automation runbooks submitted by PathWeb are deleted from the Automation Account after their final status is saved in SQL. When disabled, the runbooks are left in Azure Automation.
+            </div>
+
+            <div class="small text-body-secondary mb-4">
+                SQL mapping: <code>Settings.SettingName = 'AutoDeleteRunbook'</code> and <code>Settings.ProdVersion = 'true'/'false'</code>.
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="AutomationRunbookType" class="form-label fw-semibold">Automation Runbook Type</label>
+                @if (Model.CanEdit)
+                {
+                    <input asp-for="AutomationRunbookType" class="form-control" />
+                }
+                else
+                {
+                    <input asp-for="AutomationRunbookType" class="form-control" readonly />
+                }
+                <span asp-validation-for="AutomationRunbookType" class="text-danger"></span>
+            </div>
+
+            <div class="text-body-secondary mb-3">
+                Azure Automation runbook type submitted through the REST API. Use <code>PowerShell72</code> for the current PowerShell 7.2 configuration.
+            </div>
+
+            <div class="small text-body-secondary mb-4">
+                SQL mapping: <code>Settings.SettingName = 'AutomationRunbookType'</code> and <code>Settings.ProdVersion = 'PowerShell72'</code>.<br />
+                Portal naming is not explicit here: the current working assumption is that the portal/runtime label <code>PowerShell-7.2</code> collapses to the API runbook type <code>PowerShell72</code>. If Azure follows the same pattern in the future, a later version would likely collapse similarly, but that is based on observed behavior rather than explicit Automation Account documentation.
+            </div>
+
+            <hr />
+
+            <div class="mb-3">
+                <label asp-for="LoggingDefaultLevel" class="form-label fw-semibold">Logging Default Level</label>
+                @if (Model.CanEdit)
+                {
+                    <select asp-for="LoggingDefaultLevel" class="form-select">
+                        @foreach (var level in logLevels)
+                        {
+                            <option value="@level">@level</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input asp-for="LoggingDefaultLevel" class="form-control" readonly />
+                }
+                <span asp-validation-for="LoggingDefaultLevel" class="text-danger"></span>
+            </div>
+
+            <div class="text-body-secondary mb-3">
+                Global minimum level for the SQL-backed application log. Category overrides use the key format <code>Logging:&lt;category&gt;</code> and apply hierarchically to subcategories such as <code>PathWeb.Services</code> → <code>PathWeb.Services.AutomationService</code>.
+            </div>
+
+            <div class="small text-body-secondary mb-3">
+                SQL mapping: <code>Settings.SettingName = 'Logging:Default'</code> for the global level, and <code>Settings.SettingName = 'Logging:&lt;category&gt;'</code> for category overrides. Log levels use ASP.NET names like <code>Trace</code>, <code>Debug</code>, <code>Information</code>, <code>Warning</code>, <code>Error</code>, <code>Critical</code>, and <code>None</code>.
+            </div>
+
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <label class="form-label fw-semibold mb-0">Logging Category Overrides</label>
+                    @if (Model.CanEdit)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="addLoggingOverrideBtn">Add Override</button>
+                    }
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="loggingOverridesTable">
+                        <thead>
+                            <tr>
+                                <th style="width:65%;">Category</th>
+                                <th style="width:25%;">Level</th>
+                                <th style="width:10%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="loggingOverridesBody">
+                            @for (var i = 0; i < Model.LoggingOverrides.Count; i++)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (Model.CanEdit)
+                                        {
+                                            <input asp-for="LoggingOverrides[i].Category" class="form-control form-control-sm" />
+                                        }
+                                        else
+                                        {
+                                            <input asp-for="LoggingOverrides[i].Category" class="form-control form-control-sm" readonly />
+                                        }
+                                        <span asp-validation-for="LoggingOverrides[i].Category" class="text-danger"></span>
+                                    </td>
+                                    <td>
+                                        @if (Model.CanEdit)
+                                        {
+                                            <select asp-for="LoggingOverrides[i].Level" class="form-select form-select-sm">
+                                                @foreach (var level in logLevels)
+                                                {
+                                                    <option value="@level">@level</option>
+                                                }
+                                            </select>
+                                        }
+                                        else
+                                        {
+                                            <input asp-for="LoggingOverrides[i].Level" class="form-control form-control-sm" readonly />
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (Model.CanEdit)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-danger remove-logging-override">Remove</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                @if (Model.CanEdit)
+                {
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary" disabled>Save Settings</button>
+                }
+                <a asp-controller="Home" asp-action="Index" class="btn btn-secondary">Back to Home</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var canEdit = @Model.CanEdit.ToString().ToLowerInvariant();
+            if (!canEdit) {
+                return;
+            }
+
+            var logLevels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(logLevels));
+            var tbody = document.getElementById('loggingOverridesBody');
+            var addBtn = document.getElementById('addLoggingOverrideBtn');
+
+            function buildLevelOptions(selectedLevel) {
+                return logLevels.map(function (level) {
+                    var selected = level === selectedLevel ? ' selected' : '';
+                    return '<option value="' + level + '"' + selected + '>' + level + '</option>';
+                }).join('');
+            }
+
+            function reindexRows() {
+                Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function (row, index) {
+                    var categoryInput = row.querySelector('input[data-kind="category"]');
+                    var levelSelect = row.querySelector('select[data-kind="level"]');
+                    if (categoryInput) {
+                        categoryInput.name = 'LoggingOverrides[' + index + '].Category';
+                        categoryInput.id = 'LoggingOverrides_' + index + '__Category';
+                    }
+                    if (levelSelect) {
+                        levelSelect.name = 'LoggingOverrides[' + index + '].Level';
+                        levelSelect.id = 'LoggingOverrides_' + index + '__Level';
+                    }
+                });
+            }
+
+            function addRow(category, level) {
+                var row = document.createElement('tr');
+                row.innerHTML = ''
+                    + '<td><input class="form-control form-control-sm" data-kind="category" value="' + (category || '') + '" /></td>'
+                    + '<td><select class="form-select form-select-sm" data-kind="level">' + buildLevelOptions(level || 'Information') + '</select></td>'
+                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger remove-logging-override">Remove</button></td>';
+                tbody.appendChild(row);
+                reindexRows();
+            }
+
+            addBtn.addEventListener('click', function () {
+                addRow('', 'Information');
+            });
+
+            tbody.addEventListener('click', function (event) {
+                if (!event.target.classList.contains('remove-logging-override')) {
+                    return;
+                }
+
+                event.target.closest('tr').remove();
+                reindexRows();
+            });
+
+            reindexRows();
+        })();
+    </script>
+}

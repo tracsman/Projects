@@ -134,11 +134,13 @@ public partial class LabConfigContext : DbContext
 
         modelBuilder.Entity<Setting>(entity =>
         {
-            entity.HasNoKey();
+            entity.HasKey(e => e.SettingName);
+
+            entity.ToTable("Settings");
 
             entity.Property(e => e.BetaVersion).HasMaxLength(100);
             entity.Property(e => e.ProdVersion).HasMaxLength(100);
-            entity.Property(e => e.SettingName).HasMaxLength(50);
+            entity.Property(e => e.SettingName).HasMaxLength(256);
         });
 
         modelBuilder.Entity<Tenant>(entity =>

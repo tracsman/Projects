@@ -11,7 +11,8 @@ public class AutomationController : BaseController
     private static readonly HashSet<string> AllowedConfigTypes =
     [
         "CreateERPowerShell",
-        "CreateAzurePowerShell"
+        "CreateAzurePowerShell",
+        "ServiceProviderInstructions"
     ];
 
     private static readonly HashSet<string> TerminalStatuses =
@@ -52,6 +53,15 @@ public class AutomationController : BaseController
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == request.TenantGuid);
         if (tenant == null)
             return Json(new { success = false, output = "Tenant not found." });
+
+        if (string.Equals(request.ConfigType, "ServiceProviderInstructions", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(tenant.Ersku, "None", StringComparison.OrdinalIgnoreCase))
+                return Json(new { success = false, output = "No ExpressRoute circuit is configured for this tenant, so provider provisioning is not required." });
+
+            if (!string.Equals(tenant.EruplinkPort, "ECX", StringComparison.OrdinalIgnoreCase))
+                return Json(new { success = false, output = "This tenant uses ExpressRoute Direct, so provider provisioning is not required." });
+        }
 
         var config = await _context.Configs.FirstOrDefaultAsync(c =>
             c.TenantGuid == request.TenantGuid &&

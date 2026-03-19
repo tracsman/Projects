@@ -5,7 +5,7 @@ namespace PathWeb.Models;
 
 public partial class Setting
 {
-    public string? SettingName { get; set; }
+    public string SettingName { get; set; } = null!;
 
     public string? ProdVersion { get; set; }
 

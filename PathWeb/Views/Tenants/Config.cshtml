@@ -133,7 +133,7 @@ else
             <div class="card-header d-flex justify-content-between align-items-center gap-3 flex-wrap">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <strong>@label</strong>
-                    @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
+                    @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell" || configType == "ServiceProviderInstructions")
                     {
                         <span class="badge text-bg-secondary d-none" id="automationStatusBadge-@configType"></span>
                         <small class="text-body-secondary d-none" id="automationStatusText-@configType"></small>
@@ -166,17 +166,18 @@ else
                     }
                     else if (configType == "ServiceProviderInstructions")
                     {
-                        <button disabled class="btn btn-sm btn-outline-primary">Deploy to Provider</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="automationReopenBtn-@configType" onclick="openAutomationModal('@configType')"@(authLevel < 8 ? " disabled" : "")>Re-open</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="openAutomationModal('@configType')"@(authLevel < 8 ? " disabled" : "")>Deploy to Provider</button>
                     }
                     else if (configType.Contains("SRX") || configType.Contains("MX") || configType.Contains("ASR") || configType.Contains("ISR") || configType.Contains("NX"))
                     {
                         <div class="input-group input-group-sm" style="width: auto;">
                             <select class="form-select form-select-sm" id="action-@configType"@(authLevel < 8 ? " disabled" : "")>
-                                <option value="apply">Apply to Device</option>
+                                <option value="apply" selected>Apply to Device</option>
                                 <option value="compare">Compare to Device</option>
                                 <option value="patch">Patch Device</option>
                                 <option value="remove">Remove from Device</option>
-                                <option value="verify" selected>Verify off Device</option>
+                                <option value="verify">Verify off Device</option>
                             </select>
                             <button class="btn btn-sm btn-outline-primary" onclick="runDeviceAction('@configType')" title="Run the selected action on the device"@(authLevel < 8 ? " disabled" : "")>
                                 <i class="bi bi-play-fill"></i> Run
@@ -191,7 +192,7 @@ else
                 </div>
             </div>
             <textarea readonly rows="10" class="form-control border-0 rounded-0" id="@configType">@configContent</textarea>
-            @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell")
+            @if (configType == "CreateERPowerShell" || configType == "CreateAzurePowerShell" || configType == "ServiceProviderInstructions")
             {
                 <div class="border-top px-3 py-2 bg-body-tertiary">
                     <button class="btn btn-sm btn-link text-decoration-none px-0" type="button" data-bs-toggle="collapse" data-bs-target="#automationHistoryCollapse-@configType" aria-expanded="false" aria-controls="automationHistoryCollapse-@configType">
@@ -727,7 +728,9 @@ else
             resetAutomationModal();
             _automationConfigType = configType;
             _automationJobId = null;
-            document.getElementById('automationModalLabel').textContent = 'Deploy to Azure: ' + configType;
+            document.getElementById('automationModalLabel').textContent = configType === 'ServiceProviderInstructions'
+                ? 'Deploy to Provider: ' + configType
+                : 'Deploy to Azure: ' + configType;
             var existingRun = findAutomationRun(configType, jobId);
             document.getElementById('automationScriptEditor').value = existingRun && existingRun.preparedScript ? existingRun.preparedScript : source.value;
 

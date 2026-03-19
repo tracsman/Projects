@@ -31,6 +31,11 @@
 - [x] **Show device apply status badges** — Persisted `Apply to Device` success/failure attempts in SQL and surfaced per-device status badges/timestamps on the Config page; the device badge is clickable to reopen the last apply result, and PowerShell recent-run sections now default collapsed
 - [x] **Notification eMail** — Dedicated-mailbox Logic App deployment/test setup is working, the `Notification eMail` config card now supports `Send Email` with persisted status badging, and the email logo is served from the public `email-assets` path excluded from Easy Auth
 - [x] **Hide per-device `-out` configs from Config page** — Kept the per-device backout records in SQL for `Remove from Device`, but stopped rendering those individual `-out` config cards in the UI
+- [x] **Provision Provider button** — The `ServiceProviderInstructions` config card now submits the existing `New-LabECX` script through Azure Automation, tracks status/history in SQL, reuses the automation modal/polling flow, skips non-ECX tenants, and creates runbooks in the PowerShell 7.x runtime required by `LabMod`
+- [x] **Admin Settings page** — Added an Admin → Settings page with an `Auto Delete Runbooks` toggle plus an `Automation Runbook Type` field backed by the SQL `Settings` table (`AutoDeleteRunbook` and `AutomationRunbookType` in `SettingName`, values stored in `ProdVersion`), and Azure Automation runbook cleanup now honors the auto-delete value
+- [x] **SQL-backed logging controls** — Added `Logging:Default` plus dynamic `Logging:<category>` overrides on the Admin → Settings page, with hierarchical subcategory matching in the DB logger provider so production verbosity can be tuned without redeploying
+- [x] **Expand quick-deploy/warmup coverage** — `/warmup` now pre-compiles newer EF Core query shapes for requests queue, settings, tenant config run history, logs paging/filtering, and address ordering; `Warmup.ps1` and `quick-deploy.ps1` now also touch `Logs`, `Requests/Queue`, `Settings`, and `diag/view`
+- [x] **Target configured Azure Automation runbook type** — Runbook creation now reads `Settings.SettingName = 'AutomationRunbookType'` and submits that API runbook type dynamically (currently `PowerShell72` for PowerShell 7.2)
 
 ---
 
@@ -48,7 +53,6 @@
   - **Server prep (one-time per server):** Enable OpenSSH Server on each Windows Server 2026 Hyper-V host, configure the service account credentials in Key Vault (same pattern as network device creds)
   - **LabMod module update:** Add a `-Password` (or `-Credential`) parameter to `New-LabVM` / `Remove-LabVM` so the script can run non-interactively via SSH instead of prompting for passwords
   - **App code:** Look up target server from tenant config (e.g., `SEA-ER-04`), resolve its management IP, SSH in via existing `SshService`, run the LabVM PowerShell command, stream output to the modal
-- [ ] **Provision Provider button** — Copy-to-clipboard for now (admin runs `New-LabECX` locally). Future: install `LabMod` module in Azure Automation Account and run as a Runbook (requires ECX API credentials in Automation Account)
 - [ ] **BackoutConfig button** — Wire the BackoutConfig card's action button to execute the combined backout (Azure RG deletion + ECX deprovision + Lab VM removal)
 
 ### Post-Deploy Automation
@@ -81,8 +85,13 @@
 - **Progress**: Poll job status via `GET .../jobs/{id}/output` and stream `Write-Host` lines back to the UI modal
 - **Errors**: Automation API exposes separate Output/Error/Warning streams with timestamps — display errors directly in the modal
 - **Re-runs**: Scripts are idempotent (Try/Get, Catch/New pattern) — user can tweak the textarea and resubmit without risk
-- **Scope**: Covers CreateERPowerShell, CreateAzurePowerShell, and LabVMPowerShell — all three are Az PowerShell scripts
+- **Scope**: Covers CreateERPowerShell, CreateAzurePowerShell, ServiceProviderInstructions, and later LabVMPowerShell via Azure Automation; all Automation-submitted runbooks target the PowerShell 7.x runtime so `LabMod` is available where needed
 - **Setup needed**: One-time creation of an Azure Automation Account with Managed Identity + Contributor role assignment
+
+### PowerShell Runbook Output Hygiene
+
+- [ ] **Replace routine `Write-Host` with `Write-Verbose`** — Update generated/submitted PowerShell scripts so step-by-step chatter goes to the verbose stream instead of the main output stream
+- [ ] **Add final structured `Write-Output` result object** — Emit a concise end-of-run object with multiple properties summarizing the job outcome; exact property schema to be decided later
 
 ---
 

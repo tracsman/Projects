@@ -13,6 +13,8 @@ using PathWeb.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddFilter<DbLoggerProvider>(null, LogLevel.Trace);
+
 // Configure EF Core with Entra ID authentication to Azure SQL
 builder.Services.AddDbContext<LabConfigContext>(options =>
 {
@@ -31,6 +33,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<LogicAppService>();
 builder.Services.Configure<AutomationOptions>(builder.Configuration.GetSection("Automation"));
+builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AutomationService>();
 
 // Register memory cache for field help tooltips
@@ -144,7 +147,7 @@ app.MapGet("/health", () =>
 }).AllowAnonymous();
 
 // Warmup endpoint - forces JIT compilation of EF Core query plans, DI pipeline, and validates SQL connectivity
-app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache) =>
+app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache, SettingsService settingsService) =>
 {
     try
     {
@@ -165,18 +168,41 @@ app.MapGet("/warmup", async (LabConfigContext db, IMemoryCache cache) =>
         // Requests Index: OrderByDescending + Where with Contains
         _ = await db.TenantRequests.OrderByDescending(r => r.RequestedDate).Take(1).ToListAsync();
         _ = await db.TenantRequests.Where(r => r.RequestedBy == "" || (r.Contacts != null && r.Contacts.Contains(""))).Take(1).ToListAsync();
+        // Requests Queue + Admin badge count
+        _ = await db.TenantRequests.Where(r => r.Status == "Pending").OrderBy(r => r.RequestedDate).Take(1).ToListAsync();
+        _ = await db.TenantRequests.CountAsync(r => r.Status == "Pending");
         // Regions dropdown
         _ = await db.Regions.OrderBy(r => r.Region1).Take(1).ToListAsync();
         // Config lookup
         _ = await db.Configs.Where(c => c.TenantGuid == Guid.Empty).ToListAsync();
+        _ = await db.Configs.Where(c => c.TenantGuid == Guid.Empty && c.ConfigVersion == 0).ToListAsync();
         // Single entity lookups (FirstOrDefaultAsync / FindAsync patterns)
         _ = await db.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == Guid.Empty);
         _ = await db.Devices.FirstOrDefaultAsync(d => d.DeviceId == Guid.Empty);
         _ = await db.Users.FirstOrDefaultAsync(u => u.UserName == "");
+        _ = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == "");
         // IP Addresses
         _ = await db.PublicIps.OrderBy(p => p.Lab).Take(1).ToListAsync();
-        // Logs Index: OrderByDescending + Where with Level filter
+        _ = await db.PublicIps.OrderBy(p => p.RangeId).Take(1).ToListAsync();
+        // Logs Index: count/filter/search/paging query shapes
         _ = await db.AppLogs.OrderByDescending(l => l.Id).Take(1).ToListAsync();
+        _ = await db.AppLogs.AsNoTracking().CountAsync();
+        _ = await db.AppLogs.AsNoTracking().Where(l => l.Level == "Information").CountAsync();
+        _ = await db.AppLogs.AsNoTracking()
+            .Where(l => l.Message.Contains("warmup") || l.Category.Contains("warmup") || (l.UserName != null && l.UserName.Contains("warmup")))
+            .CountAsync();
+        _ = await db.AppLogs.AsNoTracking().OrderByDescending(l => l.Id).Skip(0).Take(50).ToListAsync();
+        // Tenant Config page run history queries
+        _ = await db.AutomationRuns.Where(r => r.TenantGuid == Guid.Empty).OrderByDescending(r => r.SubmittedDate).Take(5).ToListAsync();
+        _ = await db.DeviceActionRuns.Where(r => r.TenantGuid == Guid.Empty && r.ActionType == "Apply").OrderByDescending(r => r.SubmittedDate).Take(5).ToListAsync();
+        _ = await db.EmailSendRuns.Where(r => r.TenantGuid == Guid.Empty).OrderByDescending(r => r.SubmittedDate).Take(5).ToListAsync();
+        // Settings table + settings service cache
+        _ = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.SettingName == "AutoDeleteRunbook");
+        _ = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.SettingName == "AutomationRunbookType");
+        _ = await db.Settings.AsNoTracking().FirstOrDefaultAsync(s => s.SettingName == "Logging:Default");
+        _ = await settingsService.GetAutoDeleteRunbooksAsync();
+        _ = await settingsService.GetAutomationRunbookTypeAsync();
+        _ = await settingsService.GetLoggingSettingsAsync();
 
         // Pre-populate the FieldHelp tooltip cache
         var helpDict = await db.FieldHelps.AsNoTracking()

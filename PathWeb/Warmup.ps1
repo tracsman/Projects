@@ -41,10 +41,11 @@ if (-not $ready) {
     Write-Host "  Last error: $lastError" -ForegroundColor Yellow
 }
 
-# 2. Touch auth-protected routes to JIT-compile Razor Pages
-Write-Host "→ Compiling Razor Pages..." -ForegroundColor Cyan
+# 2. Touch auth-protected routes to JIT-compile MVC/Razor views
+Write-Host "→ Compiling MVC/Razor views..." -ForegroundColor Cyan
 $warmupPaths = @("/", "/Tenants", "/Addresses", "/Devices",
-                  "/Users", "/ToolTips",
+                  "/Users", "/ToolTips", "/Logs",
+                  "/Requests/Queue", "/Settings", "/diag/view",
                   "/About", "/About/Lab", "/About/Tenant", "/About/Progress")
 foreach ($path in $warmupPaths) {
     try {

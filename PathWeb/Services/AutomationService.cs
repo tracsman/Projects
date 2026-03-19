@@ -40,20 +40,24 @@ public class AutomationService
 {
     private static readonly string[] TerminalStatuses = ["Completed", "Failed", "Stopped", "Suspended"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private const string RunbookApiVersion = "2024-10-23";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AutomationService> _logger;
     private readonly AutomationOptions _options;
+    private readonly SettingsService _settingsService;
     private readonly TokenCredential _credential;
 
     public AutomationService(
         IHttpClientFactory httpClientFactory,
         IOptions<AutomationOptions> options,
+        SettingsService settingsService,
         ILogger<AutomationService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _options = options.Value;
+        _settingsService = settingsService;
         _credential = new DefaultAzureCredential();
     }
 
@@ -67,14 +71,11 @@ public class AutomationService
         return "Automation settings are incomplete. Configure Automation:SubscriptionId, ResourceGroupName, AccountName, and Location.";
     }
 
-    public string PrepareScriptForAutomation(string script)
+    public string PrepareScriptForAutomation(string configType, string script)
     {
         var normalized = script.Replace("\r\n", "\n").Trim();
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
-
-        if (normalized.Contains("Connect-AzAccount -Identity", StringComparison.OrdinalIgnoreCase))
-            return normalized.Replace("\n", "\r\n");
 
         normalized = Regex.Replace(
             normalized,
@@ -88,7 +89,14 @@ public class AutomationService
             string.Empty,
             RegexOptions.IgnoreCase);
 
-        normalized = "Connect-AzAccount -Identity | Out-Null\n\n" + normalized;
+        var preamble = new List<string>();
+
+        if (!normalized.Contains("Connect-AzAccount -Identity", StringComparison.OrdinalIgnoreCase))
+            preamble.Add("Connect-AzAccount -Identity | Out-Null");
+
+        if (preamble.Count > 0)
+            normalized = string.Join("\n", preamble) + "\n\n" + normalized;
+
         return normalized.Replace("\n", "\r\n");
     }
 
@@ -103,7 +111,7 @@ public class AutomationService
             };
         }
 
-        var preparedScript = PrepareScriptForAutomation(scriptContent);
+        var preparedScript = PrepareScriptForAutomation(configType, scriptContent);
         if (string.IsNullOrWhiteSpace(preparedScript))
         {
             return new AutomationSubmitResult
@@ -115,17 +123,18 @@ public class AutomationService
 
         var runbookName = BuildRunbookName(configType);
         var jobId = Guid.NewGuid().ToString();
+        var runbookType = await _settingsService.GetAutomationRunbookTypeAsync(cancellationToken);
 
         try
         {
-            await CreateOrUpdateRunbookAsync(runbookName, configType, submittedBy, cancellationToken);
+            await CreateOrUpdateRunbookAsync(runbookName, configType, submittedBy, runbookType, cancellationToken);
             await ReplaceDraftContentAsync(runbookName, preparedScript, cancellationToken);
             await PublishRunbookAsync(runbookName, cancellationToken);
             await WaitForRunbookPublishedAsync(runbookName, cancellationToken);
             await StartJobAsync(runbookName, jobId, cancellationToken);
 
-            _logger.LogInformation("Automation runbook {RunbookName} submitted as job {JobId} for {ConfigType} by {User}",
-                runbookName, jobId, configType, submittedBy);
+            _logger.LogInformation("Automation runbook {RunbookName} submitted as job {JobId} for {ConfigType} by {User} using configured runbookType {RunbookType}",
+                runbookName, jobId, configType, submittedBy, runbookType);
 
             return new AutomationSubmitResult
             {
@@ -152,6 +161,13 @@ public class AutomationService
     {
         if (!IsConfigured || string.IsNullOrWhiteSpace(runbookName))
             return false;
+
+        if (!await _settingsService.GetAutoDeleteRunbooksAsync(cancellationToken))
+        {
+            _logger.LogInformation("Automation runbook cleanup skipped for {RunbookName} because AutoDeleteRunbook is disabled",
+                runbookName);
+            return true;
+        }
 
         try
         {
@@ -266,26 +282,27 @@ public class AutomationService
         }
     }
 
-    private async Task CreateOrUpdateRunbookAsync(string runbookName, string configType, string submittedBy, CancellationToken cancellationToken)
+    private async Task CreateOrUpdateRunbookAsync(string runbookName, string configType, string submittedBy, string runbookType, CancellationToken cancellationToken)
     {
         var body = new
         {
             location = _options.Location,
             properties = new
             {
-                runbookType = "PowerShell",
+                runbookType = runbookType,
                 logProgress = true,
                 logVerbose = true,
                 description = $"PathWeb submitted runbook for {configType} by {submittedBy} at {DateTime.UtcNow:u}"
             }
         };
 
-        await SendAsync(HttpMethod.Put, BuildAccountUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"), body, cancellationToken);
+        await SendAsync(HttpMethod.Put, BuildRunbookUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"), body, cancellationToken);
+        _logger.LogInformation("Automation runbook {RunbookName} created using runbookType {RunbookType}", runbookName, runbookType);
     }
 
     private async Task ReplaceDraftContentAsync(string runbookName, string scriptContent, CancellationToken cancellationToken)
     {
-        var url = BuildAccountUrl($"runbooks/{Uri.EscapeDataString(runbookName)}/draft/content");
+        var url = BuildRunbookUrl($"runbooks/{Uri.EscapeDataString(runbookName)}/draft/content");
         var content = new StringContent(scriptContent, Encoding.UTF8, "text/powershell");
 
         var response = await SendRawAsync(HttpMethod.Put, url, content, cancellationToken);
@@ -304,7 +321,7 @@ public class AutomationService
 
     private async Task PublishRunbookAsync(string runbookName, CancellationToken cancellationToken)
     {
-        await EnsureSuccessAsync(await SendRawAsync(HttpMethod.Post, BuildAccountUrl($"runbooks/{Uri.EscapeDataString(runbookName)}/publish"), null, cancellationToken), cancellationToken);
+        await EnsureSuccessAsync(await SendRawAsync(HttpMethod.Post, BuildRunbookUrl($"runbooks/{Uri.EscapeDataString(runbookName)}/publish"), null, cancellationToken), cancellationToken);
     }
 
     private async Task WaitForRunbookPublishedAsync(string runbookName, CancellationToken cancellationToken)
@@ -313,7 +330,7 @@ public class AutomationService
         {
             var runbook = await SendAndReadJsonAsync<RunbookResponse>(
                 HttpMethod.Get,
-                BuildAccountUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"),
+                BuildRunbookUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"),
                 cancellationToken: cancellationToken);
 
             var state = runbook?.Properties?.State;
@@ -420,14 +437,17 @@ public class AutomationService
 
     private static StringContent JsonContent(object value) => new(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
 
-    private string BuildAccountUrl(string? relativePath = null)
+    private string BuildAccountUrl(string? relativePath = null, string? apiVersion = null)
     {
         var accountPath = $"https://management.azure.com/subscriptions/{_options.SubscriptionId}/resourceGroups/{_options.ResourceGroupName}/providers/Microsoft.Automation/automationAccounts/{_options.AccountName}";
+        var version = apiVersion ?? _options.ApiVersion;
         if (string.IsNullOrWhiteSpace(relativePath))
-            return $"{accountPath}?api-version={_options.ApiVersion}";
+            return $"{accountPath}?api-version={version}";
 
-        return $"{accountPath}/{relativePath}?api-version={_options.ApiVersion}";
+        return $"{accountPath}/{relativePath}?api-version={version}";
     }
+
+    private string BuildRunbookUrl(string relativePath) => BuildAccountUrl(relativePath, RunbookApiVersion);
 
     private static string BuildRunbookName(string configType)
     {
