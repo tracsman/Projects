@@ -1,0 +1,42 @@
+@model PathWeb.Models.Tenant
+@{
+    ViewData["Title"] = $"Clone Released Tenant: {Model.TenantName}";
+}
+
+<div class="container bg-body-tertiary rounded p-4 mb-4">
+    <h2>@ViewData["Title"]</h2>
+</div>
+
+<div class="alert alert-warning">
+    <strong>Confirm clone.</strong> A new active tenant record will be created from this released tenant. The new tenant will:
+    <ul class="mt-2 mb-0">
+        <li>Get a new Tenant GUID</li>
+        <li>Get the next available Tenant ID for the lab</li>
+        <li>Reset Config Version back to 0</li>
+        <li>Clear Work Item ID, MSFT P2P, MSFT NAT, BGP Communities, Service Key, and VPN Endpoints</li>
+        <li>Not copy any existing Config records</li>
+    </ul>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header fw-bold">Released Tenant Summary</div>
+    <div class="card-body">
+        <table class="table table-hover mb-0">
+            <tr><th style="width:200px">Tenant Name</th><td>@Model.TenantName</td></tr>
+            <tr><th>Ninja Owner</th><td>@Model.NinjaOwner</td></tr>
+            <tr><th>Contact(s)</th><td>@Model.Contacts</td></tr>
+            <tr><th>Usage</th><td>@Model.Usage</td></tr>
+            <tr><th>Azure Region</th><td>@Model.AzureRegion</td></tr>
+            <tr><th>Released Date</th><td>@Model.DeletedDate?.ToString("u")</td></tr>
+            <tr><th>Released By</th><td>@Model.DeletedBy</td></tr>
+        </table>
+    </div>
+</div>
+
+<form asp-action="Clone" method="post">
+    <input type="hidden" asp-for="TenantGuid" />
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-success">Confirm Clone</button>
+        <a asp-action="Details" asp-route-id="@Model.TenantGuid" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>

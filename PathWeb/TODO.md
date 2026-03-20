@@ -36,6 +36,9 @@
 - [x] **SQL-backed logging controls** — Added `Logging:Default` plus dynamic `Logging:<category>` overrides on the Admin → Settings page, with hierarchical subcategory matching in the DB logger provider so production verbosity can be tuned without redeploying
 - [x] **Expand quick-deploy/warmup coverage** — `/warmup` now pre-compiles newer EF Core query shapes for requests queue, settings, tenant config run history, logs paging/filtering, and address ordering; `Warmup.ps1` and `quick-deploy.ps1` now also touch `Logs`, `Requests/Queue`, `Settings`, and `diag/view`
 - [x] **Target configured Azure Automation runbook type** — Runbook creation now reads `Settings.SettingName = 'AutomationRunbookType'` and submits that API runbook type dynamically (currently `PowerShell72` for PowerShell 7.2)
+- [x] **View released tenants on index** — The Tenants index page now supports switching between active and released tenants using `DeletedDate == null` vs `DeletedDate != null`, and includes server-side pagination so the larger released-tenant list remains usable
+- [x] **Clone released tenant from Details** — Inactive tenant Details pages now hide `Edit` / `Release` / `Create Config`, add a clone confirmation step, and create a new active tenant record with a fresh GUID/TenantID and reset post-deploy fields before redirecting to the new tenant's Details page
+- [x] **Inactive tenant Config page is read-only** — Released tenant Config pages now hide `Create/Regenerate Config`, suppress per-config action buttons, keep copy-to-clipboard available, and prevent UI-triggered config changes for inactive tenants
 
 ---
 
@@ -70,7 +73,6 @@
   - Generate VRF config directly on the Nexus switch (skip SRX)
   - Firewall limited to RDP-to-VM and VM-to-internet policies only
   - Static route on switch (or firewall) for Azure VNet addresses via ER
-- [ ] **View Released Tenants** — Browse released (deleted) tenants in read-only mode, including their generated configs. Option to clone a released tenant as a starting point for a new one.
 
 
 ### Infrastructure / DevOps

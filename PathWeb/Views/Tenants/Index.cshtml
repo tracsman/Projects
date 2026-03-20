@@ -1,6 +1,6 @@
-@model IEnumerable<PathWeb.Models.Tenant>
+@model PathWeb.Models.TenantIndexViewModel
 @{
-    ViewData["Title"] = "Active Tenant List";
+    ViewData["Title"] = Model.ShowReleased ? "Released Tenant List" : "Active Tenant List";
     byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
 }
 
@@ -12,17 +12,23 @@
     <p>The search field will search for any matches in the Lab, Tenant ID, Ninja, Contacts, and Usage fields.</p>
 </div>
 
-<div class="container d-flex justify-content-between align-items-center mb-3">
-    <div>
+<div class="container d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
         @if (authLevel >= 8)
         {
             <a asp-action="Create" class="btn btn-primary">Create New Tenant</a>
         }
+        <div class="btn-group" role="group" aria-label="Tenant list mode">
+            <a asp-action="Index" asp-route-showReleased="false" class="btn @(Model.ShowReleased ? "btn-outline-secondary" : "btn-secondary")">Active Tenants</a>
+            <a asp-action="Index" asp-route-showReleased="true" class="btn @(Model.ShowReleased ? "btn-secondary" : "btn-outline-secondary")">Released Tenants</a>
+        </div>
+        <span class="text-body-secondary small">@Model.TotalCount total</span>
     </div>
     <form method="get" class="d-flex">
-        <input class="form-control me-2" name="searchString" type="search" placeholder="Search" value="@ViewData["CurrentSearch"]" />
+        <input type="hidden" name="showReleased" value="@Model.ShowReleased.ToString().ToLowerInvariant()" />
+        <input class="form-control me-2" name="searchString" type="search" placeholder="Search" value="@Model.SearchString" />
         <button class="btn btn-primary me-1" type="submit">Search</button>
-        <a asp-action="Index" class="btn btn-outline-secondary">Reset</a>
+        <a asp-action="Index" asp-route-showReleased="@Model.ShowReleased" class="btn btn-outline-secondary">Reset</a>
     </form>
 </div>
 
@@ -30,23 +36,23 @@
     <thead class="table-dark">
         <tr>
             <th class="text-center" style="width:10%">
-                <a asp-action="Index" asp-route-sortOrder="@ViewData["LabSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Lab and Tenant Number">Tenant Name</a>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["LabSortParm"]" asp-route-searchString="@Model.SearchString" asp-route-showReleased="@Model.ShowReleased" class="text-light text-decoration-none" title="Sort on Lab and Tenant Number">Tenant Name</a>
             </th>
             <th class="text-center" style="width:8%">
-                <a asp-action="Index" asp-route-sortOrder="@ViewData["NinjaSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Ninja">Ninja</a>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["NinjaSortParm"]" asp-route-searchString="@Model.SearchString" asp-route-showReleased="@Model.ShowReleased" class="text-light text-decoration-none" title="Sort on Ninja">Ninja</a>
             </th>
             <th style="width:22%">Contacts</th>
             <th style="width:8%">
-                <a asp-action="Index" asp-route-sortOrder="@ViewData["DateSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Environment Expiration Date">Expires</a>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["DateSortParm"]" asp-route-searchString="@Model.SearchString" asp-route-showReleased="@Model.ShowReleased" class="text-light text-decoration-none" title="Sort on Environment Expiration Date">Expires</a>
             </th>
             <th style="width:44%">
-                <a asp-action="Index" asp-route-sortOrder="@ViewData["UsageSortParm"]" asp-route-searchString="@ViewData["CurrentSearch"]" class="text-light text-decoration-none" title="Sort on Usage field">Usage</a>
+                <a asp-action="Index" asp-route-sortOrder="@ViewData["UsageSortParm"]" asp-route-searchString="@Model.SearchString" asp-route-showReleased="@Model.ShowReleased" class="text-light text-decoration-none" title="Sort on Usage field">Usage</a>
             </th>
             <th class="text-center" style="width:8%">Action</th>
         </tr>
     </thead>
     <tbody>
-        @foreach (var item in Model)
+        @foreach (var item in Model.Tenants)
         {
             <tr>
                 <td class="text-center">@item.TenantName</td>
@@ -61,3 +67,23 @@
         }
     </tbody>
 </table>
+
+@if (Model.TotalPages > 1)
+{
+    <nav aria-label="Tenant list pages">
+        <ul class="pagination pagination-sm flex-wrap">
+            <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : null)">
+                <a class="page-link" asp-action="Index" asp-route-showReleased="@Model.ShowReleased" asp-route-searchString="@Model.SearchString" asp-route-sortOrder="@Model.SortOrder" asp-route-page="@(Model.CurrentPage - 1)">Previous</a>
+            </li>
+            @for (var pageNumber = 1; pageNumber <= Model.TotalPages; pageNumber++)
+            {
+                <li class="page-item @(pageNumber == Model.CurrentPage ? "active" : null)">
+                    <a class="page-link" asp-action="Index" asp-route-showReleased="@Model.ShowReleased" asp-route-searchString="@Model.SearchString" asp-route-sortOrder="@Model.SortOrder" asp-route-page="@pageNumber">@pageNumber</a>
+                </li>
+            }
+            <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : null)">
+                <a class="page-link" asp-action="Index" asp-route-showReleased="@Model.ShowReleased" asp-route-searchString="@Model.SearchString" asp-route-sortOrder="@Model.SortOrder" asp-route-page="@(Model.CurrentPage + 1)">Next</a>
+            </li>
+        </ul>
+    </nav>
+}

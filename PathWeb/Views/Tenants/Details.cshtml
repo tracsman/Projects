@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = $"Tenant Details: {Model.TenantName}";
     byte authLevel = (byte)(ViewContext.HttpContext.Items["AuthLevel"] ?? (byte)0);
+    var isInactive = Model.DeletedDate != null;
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
@@ -11,9 +12,16 @@
 <div class="d-flex gap-2 mb-3">
     @if (authLevel >= 8)
     {
-        <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
-        <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
-        <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+        @if (!isInactive)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
+            <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
+            <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+        }
+        else
+        {
+            <a asp-action="Clone" asp-route-id="@Model.TenantGuid" class="btn btn-success">Clone Tenant</a>
+        }
     }
     <a asp-action="Config" asp-route-id="@Model.TenantGuid" class="btn btn-primary">View Config</a>
     <a asp-action="Index" class="btn btn-secondary">Back to List</a>
@@ -134,9 +142,16 @@
 <div class="d-flex gap-2">
     @if (authLevel >= 8)
     {
-        <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
-        <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
-        <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+        @if (!isInactive)
+        {
+            <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
+            <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
+            <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+        }
+        else
+        {
+            <a asp-action="Clone" asp-route-id="@Model.TenantGuid" class="btn btn-success">Clone Tenant</a>
+        }
     }
     <a asp-action="Config" asp-route-id="@Model.TenantGuid" class="btn btn-primary">View Config</a>
     <a asp-action="Index" class="btn btn-secondary">Back to List</a>

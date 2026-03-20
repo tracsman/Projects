@@ -8,6 +8,8 @@ public sealed class TenantConfigViewModel
 
     public string Contacts { get; set; } = string.Empty;
 
+    public bool IsInactive { get; set; }
+
     public IReadOnlyList<Config> Configs { get; set; } = Array.Empty<Config>();
 
     public IReadOnlyDictionary<string, AutomationRun> AutomationRuns { get; set; } = new Dictionary<string, AutomationRun>();

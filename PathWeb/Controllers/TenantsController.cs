@@ -24,7 +24,7 @@ public class TenantsController : BaseController
         _sshService = sshService;
     }
 
-    public async Task<IActionResult> Index(string? sortOrder, string? searchString)
+    public async Task<IActionResult> Index(string? sortOrder, string? searchString, bool showReleased = false, int page = 1)
     {
         if (GetAuthLevel() < (byte)AuthLevels.TenantReadOnly)
         {
@@ -38,8 +38,14 @@ public class TenantsController : BaseController
         ViewData["DateSortParm"] = sortOrder == "Date" ? "Date_desc" : "Date";
         ViewData["UsageSortParm"] = sortOrder == "Usage" ? "Usage_desc" : "Usage";
         ViewData["CurrentSearch"] = searchString;
+        ViewData["ShowReleased"] = showReleased;
 
-        var tenants = _context.Tenants.Where(t => t.DeletedDate == null).AsQueryable();
+        const int pageSize = 50;
+
+        var tenants = _context.Tenants
+            .AsNoTracking()
+            .Where(t => showReleased ? t.DeletedDate != null : t.DeletedDate == null)
+            .AsQueryable();
 
         if (!string.IsNullOrEmpty(searchString))
         {
@@ -64,8 +70,28 @@ public class TenantsController : BaseController
             _ => tenants.OrderBy(t => t.Lab).ThenBy(t => t.TenantId),
         };
 
-        _logger.LogInformation("Tenants.Index requested by {User}, sort: {Sort}, search: {Search}", GetUserEmail(), sortOrder ?? "default", searchString ?? "none");
-        return View(await tenants.ToListAsync());
+        var totalCount = await tenants.CountAsync();
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        page = Math.Clamp(page, 1, totalPages);
+
+        var model = new TenantIndexViewModel
+        {
+            Tenants = await tenants
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(),
+            ShowReleased = showReleased,
+            SortOrder = sortOrder,
+            SearchString = searchString,
+            CurrentPage = page,
+            TotalPages = totalPages,
+            TotalCount = totalCount,
+            PageSize = pageSize
+        };
+
+        _logger.LogInformation("Tenants.Index requested by {User}, mode: {Mode}, sort: {Sort}, search: {Search}, page: {Page}",
+            GetUserEmail(), showReleased ? "released" : "active", sortOrder ?? "default", searchString ?? "none", page);
+        return View(model);
     }
 
     public async Task<IActionResult> Details(Guid? id)
@@ -295,6 +321,120 @@ public class TenantsController : BaseController
         return View(tenant);
     }
 
+    public async Task<IActionResult> Clone(Guid? id)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
+        {
+            _logger.LogWarning("Permission denied for Tenants.Clone, user: {User}", GetUserEmail());
+            return View("PermissionError");
+        }
+
+        if (id == null)
+        {
+            TempData["Message"] = "Request missing required Tenant GUID!";
+            TempData["MessageLevel"] = "danger";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == id);
+        if (tenant == null)
+        {
+            TempData["Message"] = "Invalid Tenant GUID requested!";
+            TempData["MessageLevel"] = "danger";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (tenant.DeletedDate == null)
+        {
+            TempData["Message"] = $"Tenant {tenant.TenantName} is already active and cannot be cloned from the released-tenant workflow.";
+            TempData["MessageLevel"] = "warning";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        _logger.LogInformation("Tenants.Clone confirmation for {TenantName} by {User}", tenant.TenantName, GetUserEmail());
+        return View(tenant);
+    }
+
+    [HttpPost, ActionName("Clone")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CloneConfirmed(Guid id)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
+        {
+            _logger.LogWarning("Permission denied for Tenants.Clone [POST], user: {User}", GetUserEmail());
+            return View("PermissionError");
+        }
+
+        var sourceTenant = await _context.Tenants.FindAsync(id);
+        if (sourceTenant == null)
+        {
+            TempData["Message"] = "Invalid Tenant GUID requested!";
+            TempData["MessageLevel"] = "danger";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (sourceTenant.DeletedDate == null)
+        {
+            TempData["Message"] = $"Tenant {sourceTenant.TenantName} is already active and cannot be cloned from the released-tenant workflow.";
+            TempData["MessageLevel"] = "warning";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        var now = DateTime.Now;
+        var clone = new Tenant
+        {
+            TenantGuid = Guid.NewGuid(),
+            Lab = sourceTenant.Lab,
+            TenantId = await GetNextTenantId(sourceTenant.Lab, GetCloneServerPreference(sourceTenant)),
+            ConfigVersion = 0,
+            NinjaOwner = sourceTenant.NinjaOwner,
+            Contacts = sourceTenant.Contacts,
+            ReturnDate = sourceTenant.ReturnDate,
+            Usage = sourceTenant.Usage,
+            AzureRegion = sourceTenant.AzureRegion,
+            Ersku = sourceTenant.Ersku,
+            Erspeed = sourceTenant.Erspeed,
+            EruplinkPort = sourceTenant.EruplinkPort,
+            PvtPeering = sourceTenant.PvtPeering,
+            ErgatewaySize = sourceTenant.ErgatewaySize,
+            ErfastPath = sourceTenant.ErfastPath,
+            Msftpeering = sourceTenant.Msftpeering,
+            Msftp2p = string.Empty,
+            Msftadv = string.Empty,
+            Msfttags = string.Empty,
+            Skey = null,
+            Vpngateway = sourceTenant.Vpngateway,
+            Vpnbgp = sourceTenant.Vpnbgp,
+            Vpnconfig = sourceTenant.Vpnconfig,
+            VpnendPoint = string.Empty,
+            AzVm1 = sourceTenant.AzVm1,
+            AzVm2 = sourceTenant.AzVm2,
+            AzVm3 = sourceTenant.AzVm3,
+            AzVm4 = sourceTenant.AzVm4,
+            AddressFamily = sourceTenant.AddressFamily,
+            LabVm1 = sourceTenant.LabVm1,
+            LabVm2 = sourceTenant.LabVm2,
+            LabVm3 = sourceTenant.LabVm3,
+            LabVm4 = sourceTenant.LabVm4,
+            WorkItemId = 0,
+            AssignedDate = now,
+            AssignedBy = GetUserEmail(),
+            DeletedDate = null,
+            DeletedBy = null,
+            LastUpdateDate = now,
+            LastUpdateBy = GetUserEmail()
+        };
+
+        _context.Tenants.Add(clone);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Tenant cloned from released source {SourceTenantName} to new tenant {TenantName} by {User}",
+            sourceTenant.TenantName, clone.TenantName, GetUserEmail());
+        TempData["Message"] = $"Tenant {sourceTenant.TenantName} was cloned to new active tenant {clone.TenantName}.";
+        TempData["MessageLevel"] = "success";
+        return RedirectToAction(nameof(Details), new { id = clone.TenantGuid });
+    }
+
     [HttpPost, ActionName("Release")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ReleaseConfirmed(Guid id)
@@ -387,6 +527,7 @@ public class TenantsController : BaseController
             TenantGuid = id.Value,
             TenantName = tenant.TenantName,
             Contacts = tenant.Contacts ?? string.Empty,
+            IsInactive = tenant.DeletedDate != null,
             Configs = configs,
             AutomationRuns = latestAutomationRuns
                 .GroupBy(r => r.ConfigType)
@@ -487,6 +628,17 @@ public class TenantsController : BaseController
                 return id;
         }
         return (short)(usedIds.Max() + 1);
+    }
+
+    private static short GetCloneServerPreference(Tenant sourceTenant)
+    {
+        if (sourceTenant.TenantId >= 101)
+            return 100;
+
+        if (sourceTenant.TenantId >= 10 && sourceTenant.TenantId <= 69)
+            return (short)(sourceTenant.TenantId / 10);
+
+        return 0;
     }
 
     private async Task SetDropDowns()
