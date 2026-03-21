@@ -1,4 +1,29 @@
-#Get public and private function definition files.
+# region: module-scope initialisation
+$script:IsInteractive = [Environment]::UserInteractive
+# endregion
+
+# region: internal helper(s)
+function Write-Log {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message,
+        [switch]$TimeStamp = $false
+    )
+
+    if ($script:IsInteractive) {
+        # Friendly local UX
+        if ($TimeStamp) { Write-Host (Get-Date)' - ' -NoNewline }
+        if ($TimeStamp) { Write-Host $Message -ForegroundColor Cyan } else { Write-Host $Message }
+    }
+    else {
+        # Runbook-safe logging
+        if ($TimeStamp) {Write-Verbose "$(Get-Date) - $Message" } else { Write-Verbose $Message }
+    }
+}
+# endregion
+
+
+# Get public function definition files.
     $Public  = @( Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -ErrorAction SilentlyContinue )
 
 #Dot source the files
@@ -14,18 +39,5 @@
         }
     }
 
-$ModuleManifest = Test-ModuleManifest -path $PSScriptRoot\LabMod.psd1
-$script:XMLSchemaVersion = ([string]$ModuleManifest.Version.Major) + "." + ([string]$ModuleManifest.Version.Minor)
-
-Export-ModuleMember -Function Build-LabBaseVHDX
-Export-ModuleMember -Function Build-LabBaseVM
-Export-ModuleMember -Function Copy-ToUbuntu
-Export-ModuleMember -Function Get-LabECX
-Export-ModuleMember -Function New-LabVM
-Export-ModuleMember -Function New-LabVMDrive
-Export-ModuleMember -Function New-LabECX
-Export-ModuleMember -Function Remove-LabECX
-Export-ModuleMember -Function Remove-LabVM
-Export-ModuleMember -Function Uninstall-LabMod
-Export-ModuleMember -Function Update-LabLibrary
-Export-ModuleMember -Function Update-LabMod
+$ManifestData = Import-PowerShellDataFile -Path $PSScriptRoot\LabMod.psd1
+$script:XMLSchemaVersion = "$($ManifestData.ModuleVersion.Split('.')[0]).$($ManifestData.ModuleVersion.Split('.')[1])"
