@@ -287,13 +287,15 @@ function New-LabVM {
 
                 Write-Log "  Rebooting to kick off scripts"
                 Write-Log "  Waiting on VM..."
-                Stop-VM -Name $VMName
+                While ((Get-VM -Name $VMName).State -ne 'Running') { Start-Sleep -Seconds 2 }
+                Stop-VM -Name $VMName -Force
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
                 Start-Sleep 10
                 Write-Log "  Rebooting to instantiate new settings"
                 Write-Log "  Waiting on VM..."
-                Stop-VM -Name $VMName
+                While ((Get-VM -Name $VMName).State -ne 'Running') { Start-Sleep -Seconds 2 }
+                Stop-VM -Name $VMName -Force
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
                 Start-Sleep 10
