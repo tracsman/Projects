@@ -128,7 +128,7 @@ function New-LabVM {
     If (-not (Test-Path $VHDSource)) { Write-Host; Write-Warning "Base .VHDX file ($BaseVHDName) not found"; Write-Host; Return }
 
     # Get admin creds
-    Write-Host "  Grabbing admin secrets"
+    Write-Log "  Grabbing admin secrets"
     if (-not $AdminCred) {
         $AdminCred = Get-Credential -UserName "Administrator" -Message "Enter server Administrator (Server-Admin) password for PathLab"
     }
@@ -138,32 +138,21 @@ function New-LabVM {
     $Users = @($UserCred.UserName, $($UserCred.GetNetworkCredential().Password))
 
     # Send the starting info
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "$Action..." -ForegroundColor Cyan
-    Write-Host "          Lab: " -NoNewline
-    Write-Host "$Lab" -ForegroundColor Yellow
-    Write-Host "    Tenant ID: " -NoNewline
-    Write-Host "$TenantID" -ForegroundColor Yellow
-    Write-Host "       VMName: " -NoNewline
-    Write-Host "$VMName" -ForegroundColor Yellow
-    Write-Host "           OS: " -NoNewline
-    Write-Host "$OS" -ForegroundColor Yellow
-    Write-Verbose "      CopyOnly= $CopyOnly"
-    Write-Verbose "  VMCreateOnly= $VMCreateOnly"
-    Write-Verbose " PostBuildOnly= $PostBuildOnly"
-    Write-Verbose " PwdUpdateOnly= $PwdUpdateOnly"
-
+    Write-Log "$Action..." -TimeStamp
+    Write-Log "          Lab: $Lab"
+    Write-Log "    Tenant ID: $TenantID"
+    Write-Log "       VMName: $VMName"
+    Write-Log "           OS: $OS"
+   
     # 3. Copy VHDX
     If ($CopyOnly) {
-        Write-Host (Get-Date)' - ' -NoNewline
-        Write-Host "Copying VHD for Tenant $TenantID" -ForegroundColor Cyan
+        Write-Log "Copying VHD for Tenant $TenantID" -TimeStamp
         New-LabVMDrive -from $VHDSource -to $VMDisk
     }
 
     # 4. Create VM Object
     If ($VMCreateOnly) {
-        Write-Host (Get-Date)' - ' -NoNewline
-        Write-Host "Creating VM" -ForegroundColor Cyan
+        Write-Log "Creating VM" -TimeStamp
         $VLAN = $TenantID
         $VM = New-VM -Name $VMName -VHDPath $VMDisk -Path $VMConfig -MemoryStartupBytes 4GB -Generation 2
         Set-VM -VM $VM -SnapshotFileLocation $VMConfig -SmartPagingFilePath $VMConfig
@@ -181,21 +170,19 @@ function New-LabVM {
     If ($PostBuildOnly) {
         Switch ($OS) {
             "Server2025" {
-                Write-Host (Get-Date)' - ' -NoNewline
-                Write-Host "Starting VM" -ForegroundColor Cyan
+                Write-Log "Starting VM" -TimeStamp
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For Heartbeat
-                Write-Host (Get-Date)' - ' -NoNewline
-                Write-Host "Pushing post deploy config" -ForegroundColor Cyan
+                Write-Log "Pushing post deploy config" -TimeStamp
 
                 If ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
-                    Write-Host "  Waiting for VM to come online: " -NoNewline
+                    Write-Log "  Waiting for VM to come online: "
                 }
                 While ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
                     Write-Host "*" -NoNewline
                     Start-Sleep -Seconds 1
                 }
-                Write-Host "  VM online, pushing post deploy config"
+                Write-Log "  VM online, pushing post deploy config"
                 Invoke-Command -VMName $VMName -Credential $AdminCred -ScriptBlock {
                     param ($VMName, $TenantID, $Users)
 
@@ -222,18 +209,18 @@ function New-LabVM {
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
                     # Turn On ICMPv4
-                    Write-Host "  Opening ICMPv4 Port"
+                    Write-Log "  Opening ICMPv4 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv4_in -ErrorAction Stop | Out-Null
-                        Write-Host "    Port already open"}
+                        Write-Log "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv4" -Name Allow_ICMPv4_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv4 | Out-Null
-                        Write-Host "    Port opened"}
+                        Write-Log "    Port opened"}
 
                     # Turn On ICMPv6
-                    Write-Host "  Opening ICMPv4 Port"
+                    Write-Log "  Opening ICMPv6 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv6_in -ErrorAction Stop | Out-Null
-                        Write-Host "    Port already open"}
+                        Write-Log "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv6" -Name Allow_ICMPv6_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv6 | Out-Null
-                        Write-Host "    Port opened"}
+                        Write-Log "    Port opened"}
 
                     # Get usernames and passwords
                     $VM_UserName = $Users[0]
@@ -257,18 +244,17 @@ function New-LabVM {
                 $VMIPv6 = $IPv6Prefix + ":" + $TenantID + "::" + $VMHostIP
                 $VMGWv6 = $IPv6Prefix + ":" + $TenantID + "::1"
 
-                Write-Host (Get-Date)' - ' -NoNewline
-                Write-Host "Pushing post deploy config" -ForegroundColor Cyan
+                Write-Log "Pushing post deploy config" -TimeStamp
                 
-                Write-Host "  Updating SecureBootTemplate"
+                Write-Log "  Updating SecureBootTemplate"
                 Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority"
 
-                Write-Host "  Starting VM"
+                Write-Log "  Starting VM"
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
                 Start-Sleep 10
 
-                Write-Host "  Creating startup script"
+                Write-Log "  Creating startup script"
                 mkdir "$env:TEMP\LabMod\" -Force | Out-Null
                 Out-File "$env:TEMP\LabMod\TenantScriptNeeded.txt" -Force -NoNewline -Encoding ascii
                 
@@ -293,20 +279,20 @@ function New-LabVM {
                 $script += "rm /var/tmp/LabMod/temp.txt -f`n"
                 $script | Out-File "$env:TEMP\LabMod\tenant-update.sh" -Force -NoNewline -Encoding ascii
 
-                Write-Host "  Copying startup scripts"
+                Write-Log "  Copying startup scripts"
                 Start-Sleep 10
                 Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\temp.txt" -DestinationPath '/var/tmp/LabMod' -FileSource Host -Force
                 Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\tenant-update.sh" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
                 Copy-VMFile -Name $VMName -SourcePath "$env:TEMP\LabMod\TenantScriptNeeded.txt" -DestinationPath '/var/tmp/LabMod/' -FileSource Host -Force
 
-                Write-Host "  Rebooting to kick off scripts"
-                Write-Host "  Waiting on VM..."
+                Write-Log "  Rebooting to kick off scripts"
+                Write-Log "  Waiting on VM..."
                 Stop-VM -Name $VMName
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
                 Start-Sleep 10
-                Write-Host "  Rebooting to instantiate new settings"
-                Write-Host "  Waiting on VM..."
+                Write-Log "  Rebooting to instantiate new settings"
+                Write-Log "  Waiting on VM..."
                 Stop-VM -Name $VMName
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
@@ -317,17 +303,15 @@ function New-LabVM {
 
     # 5b. Do Password Update
     If ($PwdUpdateOnly) {
-        Write-Host (Get-Date)' - ' -NoNewline
-        Write-Host "Updating Lab VM Passwords" -ForegroundColor Cyan
-
+        Write-Log "Updating Lab VM Passwords" -TimeStamp
         If ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
-            Write-Host "  Waiting for VM to come online: " -NoNewline
+            Write-Log "  Waiting for VM to come online..."
         }
         While ((Invoke-Command -VMName $VMName -Credential $AdminCred { "Administrator" } -ErrorAction SilentlyContinue) -ne "Administrator") {
             Write-Host "*" -NoNewline
             Start-Sleep -Seconds 1
         }
-        Write-Host " VM online, pushing password updates"
+        Write-Log " VM online, pushing password updates"
         Invoke-Command -VMName $VMName -Credential $AdminCred -ScriptBlock {
             param ($Users)
 
@@ -347,8 +331,7 @@ function New-LabVM {
     $Mins = $TimeDiff.Minutes
     $Secs = $TimeDiff.Seconds
     $RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "$Action completed successfully" -ForegroundColor Green
-    Write-Host "Time to create: $RunTime"
+    Write-Log "$Action completed successfully" -TimeStamp
+    Write-Log "Time to create: $RunTime" -TimeStamp
     Write-Host
 }
