@@ -68,7 +68,13 @@ function New-LabVM {
         [switch]$CopyOnly = $false,
         [switch]$VMCreateOnly = $false,
         [switch]$PostBuildOnly = $false,
-        [switch]$PwdUpdateOnly = $false)
+        [switch]$PwdUpdateOnly = $false,
+
+        [Parameter(Mandatory = $false, HelpMessage = 'Optional server admin credential. If omitted, prompt interactively.')]
+        [System.Management.Automation.PSCredential]$AdminCred,
+
+        [Parameter(Mandatory = $false, HelpMessage = 'Optional environment user credential. If omitted, prompt interactively.')]
+        [System.Management.Automation.PSCredential]$UserCred)
 
     #
     # Create On Prem VM Execution Path
@@ -123,9 +129,13 @@ function New-LabVM {
 
     # Get admin creds
     Write-Host "  Grabbing admin secrets"
-    $AdminCred = Get-Credential -UserName Administrator -Message "Enter server Administrator (Server-Admin) password for PathLab"
-    $ServerCred = Get-Credential -UserName $VM_UserName -Message "Enter server Key vault password for company $TenantID"
-    $Users = @($ServerCred.UserName, $($ServerCred.GetNetworkCredential().Password))
+    if (-not $AdminCred) {
+        $AdminCred = Get-Credential -UserName "Administrator" -Message "Enter server Administrator (Server-Admin) password for PathLab"
+    }
+    if (-not $UserCred) {
+        $UserCred = Get-Credential -UserName $VM_UserName -Message "Enter server Key vault password for company $TenantID"
+    }
+    $Users = @($UserCred.UserName, $($UserCred.GetNetworkCredential().Password))
 
     # Send the starting info
     Write-Host (Get-Date)' - ' -NoNewline

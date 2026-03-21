@@ -73,6 +73,19 @@ public class SshService
     }
 
     /// <summary>
+    /// Connects to a host via SSH, explicitly launches pwsh non-interactively, and runs a PowerShell script.
+    /// </summary>
+    public Task<(bool Success, string Output)> RunPowerShellCommandAsync(string host, int port, string script)
+    {
+        if (string.IsNullOrWhiteSpace(script))
+            return Task.FromResult((false, "PowerShell script is empty."));
+
+        var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var command = $"pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encodedCommand}";
+        return RunCommandAsync(host, port, command);
+    }
+
+    /// <summary>
     /// Opens an interactive shell session to apply configuration lines to a network device.
     /// Juniper: configure → load set terminal → commit check → show | compare → commit and-quit
     /// Cisco: configure terminal → apply lines → end → wr

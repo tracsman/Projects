@@ -708,6 +708,68 @@ app.MapGet("/diag", async (
     });
 });
 
+app.MapGet("/diag/test-labvm-ssh", async (
+    HttpContext ctx,
+    LabConfigContext db,
+    SshService sshService,
+    ILoggerFactory loggerFactory,
+    CancellationToken cancellationToken) =>
+{
+    var authLevel = ctx.Items["AuthLevel"] as byte? ?? 0;
+    if (authLevel < (byte)AuthLevels.SiteAdmin)
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = "Permission denied. SiteAdmin access is required.",
+            authLevel
+        }, statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    const string targetServerName = "SEA-ER-08";
+    var logger = loggerFactory.CreateLogger("LabVmDiagnostics");
+
+    var device = await db.Devices
+        .AsNoTracking()
+        .FirstOrDefaultAsync(d => d.Name == targetServerName, cancellationToken);
+
+    if (device == null || string.IsNullOrWhiteSpace(device.MgmtIpv4))
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = $"Device '{targetServerName}' was not found or does not have a management IP in the Devices table."
+        }, statusCode: StatusCodes.Status404NotFound);
+    }
+
+    const string script = """
+$ErrorActionPreference = 'Stop'
+'pwsh-ok'
+hostname
+whoami
+Get-Module -ListAvailable LabMod | Select-Object Name,Version,Path | Format-List
+""";
+
+    logger.LogInformation("Lab VM SSH diagnostic requested by {User} for {DeviceName} ({Host})",
+        ctx.User?.Identity?.Name ?? "(unknown)", device.Name, device.MgmtIpv4);
+
+    var (success, output) = await sshService.RunPowerShellCommandAsync(device.MgmtIpv4, 22, script);
+
+    return Results.Ok(new
+    {
+        success,
+        target = new
+        {
+            device.Name,
+            device.Lab,
+            host = device.MgmtIpv4,
+            hardcoded = true,
+            note = "Temporary Lab VM SSH spike endpoint targeting SEA-ER-08 only."
+        },
+        output
+    });
+});
+
 if (easyAuthEnabled || hasValidEntraId)
 {
     app.UseAuthentication();

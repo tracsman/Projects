@@ -44,7 +44,12 @@
 
 ## 🔧 In Progress
 
-- [ ] *(none right now)*
+- [ ] **Create Lab VMs prerequisites in progress**
+  - `1.1` tested on `SEA-ER-08` — OpenSSH access is working via management IP `10.1.7.81`
+  - `1.2` tested on `SEA-ER-08` — non-interactive remote PowerShell works when SSH explicitly launches `pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass`
+  - `1.2` module check passed on `SEA-ER-08` — `LabMod` is visible to PowerShell 7 (`LabMod` `1.4.1.7` under `C:\Program Files\PowerShell\7\Modules\LabMod`)
+  - current working assumption: PathWeb should connect by management IP from the `Devices` table and explicitly invoke `pwsh` rather than relying on the SSH default shell
+  - temporary admin-only diagnostic endpoint added: `/diag/test-labvm-ssh` resolves hardcoded `SEA-ER-08` from `Devices`, SSHes by management IP, explicitly launches `pwsh`, and returns raw output for the spike/proof-of-concept
 
 ---
 
@@ -56,7 +61,50 @@
   - **Server prep (one-time per server):** Enable OpenSSH Server on each Windows Server 2026 Hyper-V host, configure the service account credentials in Key Vault (same pattern as network device creds)
   - **LabMod module update:** Add a `-Password` (or `-Credential`) parameter to `New-LabVM` / `Remove-LabVM` so the script can run non-interactively via SSH instead of prompting for passwords
   - **App code:** Look up target server from tenant config (e.g., `SEA-ER-04`), resolve its management IP, SSH in via existing `SshService`, run the LabVM PowerShell command, stream output to the modal
-- [ ] **BackoutConfig button** — Wire the BackoutConfig card's action button to execute the combined backout (Azure RG deletion + ECX deprovision + Lab VM removal)
+
+#### Create Lab VMs — Plan of Attack
+
+1. **Prerequisites and host readiness**
+   1.1. Enable and verify OpenSSH Server on each Windows Server 2026 Hyper-V host that PathWeb may target.
+   1.2. Confirm the service account can sign in over SSH and launch PowerShell non-interactively on each target host.
+   1.3. Store Hyper-V host credentials in Azure Key Vault using a clear per-host or per-lab naming convention.
+   1.4. Confirm PathWeb can resolve and read those credentials using the existing managed identity + Key Vault path.
+   1.5. Define the deterministic mapping from tenant/lab/server preference to target Hyper-V host name (for example `SEA` → `SEA-ER-04`).
+
+2. **LabMod and remote command contract**
+   2.1. Update `New-LabVM` / `Remove-LabVM` to accept `-Password` or `-Credential` so they never prompt interactively.
+   2.2. Manually test the non-interactive PowerShell command on a host before wiring it into PathWeb.
+   2.3. Decide the exact command contract PathWeb will send to the host, including tenant inputs, VM selections, credentials, and expected output format.
+   2.4. Define a clean end-of-run output pattern so remote execution can return a useful success/failure summary.
+
+3. **Backend proof-of-concept execution path**
+   3.1. Build a small backend proof-of-concept that resolves tenant → host → management IP → credentials without touching the UI yet.
+   3.2. Reuse `SshService` to connect to a target host and execute the intended PowerShell command remotely.
+   3.3. Capture stdout/stderr and confirm the output is stable enough to surface in the app.
+   3.4. Fail early and clearly when host mapping, management IP, credentials, or SSH connectivity are missing.
+
+4. **App abstractions and safety checks**
+   4.1. Add a dedicated helper/service for tenant-to-host resolution and host credential lookup so controllers stay thin.
+   4.2. Validate that the tenant is active and has sufficient information to determine a target host before running any VM action.
+   4.3. Add guardrails against duplicate/concurrent Lab VM create requests for the same tenant.
+   4.4. Decide whether remove/backout will share the same abstraction once create is working.
+
+5. **UI and operator workflow**
+   5.1. Enable the `Create Lab VMs` action from the `LabVMPowerShell` config card only after backend execution is proven.
+   5.2. Reuse the existing modal pattern if possible so output streaming and status behavior stay consistent with other actions.
+   5.3. Show target host, running state, output, and success/failure clearly in the modal.
+   5.4. Add a confirmation step before the actual create action if the workflow feels risky in practice.
+
+6. **Run history and persistence**
+   6.1. Decide whether Lab VM actions should be persisted similarly to Azure Automation and device actions.
+   6.2. If yes, store tenant, action, target host, submitted by/date, success/failure, and output summary in SQL.
+   6.3. Surface the latest attempt and recent history in the Config page if that proves useful.
+
+7. **Incremental rollout and validation**
+   7.1. Test with a single lab and a single Hyper-V host first.
+   7.2. Validate one simple create scenario end-to-end before generalizing.
+   7.3. After create works, add and test the corresponding remove/backout path.
+   7.4. Only then expand the feature to additional labs/hosts and broader tenant combinations.
 
 ### Post-Deploy Automation
 
@@ -68,32 +116,32 @@
 
 ### Config & Tenant Features
 
+- [ ] **Microsoft Peering BGP Communities helper** — Keep `Msfttags` as the source-of-truth text field, but add an assisted picker/suggestion flow so users do not need to know raw community strings up front:
+  - **Preserve freeform entry:** Continue allowing manual comma/semicolon/newline-separated BGP community input for advanced users and edge cases
+  - **Normalize and validate input:** Parse entered values, trim/dedupe them, allow comma/semicolon/newline separators, and validate the expected `number:number` format before save/config generation
+  - **Add a lightweight picker UI:** Add a searchable modal or side panel that lets users search/select known community entries instead of building a large tree selector
+  - **Support region-based suggestions:** Use the selected Azure Region to suggest likely Microsoft peering communities, but do not silently auto-fill them; let the user explicitly add suggested entries
+  - **Add a small curated catalog:** Back the picker with a maintained catalog of known communities and metadata such as display name, service family, Azure region, geography, and whether an entry is a common default for a region
+  - **Show friendly labels for entered values:** Under the text field, resolve known community values to human-readable labels and flag unknown values as custom/unrecognized so users can review what they entered
+  - **Add preset shortcuts:** Consider lightweight presets such as `Selected Azure region only`, `Selected region + paired region`, `Same geography`, and `Custom`
+  - **Keep storage simple:** Continue storing the final selected/manual values in the existing `Msfttags` text field rather than inventing a more complex persisted structure unless later experience proves it is necessary
+  - **Avoid live doc scraping at runtime:** Populate the catalog from app-managed static data or a DB table rather than scraping Learn pages live in the UI path
+  - **Future follow-up:** If this proves useful in practice, consider adding a small maintenance workflow for refreshing the curated community catalog from Azure documentation updates
 - [ ] **Firewall Bypass mode** — Add a toggle to tenant create/edit that generates a simplified config path bypassing the firewall:
   - New `FirewallBypass` boolean field on the Tenant table
   - Generate VRF config directly on the Nexus switch (skip SRX)
   - Firewall limited to RDP-to-VM and VM-to-internet policies only
   - Static route on switch (or firewall) for Azure VNet addresses via ER
 
-
 ### Infrastructure / DevOps
 
 - [ ] **Storage access for post-install VM scripts** — Post-SFI: investigate whether the App Service Managed Identity can access the Scripts storage account directly, and pass credentials/SAS to VMs during provisioning
-
-### Azure Automation Runbook — Plan of Record
-
-- **Approach**: Submit generated PowerShell to an Azure Automation Account as a runbook job via REST API
-- **Auth**: Automation Account uses a System-assigned Managed Identity with Contributor on the subscription (no credentials in the app)
-- **Script prep**: Replace the `Get-AzContext` login check with `Connect-AzAccount -Identity` before submission; no other ConfigGenerator changes needed
-- **Progress**: Poll job status via `GET .../jobs/{id}/output` and stream `Write-Host` lines back to the UI modal
-- **Errors**: Automation API exposes separate Output/Error/Warning streams with timestamps — display errors directly in the modal
-- **Re-runs**: Scripts are idempotent (Try/Get, Catch/New pattern) — user can tweak the textarea and resubmit without risk
-- **Scope**: Covers CreateERPowerShell, CreateAzurePowerShell, ServiceProviderInstructions, and later LabVMPowerShell via Azure Automation; all Automation-submitted runbooks target the PowerShell 7.x runtime so `LabMod` is available where needed
-- **Setup needed**: One-time creation of an Azure Automation Account with Managed Identity + Contributor role assignment
 
 ### PowerShell Runbook Output Hygiene
 
 - [ ] **Replace routine `Write-Host` with `Write-Verbose`** — Update generated/submitted PowerShell scripts so step-by-step chatter goes to the verbose stream instead of the main output stream
 - [ ] **Add final structured `Write-Output` result object** — Emit a concise end-of-run object with multiple properties summarizing the job outcome; exact property schema to be decided later
+- [ ] **Parse structured runbook result objects in PathWeb** — Once runbooks emit a final structured `Write-Output` object, detect and present its properties cleanly in the modal/history UI instead of showing only raw text
 
 ---
 
