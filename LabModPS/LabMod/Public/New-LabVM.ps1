@@ -290,7 +290,7 @@ function New-LabVM {
                 Stop-VM -Name $VMName
                 Start-VM -Name $VMName
                 Wait-VM -Name $VMName -For IPAddress
-                Start-Sleep 20
+                Start-Sleep 40
                 Write-Log "  Rebooting to instantiate new settings"
                 Write-Log "  Waiting on VM..."
                 Stop-VM -Name $VMName
