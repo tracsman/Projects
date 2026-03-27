@@ -8,363 +8,205 @@
     deploys the GHCAdmin files to OneDrive Commercial and initializes a Git repository.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/<owner>/GHCAdmin/main/Install.ps1 | iex
+    irm https://aka.ms/GHCAdmin | iex
 #>
 
-# ── Helper functions ──────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-function Write-Step {
-    param([string]$Message)
-    Write-Host "`n>> $Message" -ForegroundColor Cyan
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
 }
 
-function Write-OK {
-    param([string]$Message)
-    Write-Host "   [OK] $Message" -ForegroundColor Green
-}
-
-function Write-Warn {
-    param([string]$Message)
-    Write-Host "   [!]  $Message" -ForegroundColor Yellow
-}
-
-function Write-Err {
-    param([string]$Message)
-    Write-Host "   [X]  $Message" -ForegroundColor Red
-}
-
-# ── Prerequisite checks ──────────────────────────────────────────────────────
-
-function Test-VSCode {
-    # Check common locations and PATH
-    if (Get-Command code -ErrorAction SilentlyContinue) { return $true }
-
-    $paths = @(
-        "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe",
-        "$env:ProgramFiles\Microsoft VS Code\Code.exe"
-    )
-    foreach ($p in $paths) {
-        if (Test-Path $p) { return $true }
-    }
+function Find-Exe {
+    param([string]$Name, [string[]]$FallbackPaths)
+    if (Get-Command $Name -ErrorAction SilentlyContinue) { return $true }
+    foreach ($p in $FallbackPaths) { if (Test-Path $p) { return $true } }
     return $false
 }
 
-function Install-VSCode {
-    Write-Step "Installing Visual Studio Code..."
-    $installer = Join-Path $env:TEMP "vscode_install.exe"
+function Install-FromUrl {
+    param([string]$Label, [string]$Url, [string[]]$Args)
+    $installer = Join-Path $env:TEMP "$Label`_install.exe"
+    Write-Host "`n>> Installing $Label..." -ForegroundColor Cyan
     try {
-        Invoke-WebRequest -Uri "https://update.code.visualstudio.com/latest/win32-x64-user/stable" `
-                          -OutFile $installer -UseBasicParsing
-        Start-Process -FilePath $installer -ArgumentList "/verysilent", "/mergetasks=!runcode,addtopath" -Wait
+        Invoke-WebRequest -Uri $Url -OutFile $installer -UseBasicParsing
+        Start-Process -FilePath $installer -ArgumentList $Args -Wait
         Remove-Item $installer -ErrorAction SilentlyContinue
-        # Refresh PATH for the current session
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                     [System.Environment]::GetEnvironmentVariable("Path", "User")
-        if (Test-VSCode) {
-            Write-OK "Visual Studio Code installed successfully."
-        } else {
-            Write-Warn "Installer finished but VS Code was not detected on PATH. You may need to restart your shell."
-        }
+        Refresh-Path
+        return $true
     }
     catch {
-        Write-Err "Failed to download or run the VS Code installer: $_"
+        Write-Host "   [X]  Failed to install ${Label}: $_" -ForegroundColor Red
         return $false
     }
-    return $true
-}
-
-function Test-Git {
-    if (Get-Command git -ErrorAction SilentlyContinue) { return $true }
-
-    $paths = @(
-        "$env:ProgramFiles\Git\cmd\git.exe",
-        "${env:ProgramFiles(x86)}\Git\cmd\git.exe"
-    )
-    foreach ($p in $paths) {
-        if (Test-Path $p) { return $true }
-    }
-    return $false
-}
-
-function Install-Git {
-    Write-Step "Installing Git for Windows..."
-
-    # Query the GitHub API once for the latest release
-    $releaseUrl = "https://api.github.com/repos/git-for-windows/git/releases/latest"
-    try {
-        $release = Invoke-RestMethod -Uri $releaseUrl -UseBasicParsing
-        $asset   = $release.assets | Where-Object { $_.name -match "Git-.*-64-bit\.exe$" } | Select-Object -First 1
-        if (-not $asset) {
-            Write-Err "Could not find a 64-bit installer asset in the latest Git release."
-            return $false
-        }
-        $downloadUrl = $asset.browser_download_url
-    }
-    catch {
-        Write-Err "Failed to query the latest Git release: $_"
-        return $false
-    }
-
-    $installer = Join-Path $env:TEMP "git_install.exe"
-    try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $installer -UseBasicParsing
-        Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
-        Remove-Item $installer -ErrorAction SilentlyContinue
-        # Refresh PATH for the current session
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                     [System.Environment]::GetEnvironmentVariable("Path", "User")
-        if (Test-Git) {
-            Write-OK "Git for Windows installed successfully."
-        } else {
-            Write-Warn "Installer finished but git was not detected on PATH. You may need to restart your shell."
-        }
-    }
-    catch {
-        Write-Err "Failed to download or run the Git installer: $_"
-        return $false
-    }
-    return $true
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "  GHCAdmin — GitHub Copilot Admin Helper"      -ForegroundColor Cyan
+Write-Host "  GHCAdmin - GitHub Copilot Admin Helper"      -ForegroundColor Cyan
 Write-Host "  Installation Script"                          -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
-# -- Check VS Code --
-Write-Step "Checking for Visual Studio Code..."
-if (Test-VSCode) {
-    Write-OK "Visual Studio Code is installed."
+# -- VS Code --
+Write-Host "`n>> Checking for Visual Studio Code..." -ForegroundColor Cyan
+$vscodePaths = @("$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe", "$env:ProgramFiles\Microsoft VS Code\Code.exe")
+if (Find-Exe "code" $vscodePaths) {
+    Write-Host "   [OK] Visual Studio Code is installed." -ForegroundColor Green
 } else {
-    Write-Warn "Visual Studio Code was not found."
-    $response = Read-Host "   Would you like to install Visual Studio Code now? (Y/n)"
-    if ($response -match '^(y|yes)?$') {
-        if (-not (Install-VSCode)) {
-            Write-Err "VS Code installation failed. Please install manually and re-run this script."
-            return
+    Write-Host "   [!]  Visual Studio Code was not found." -ForegroundColor Yellow
+    $r = Read-Host "   Install now? (Y/n)"
+    if ($r -match '^(y|yes)?$') {
+        $ok = Install-FromUrl "VSCode" "https://update.code.visualstudio.com/latest/win32-x64-user/stable" @("/verysilent", "/mergetasks=!runcode,addtopath")
+        if (-not $ok -or -not (Find-Exe "code" $vscodePaths)) {
+            Write-Host "   [X]  VS Code installation failed. Install manually and re-run." -ForegroundColor Red; return
         }
     } else {
-        Write-Err "VS Code is required. Please install it and re-run this script."
-        return
+        Write-Host "   [X]  VS Code is required." -ForegroundColor Red; return
     }
 }
 
-# -- Check Git --
-Write-Step "Checking for Git..."
-if (Test-Git) {
-    Write-OK "Git is installed."
+# -- Git --
+Write-Host "`n>> Checking for Git..." -ForegroundColor Cyan
+$gitPaths = @("$env:ProgramFiles\Git\cmd\git.exe", "${env:ProgramFiles(x86)}\Git\cmd\git.exe")
+if (Find-Exe "git" $gitPaths) {
+    Write-Host "   [OK] Git is installed." -ForegroundColor Green
 } else {
-    Write-Warn "Git was not found."
-    $response = Read-Host "   Would you like to install Git for Windows now? (Y/n)"
-    if ($response -match '^(y|yes)?$') {
-        if (-not (Install-Git)) {
-            Write-Err "Git installation failed. Please install manually and re-run this script."
-            return
+    Write-Host "   [!]  Git was not found." -ForegroundColor Yellow
+    $r = Read-Host "   Install now? (Y/n)"
+    if ($r -match '^(y|yes)?$') {
+        # Resolve latest 64-bit installer URL from GitHub
+        try {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" -UseBasicParsing
+            $gitUrl  = ($release.assets | Where-Object { $_.name -match "Git-.*-64-bit\.exe$" } | Select-Object -First 1).browser_download_url
+        } catch {
+            Write-Host "   [X]  Could not resolve latest Git release: $_" -ForegroundColor Red; return
+        }
+        $ok = Install-FromUrl "Git" $gitUrl @("/VERYSILENT", "/NORESTART")
+        if (-not $ok -or -not (Find-Exe "git" $gitPaths)) {
+            Write-Host "   [X]  Git installation failed. Install manually and re-run." -ForegroundColor Red; return
         }
     } else {
-        Write-Err "Git is required. Please install it and re-run this script."
-        return
+        Write-Host "   [X]  Git is required." -ForegroundColor Red; return
     }
 }
 
-# -- Check OneDrive Commercial --
-Write-Step "Checking for OneDrive Commercial (OneDrive - Microsoft)..."
-if ([string]::IsNullOrWhiteSpace($env:OneDriveCommercial)) {
-    Write-Err "The environment variable `$env:OneDriveCommercial is not set."
-    Write-Err "OneDrive for Work (OneDrive - Microsoft) must be installed and running."
-    Write-Err "Please sign in to OneDrive with your work account and re-run this script."
-    return
+# -- OneDrive Commercial --
+Write-Host "`n>> Checking for OneDrive Commercial..." -ForegroundColor Cyan
+if ([string]::IsNullOrWhiteSpace($env:OneDriveCommercial) -or -not (Test-Path $env:OneDriveCommercial)) {
+    Write-Host "   [X]  OneDrive for Work is not available. Sign in and re-run." -ForegroundColor Red; return
 }
-if (-not (Test-Path $env:OneDriveCommercial)) {
-    Write-Err "OneDriveCommercial points to '$env:OneDriveCommercial' but that path does not exist."
-    Write-Err "Please ensure OneDrive is syncing and re-run this script."
-    return
-}
-Write-OK "OneDrive Commercial is available at: $env:OneDriveCommercial"
+Write-Host "   [OK] $env:OneDriveCommercial" -ForegroundColor Green
 
-Write-Step "Prerequisites verified."
-
-# ── Prompt for target folder ──────────────────────────────────────────────────
+# ── Target folder ─────────────────────────────────────────────────────────────
 
 $defaultFolder = "Documents\Copilot\ToDo"
-Write-Host ""
-Write-Host "   The GHCAdmin repo will be created inside your OneDrive Commercial folder:" -ForegroundColor White
-Write-Host "   $env:OneDriveCommercial" -ForegroundColor Gray
-Write-Host ""
-$folderInput = Read-Host "   Enter a subfolder path (default: $defaultFolder)"
-if ([string]::IsNullOrWhiteSpace($folderInput)) {
-    $folderInput = $defaultFolder
-}
-
+Write-Host "`n   Repo location inside OneDrive Commercial:" -ForegroundColor White
+$folderInput = Read-Host "   Subfolder path (default: $defaultFolder)"
+if ([string]::IsNullOrWhiteSpace($folderInput)) { $folderInput = $defaultFolder }
 $TargetPath = Join-Path $env:OneDriveCommercial $folderInput
 
 if (Test-Path $TargetPath) {
-    Write-Warn "Target folder already exists: $TargetPath"
-    $overwrite = Read-Host "   Continue and overwrite existing files? (y/N)"
-    if ($overwrite -notmatch '^(y|yes)$') {
-        Write-Err "Installation cancelled."
-        return
+    Write-Host "   [!]  Folder already exists: $TargetPath" -ForegroundColor Yellow
+    if ((Read-Host "   Overwrite existing files? (y/N)") -notmatch '^(y|yes)$') {
+        Write-Host "   [X]  Installation cancelled." -ForegroundColor Red; return
     }
 } else {
-    Write-Host "   Folder does not exist: $TargetPath" -ForegroundColor Gray
-    $create = Read-Host "   Create this folder? (Y/n)"
-    if ($create -match '^(y|yes)?$') {
-        try {
-            New-Item -Path $TargetPath -ItemType Directory -Force | Out-Null
-            Write-OK "Created folder: $TargetPath"
-        }
-        catch {
-            Write-Err "Failed to create folder: $_"
-            return
-        }
+    if ((Read-Host "   Create folder '$TargetPath'? (Y/n)") -match '^(y|yes)?$') {
+        try { New-Item -Path $TargetPath -ItemType Directory -Force | Out-Null }
+        catch { Write-Host "   [X]  Failed to create folder: $_" -ForegroundColor Red; return }
+        Write-Host "   [OK] Folder created." -ForegroundColor Green
     } else {
-        Write-Err "Installation cancelled — target folder is required."
-        return
+        Write-Host "   [X]  Installation cancelled." -ForegroundColor Red; return
     }
 }
 
-Write-OK "Target path set to: $TargetPath"
+# ── Git init ──────────────────────────────────────────────────────────────────
 
-# ── Initialize Git repo ──────────────────────────────────────────────────────
-
-Write-Step "Initializing Git repository..."
-Push-Location $TargetPath
-try {
-    if (Test-Path (Join-Path $TargetPath ".git")) {
-        Write-OK "Git repository already exists in this folder — skipping init."
-    } else {
-        git init | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "git init failed."
-            Pop-Location
-            return
-        }
-        Write-OK "Git repository initialized."
-    }
-}
-catch {
-    Write-Err "Failed to initialize Git repository: $_"
+Write-Host "`n>> Initializing Git repository..." -ForegroundColor Cyan
+if (Test-Path (Join-Path $TargetPath ".git")) {
+    Write-Host "   [OK] Already a Git repo — skipping init." -ForegroundColor Green
+} else {
+    Push-Location $TargetPath
+    git init | Out-Null
     Pop-Location
-    return
+    if ($LASTEXITCODE -ne 0) { Write-Host "   [X]  git init failed." -ForegroundColor Red; return }
+    Write-Host "   [OK] Repository initialized." -ForegroundColor Green
 }
-Pop-Location
 
-# ── Download GHCAdmin files ──────────────────────────────────────────────────
+# ── Download files ────────────────────────────────────────────────────────────
 
-# Update this to match your GitHub repository
 $repoOwner = "YourGitHubUser"
 $repoName  = "GHCAdmin"
 $branch    = "main"
 $baseUrl   = "https://raw.githubusercontent.com/$repoOwner/$repoName/$branch/GHCAdmin"
 
-# Files to download (relative to the GHCAdmin folder in the repo)
-$files = @(
-    "README.md",
-    "TODO.md",
-    ".github/copilot-instructions.md"
-)
+$files = @("README.md", "TODO.md", ".github/copilot-instructions.md")
 
-Write-Step "Downloading GHCAdmin files from GitHub..."
-
-$allSucceeded = $true
+Write-Host "`n>> Downloading files from GitHub..." -ForegroundColor Cyan
+$allOk = $true
 foreach ($file in $files) {
-    $url        = "$baseUrl/$file"
-    $destFile   = Join-Path $TargetPath $file
-    $destDir    = Split-Path $destFile -Parent
-
-    # Ensure subdirectories exist
-    if (-not (Test-Path $destDir)) {
-        New-Item -Path $destDir -ItemType Directory -Force | Out-Null
-    }
-
+    $dest    = Join-Path $TargetPath $file
+    $destDir = Split-Path $dest -Parent
+    if (-not (Test-Path $destDir)) { New-Item -Path $destDir -ItemType Directory -Force | Out-Null }
     try {
-        Invoke-WebRequest -Uri $url -OutFile $destFile -UseBasicParsing
-        Write-OK "Downloaded: $file"
-    }
-    catch {
-        Write-Err "Failed to download $file — $_"
-        $allSucceeded = $false
+        Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
+        Write-Host "   [OK] $file" -ForegroundColor Green
+    } catch {
+        Write-Host "   [X]  $file — $_" -ForegroundColor Red
+        $allOk = $false
     }
 }
+if (-not $allOk) { Write-Host "   [!]  Some downloads failed." -ForegroundColor Yellow }
 
-if (-not $allSucceeded) {
-    Write-Warn "Some files could not be downloaded. Check the errors above."
-} else {
-    Write-OK "All files downloaded successfully."
-}
-
-# ── Update copilot-instructions.md with actual target path ────────────────────
+# ── Update copilot-instructions.md path if non-default folder ─────────────────
 
 $instructionsFile = Join-Path $TargetPath ".github\copilot-instructions.md"
-if (Test-Path $instructionsFile) {
+if ((Test-Path $instructionsFile) -and ($folderInput -ne $defaultFolder)) {
     $defaultTodoPath = '$env:OneDriveCommercial\Documents\Copilot\ToDo\TODO.md'
     $actualTodoPath  = '$env:OneDriveCommercial\' + $folderInput + '\TODO.md'
-
-    if ($defaultTodoPath -ne $actualTodoPath) {
-        Write-Step "Updating TODO.md path in copilot-instructions.md..."
-        $content = Get-Content $instructionsFile -Raw
-        $content = $content.Replace($defaultTodoPath, $actualTodoPath)
-        Set-Content -Path $instructionsFile -Value $content -NoNewline
-        Write-OK "Path updated to: $actualTodoPath"
-    }
+    (Get-Content $instructionsFile -Raw).Replace($defaultTodoPath, $actualTodoPath) |
+        Set-Content -Path $instructionsFile -NoNewline
+    Write-Host "   [OK] Updated TODO path in copilot-instructions.md" -ForegroundColor Green
 }
 
 # ── Initial commit ────────────────────────────────────────────────────────────
 
-Write-Step "Creating initial Git commit..."
+Write-Host "`n>> Creating initial commit..." -ForegroundColor Cyan
 Push-Location $TargetPath
-try {
-    git add -A 2>&1 | Out-Null
-    git commit -m "Initial GHCAdmin setup" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn "git commit returned a non-zero exit code — files may already be committed."
-    } else {
-        Write-OK "Initial commit created."
-    }
-}
-catch {
-    Write-Warn "Could not create initial commit: $_"
-}
+git add -A 2>&1 | Out-Null
+git commit -m "Initial GHCAdmin setup" 2>&1 | Out-Null
 Pop-Location
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   [OK] Initial commit created." -ForegroundColor Green
+} else {
+    Write-Host "   [!]  Commit skipped — files may already be committed." -ForegroundColor Yellow
+}
 
 # ── Desktop shortcut ─────────────────────────────────────────────────────────
 
-Write-Step "Creating desktop shortcut..."
-$desktopPath   = [Environment]::GetFolderPath("Desktop")
-$shortcutFile  = Join-Path $desktopPath "GHCAdmin ToDo.lnk"
-
-# Resolve the VS Code executable path
+Write-Host "`n>> Creating desktop shortcut..." -ForegroundColor Cyan
 $codePath = (Get-Command code -ErrorAction SilentlyContinue).Source
 if (-not $codePath) {
-    # Fall back to common install locations
-    $candidates = @(
-        "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe",
-        "$env:ProgramFiles\Microsoft VS Code\Code.exe"
-    )
-    foreach ($c in $candidates) {
-        if (Test-Path $c) { $codePath = $c; break }
-    }
+    foreach ($c in $vscodePaths) { if (Test-Path $c) { $codePath = $c; break } }
 }
-
 if ($codePath) {
     try {
         $shell    = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut($shortcutFile)
+        $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "GHCAdmin ToDo.lnk"))
         $shortcut.TargetPath       = $codePath
         $shortcut.Arguments        = "`"$TargetPath`""
         $shortcut.WorkingDirectory = $TargetPath
         $shortcut.Description      = "Open GHCAdmin ToDo in VS Code"
         $shortcut.Save()
-        Write-OK "Desktop shortcut created: GHCAdmin ToDo.lnk"
-    }
-    catch {
-        Write-Warn "Could not create desktop shortcut: $_"
+        Write-Host "   [OK] Desktop shortcut created." -ForegroundColor Green
+    } catch {
+        Write-Host "   [!]  Could not create shortcut: $_" -ForegroundColor Yellow
     }
 } else {
-    Write-Warn "Could not locate VS Code executable — skipping shortcut creation."
+    Write-Host "   [!]  Could not locate VS Code — skipping shortcut." -ForegroundColor Yellow
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -374,8 +216,6 @@ Write-Host "=============================================" -ForegroundColor Gree
 Write-Host "  Installation complete!"                      -ForegroundColor Green
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Open this folder in VS Code to get started:" -ForegroundColor White
-Write-Host "  $TargetPath"                                  -ForegroundColor Cyan
-Write-Host ""
+Write-Host "  Open in VS Code:  code `"$TargetPath`""     -ForegroundColor Gray
 Write-Host "  Or double-click 'GHCAdmin ToDo' on your Desktop." -ForegroundColor Gray
 Write-Host ""

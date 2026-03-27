@@ -18,19 +18,20 @@ A deployable toolkit that sets up a GitHub Copilot–powered personal task-manag
 
 ## Installation
 
-Run the included installer from an elevated or standard PowerShell prompt:
+Run this one-liner in a PowerShell prompt:
 
 ```powershell
-.\Install.ps1
+irm https://aka.ms/GHCAdmin | iex
 ```
 
 The script will:
 
-1. Create the target folder under your OneDrive Commercial directory
-2. Copy the `GHCAdmin/` contents into it
-3. Initialize a Git repository so Copilot can operate on the files
-
-See `Install.ps1 -Help` for options.
+1. Check and install prerequisites (VS Code, Git)
+2. Verify OneDrive Commercial is available
+3. Create the target folder under your OneDrive Commercial directory
+4. Download the `GHCAdmin/` contents into it
+5. Initialize a Git repository so Copilot can operate on the files
+6. Create a desktop shortcut to launch VS Code with the repo
 
 ## Usage
 
