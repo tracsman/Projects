@@ -138,10 +138,10 @@ if (Test-Path (Join-Path $TargetPath ".git")) {
 
 # ── Download files ────────────────────────────────────────────────────────────
 
-$repoOwner = "YourGitHubUser"
-$repoName  = "GHCAdmin"
+$repoOwner = "tracsman"
+$repoName  = "Projects"
 $branch    = "main"
-$baseUrl   = "https://raw.githubusercontent.com/$repoOwner/$repoName/$branch/GHCAdmin"
+$baseUrl   = "https://raw.githubusercontent.com/$repoOwner/$repoName/$branch/GHCAdmin/GHCAdmin"
 
 $files = @("README.md", "TODO.md", ".github/copilot-instructions.md")
 
