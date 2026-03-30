@@ -110,7 +110,12 @@ $TargetPath = Join-Path $env:OneDriveCommercial $folderInput
 
 if (Test-Path $TargetPath) {
     Write-Host "   [!]  Folder already exists: $TargetPath" -ForegroundColor Yellow
-    if ((Read-Host "   Overwrite existing files? (y/N)") -notmatch '^(y|yes)$') {
+    Write-Host "   [!!] WARNING: Continuing will REPLACE all files in this folder," -ForegroundColor Red
+    Write-Host "   [!!] including your TODO.md. Any tasks you have added will be" -ForegroundColor Red
+    Write-Host "   [!!] PERMANENTLY DELETED and replaced with a blank template." -ForegroundColor Red
+    Write-Host "   [!!] A backup of TODO.md will be created, but other files" -ForegroundColor Red
+    Write-Host "   [!!] (README.md, copilot-instructions.md) will be overwritten." -ForegroundColor Red
+    if ((Read-Host "   Type 'yes' to confirm overwrite (y/N)") -notmatch '^(y|yes)$') {
         Write-Host "   [X]  Installation cancelled." -ForegroundColor Red; return
     }
 } else {
@@ -144,6 +149,25 @@ $branch    = "main"
 $baseUrl   = "https://raw.githubusercontent.com/$repoOwner/$repoName/$branch/GHCAdmin/GHCAdmin"
 
 $files = @("README.md", "TODO.md", ".github/copilot-instructions.md")
+
+# ── Backup TODO.md before overwriting ─────────────────────────────────────────
+
+$todoFile = Join-Path $TargetPath "TODO.md"
+if (Test-Path $todoFile) {
+    Write-Host "`n>> Backing up existing TODO.md..." -ForegroundColor Cyan
+    $bakPath = Join-Path $TargetPath "TODO.md.bak"
+    if (Test-Path $bakPath) {
+        $i = 2
+        while (Test-Path (Join-Path $TargetPath "TODO.md.bak$i")) { $i++ }
+        $bakPath = Join-Path $TargetPath "TODO.md.bak$i"
+    }
+    try {
+        Copy-Item -Path $todoFile -Destination $bakPath -Force
+        Write-Host "   [OK] Backup saved to $(Split-Path $bakPath -Leaf)" -ForegroundColor Green
+    } catch {
+        Write-Host "   [X]  Failed to back up TODO.md: $_" -ForegroundColor Red; return
+    }
+}
 
 Write-Host "`n>> Downloading files from GitHub..." -ForegroundColor Cyan
 $allOk = $true
