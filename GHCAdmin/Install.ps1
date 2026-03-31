@@ -108,6 +108,30 @@ $folderInput = Read-Host "   Subfolder path (default: $defaultFolder)"
 if ([string]::IsNullOrWhiteSpace($folderInput)) { $folderInput = $defaultFolder }
 $TargetPath = Join-Path $env:OneDriveCommercial $folderInput
 
+# ── Desktop shortcut (runs early so it's created even if overwrite is declined) ─
+
+Write-Host "`n>> Creating desktop shortcut..." -ForegroundColor Cyan
+$codePath = (Get-Command code -ErrorAction SilentlyContinue).Source
+if (-not $codePath) {
+    foreach ($c in $vscodePaths) { if (Test-Path $c) { $codePath = $c; break } }
+}
+if ($codePath) {
+    try {
+        $shell    = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "GHCAdmin ToDo.lnk"))
+        $shortcut.TargetPath       = $codePath
+        $shortcut.Arguments        = "`"$TargetPath`""
+        $shortcut.WorkingDirectory = $TargetPath
+        $shortcut.Description      = "Open GHCAdmin ToDo in VS Code"
+        $shortcut.Save()
+        Write-Host "   [OK] Desktop shortcut created." -ForegroundColor Green
+    } catch {
+        Write-Host "   [!]  Could not create shortcut: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "   [!]  Could not locate VS Code — skipping shortcut." -ForegroundColor Yellow
+}
+
 if (Test-Path $TargetPath) {
     Write-Host "   [!]  Folder already exists: $TargetPath" -ForegroundColor Yellow
     Write-Host "   [!!] WARNING: Continuing will REPLACE all files in this folder," -ForegroundColor Red
@@ -207,30 +231,6 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "   [OK] Initial commit created." -ForegroundColor Green
 } else {
     Write-Host "   [!]  Commit skipped — files may already be committed." -ForegroundColor Yellow
-}
-
-# ── Desktop shortcut ─────────────────────────────────────────────────────────
-
-Write-Host "`n>> Creating desktop shortcut..." -ForegroundColor Cyan
-$codePath = (Get-Command code -ErrorAction SilentlyContinue).Source
-if (-not $codePath) {
-    foreach ($c in $vscodePaths) { if (Test-Path $c) { $codePath = $c; break } }
-}
-if ($codePath) {
-    try {
-        $shell    = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath("Desktop")) "GHCAdmin ToDo.lnk"))
-        $shortcut.TargetPath       = $codePath
-        $shortcut.Arguments        = "`"$TargetPath`""
-        $shortcut.WorkingDirectory = $TargetPath
-        $shortcut.Description      = "Open GHCAdmin ToDo in VS Code"
-        $shortcut.Save()
-        Write-Host "   [OK] Desktop shortcut created." -ForegroundColor Green
-    } catch {
-        Write-Host "   [!]  Could not create shortcut: $_" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "   [!]  Could not locate VS Code — skipping shortcut." -ForegroundColor Yellow
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
