@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Designed to be run directly from GitHub (e.g. via iex). Interactively prompts for
-    configuration, checks prerequisites (VS Code, Git), installs missing tools, then
-    deploys the GHCAdmin files to OneDrive Commercial and initializes a Git repository.
+    configuration, checks prerequisites (VS Code), installs missing tools, then
+    deploys the GHCAdmin files to OneDrive Commercial.
 
 .EXAMPLE
     irm https://aka.ms/GHCAdmin | iex
@@ -68,31 +68,6 @@ if (Find-Exe "code" $vscodePaths) {
     }
 }
 
-# -- Git --
-Write-Host "`n>> Checking for Git..." -ForegroundColor Cyan
-$gitPaths = @("$env:ProgramFiles\Git\cmd\git.exe", "${env:ProgramFiles(x86)}\Git\cmd\git.exe")
-if (Find-Exe "git" $gitPaths) {
-    Write-Host "   [OK] Git is installed." -ForegroundColor Green
-} else {
-    Write-Host "   [!]  Git was not found." -ForegroundColor Yellow
-    $r = Read-Host "   Install now? (Y/n)"
-    if ($r -match '^(y|yes)?$') {
-        # Resolve latest 64-bit installer URL from GitHub
-        try {
-            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" -UseBasicParsing
-            $gitUrl  = ($release.assets | Where-Object { $_.name -match "Git-.*-64-bit\.exe$" } | Select-Object -First 1).browser_download_url
-        } catch {
-            Write-Host "   [X]  Could not resolve latest Git release: $_" -ForegroundColor Red; return
-        }
-        $ok = Install-FromUrl "Git" $gitUrl @("/VERYSILENT", "/NORESTART")
-        if (-not $ok -or -not (Find-Exe "git" $gitPaths)) {
-            Write-Host "   [X]  Git installation failed. Install manually and re-run." -ForegroundColor Red; return
-        }
-    } else {
-        Write-Host "   [X]  Git is required." -ForegroundColor Red; return
-    }
-}
-
 # -- OneDrive Commercial --
 Write-Host "`n>> Checking for OneDrive Commercial..." -ForegroundColor Cyan
 if ([string]::IsNullOrWhiteSpace($env:OneDriveCommercial) -or -not (Test-Path $env:OneDriveCommercial)) {
@@ -103,7 +78,7 @@ Write-Host "   [OK] $env:OneDriveCommercial" -ForegroundColor Green
 # ── Target folder ─────────────────────────────────────────────────────────────
 
 $defaultFolder = "Documents\Copilot\ToDo"
-Write-Host "`n   Repo location inside OneDrive Commercial:" -ForegroundColor White
+Write-Host "`n   Folder location inside OneDrive Commercial:" -ForegroundColor White
 $folderInput = Read-Host "   Subfolder path (default: $defaultFolder)"
 if ([string]::IsNullOrWhiteSpace($folderInput)) { $folderInput = $defaultFolder }
 $TargetPath = Join-Path $env:OneDriveCommercial $folderInput
@@ -150,19 +125,6 @@ if (Test-Path $TargetPath) {
     } else {
         Write-Host "   [X]  Installation cancelled." -ForegroundColor Red; return
     }
-}
-
-# ── Git init ──────────────────────────────────────────────────────────────────
-
-Write-Host "`n>> Initializing Git repository..." -ForegroundColor Cyan
-if (Test-Path (Join-Path $TargetPath ".git")) {
-    Write-Host "   [OK] Already a Git repo — skipping init." -ForegroundColor Green
-} else {
-    Push-Location $TargetPath
-    git init | Out-Null
-    Pop-Location
-    if ($LASTEXITCODE -ne 0) { Write-Host "   [X]  git init failed." -ForegroundColor Red; return }
-    Write-Host "   [OK] Repository initialized." -ForegroundColor Green
 }
 
 # ── Download files ────────────────────────────────────────────────────────────
@@ -218,19 +180,6 @@ if ((Test-Path $instructionsFile) -and ($folderInput -ne $defaultFolder)) {
     (Get-Content $instructionsFile -Raw).Replace($defaultTodoPath, $actualTodoPath) |
         Set-Content -Path $instructionsFile -NoNewline
     Write-Host "   [OK] Updated TODO path in copilot-instructions.md" -ForegroundColor Green
-}
-
-# ── Initial commit ────────────────────────────────────────────────────────────
-
-Write-Host "`n>> Creating initial commit..." -ForegroundColor Cyan
-Push-Location $TargetPath
-git add -A 2>&1 | Out-Null
-git commit -m "Initial GHCAdmin setup" 2>&1 | Out-Null
-Pop-Location
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "   [OK] Initial commit created." -ForegroundColor Green
-} else {
-    Write-Host "   [!]  Commit skipped — files may already be committed." -ForegroundColor Yellow
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
