@@ -102,6 +102,7 @@ The deployment creates three virtual networks with the following components:
 | Schedule | vpn-disconnect-daily-5pm | Daily 5:00 PM CST - disconnects VPN |
 | Role Assignment | Network Contributor (RG) | Automation MI manages VPN connections |
 | Role Assignment | Key Vault Secrets User (KV) | Automation MI reads VPN shared key |
+| Role Assignment | Virtual Machine Contributor (RG) | Automation MI restarts strongSwan on router |
 | Role Assignment | Automation Contributor (AA) | Deployment script MI publishes runbooks |
 
 ### VMSS & Monitoring Resources
@@ -140,10 +141,10 @@ The `vpnControl` runbook manages the S2S VPN connection on a daily schedule:
 
 | Action | Schedule | What It Does |
 | ------ | -------- | ------------ |
-| **On** | 9:00 AM CST daily | Restores shared key from Key Vault, connects VPN |
-| **Off** | 5:00 PM CST daily | Rotates shared key to random value, disconnects VPN |
+| **On** | 9:00 AM CST daily | Restores shared key from Key Vault, restarts strongSwan on router |
+| **Off** | 5:00 PM CST daily | Rotates shared key to random value, tunnel drops |
 
-The runbook includes idempotency checks (skips if already in desired state) and PSK rotation for security (randomized key on disconnect, restored from Key Vault on connect).
+The runbook includes PSK rotation for security (randomized key on disconnect, restored from Key Vault on connect). On connect, it remotely restarts strongSwan on VNet03-router01 via `Invoke-AzVMRunCommand` to re-initiate the tunnel.
 
 ## VM Specifications
 

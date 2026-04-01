@@ -1113,6 +1113,16 @@ resource automationKeyVaultSecretsUserRole 'Microsoft.Authorization/roleAssignme
   }
 }
 
+// Virtual Machine Contributor on the resource group (for running commands on router VM)
+resource automationVmContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, automationAccount.id, '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')
+  properties: {
+    principalId: automationAccount.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')
+  }
+}
+
 // Automation Contributor on the Automation Account (for deployment script to publish runbooks)
 resource deployScriptAutomationContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: automationAccount
@@ -1146,7 +1156,7 @@ resource publishRunbookScript 'Microsoft.Resources/deploymentScripts@2023-08-01'
     }
   }
   properties: {
-    forceUpdateTag: '1.0.2'
+    forceUpdateTag: '1.0.8'
     azPowerShellVersion: '11.0'
     timeout: 'PT10M'
     retentionInterval: 'PT1H'
@@ -1176,64 +1186,54 @@ param(
     [string]$Action
 )
 
+$ErrorActionPreference = 'Stop'
+
 # Static configuration
 $ResourceGroupName = "VPN-jonor"
 $ConnectionName    = "VNet01-conn-vnet03-s2s"
 $KeyVaultName      = "jonor-2jv6ghsaeyzaq"
 $VpnKeySecretName  = "vpn-shared-key"
+$RouterVmName      = "VNet03-router01"
 
-# Auth (Managed Identity recommended)
-Connect-AzAccount -Identity
+# Auth with Managed Identity (Azure China cloud)
+Connect-AzAccount -Identity -Environment AzureChinaCloud -WarningAction SilentlyContinue | Out-Null
 
 Write-Output "Action: $Action"
 Write-Output "Connection: $ConnectionName"
-
-# Idempotency check
-$connection = Get-AzVirtualNetworkGatewayConnection `
-    -ResourceGroupName $ResourceGroupName `
-    -Name $ConnectionName
-
-if ($Action -eq "Off" -and $connection.ConnectionStatus -eq "Disconnected") {
-    Write-Output "Already disconnected. No action taken."
-    return
-}
-
-if ($Action -eq "On" -and $connection.ConnectionStatus -eq "Connected") {
-    Write-Output "Already connected. No action taken."
-    return
-}
 
 switch ($Action) {
 
     "On" {
         Write-Output "Restoring shared key from Key Vault..."
-        $secret = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name $VpnKeySecretName
-        $sharedKey = $secret.SecretValue | ConvertFrom-SecureString -AsPlainText
+        $sharedKey = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name $VpnKeySecretName -AsPlainText
 
-        Set-AzVirtualNetworkGatewayConnectionSharedKey `
+        $null = Set-AzVirtualNetworkGatewayConnectionSharedKey `
             -ResourceGroupName $ResourceGroupName `
             -Name $ConnectionName `
-            -Value $sharedKey
+            -Value $sharedKey `
+            -Force
 
-        Write-Output "Connecting S2S VPN connection..."
-        Connect-AzVirtualNetworkGatewayConnection `
+        Write-Output "Shared key restored. Restarting strongSwan on router..."
+        $null = Invoke-AzVMRunCommand `
             -ResourceGroupName $ResourceGroupName `
-            -Name $ConnectionName
+            -VMName $RouterVmName `
+            -CommandId 'RunShellScript' `
+            -ScriptString 'ipsec restart'
+
+        Write-Output "strongSwan restarted. VPN tunnel re-initiating."
     }
 
     "Off" {
         $disabledKey = "disabled-$(Get-Random -Minimum 100000 -Maximum 999999)"
-        Write-Output "Changing shared key to '$disabledKey'..."
+        Write-Output "Changing shared key to invalidate tunnel..."
 
         Set-AzVirtualNetworkGatewayConnectionSharedKey `
             -ResourceGroupName $ResourceGroupName `
             -Name $ConnectionName `
-            -Value $disabledKey
+            -Value $disabledKey `
+            -Force
 
-        Write-Output "Disconnecting S2S VPN connection..."
-        Disconnect-AzVirtualNetworkGatewayConnection `
-            -ResourceGroupName $ResourceGroupName `
-            -Name $ConnectionName
+        Write-Output "Shared key changed. VPN tunnel will drop."
     }
 }
 
