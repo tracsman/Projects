@@ -9,7 +9,6 @@ Running the installer (`irm https://aka.ms/GHCAdmin | iex`) made the following c
 ### Prerequisites Installed (if missing)
 
 - **Visual Studio Code** — installed to `%LOCALAPPDATA%\Programs\Microsoft VS Code` and added to PATH
-- **Git for Windows** — installed to `%ProgramFiles%\Git` and added to PATH
 
 ### Files Created in OneDrive
 
@@ -20,10 +19,6 @@ A folder was created inside your OneDrive Commercial directory (default: `Docume
 | `TODO.md` | Your structured task list with Tasks, Projects, Recurring, and Completed sections |
 | `README.md` | This file — your getting-started guide |
 | `.github/copilot-instructions.md` | Personality and rules that GitHub Copilot follows when managing your tasks |
-
-### Git Repository
-
-The folder was initialized as a local Git repository with an initial commit. This enables GitHub Copilot to work with the files inside VS Code. Because it lives in OneDrive, your TODO file syncs automatically across your devices.
 
 ### Desktop Shortcut
 
@@ -66,10 +61,6 @@ When you finish something, tell Copilot:
 
 - *"Mark 'Finish quarterly report' as done"* — Copilot checks the box and moves it to the Completed section
 - Recurring items are never archived — Copilot unchecks them and advances the next-due date automatically
-
-### 6. Commit Your Changes
-
-Use VS Code's built-in Source Control panel (`Ctrl+Shift+G`) or run `git commit` from the terminal to save snapshots of your TODO over time. This gives you a full history of changes.
 
 ## TODO.md Structure
 
