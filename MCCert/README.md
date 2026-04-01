@@ -4,7 +4,7 @@ This Bicep template deploys a multi-VNet infrastructure in Azure China (China No
 
 ## Architecture
 
-![Architecture Diagram](media/Setup.vsdx)
+![Architecture Diagram](media/Setup.svg)
 
 ## Overview
 
