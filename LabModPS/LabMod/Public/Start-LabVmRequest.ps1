@@ -8,6 +8,8 @@ function Start-LabVmRequest {
         [ValidateSet('Server2025', 'Ubuntu')]
         [string]$OS = 'Server2025',
 
+        [string]$RunId,
+
         [Parameter(Mandatory = $false, HelpMessage = 'Optional server admin credential. If omitted, prompt interactively.')]
         [System.Management.Automation.PSCredential]$AdminCred,
 
@@ -17,7 +19,12 @@ function Start-LabVmRequest {
 
     $startedAt = Get-Date
     $lab = ($env:COMPUTERNAME.Split('-'))[0]
-    $runId = 'labvm-{0}-cust{1}-{2}-{3}' -f $lab.ToLowerInvariant(), $TenantID, $startedAt.ToString('yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N'))
+    if ([string]::IsNullOrWhiteSpace($RunId)) {
+        $runId = 'labvm-{0}-cust{1}-{2}-{3}' -f $lab.ToLowerInvariant(), $TenantID, $startedAt.ToString('yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N'))
+    }
+    else {
+        $runId = $RunId
+    }
     $statusPath = Join-Path $script:LabLogDirectory ("LabMod-Status-{0}.json" -f $runId)
     $action = 'Start-LabVmRequest'
     $vmPattern = '{0}-ER-{1}-VM*' -f $lab, $TenantID
