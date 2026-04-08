@@ -1,5 +1,7 @@
 # region: module-scope initialisation
 $script:IsInteractive = [Environment]::UserInteractive
+$script:LabLogDirectory = 'C:\Hyper-V\Logs'
+$script:LabCommonLogPath = Join-Path $script:LabLogDirectory 'LabMod.log.jsonl'
 # endregion
 
 # region: internal helper(s)
@@ -9,6 +11,8 @@ function Write-Log {
         [string]$Message,
         [switch]$TimeStamp = $false
     )
+
+    Write-LabLogEntry -Message $Message -Level 'Information'
 
     if ($script:IsInteractive) {
         # Friendly local UX
@@ -23,11 +27,13 @@ function Write-Log {
 # endregion
 
 
-# Get public function definition files.
+# Get private and public function definition files.
+    $Private = @( Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -ErrorAction SilentlyContinue )
+
     $Public  = @( Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -ErrorAction SilentlyContinue )
 
 #Dot source the files
-    Foreach($import in @($Public))
+    Foreach($import in @($Private + $Public))
     {
         Try
         {

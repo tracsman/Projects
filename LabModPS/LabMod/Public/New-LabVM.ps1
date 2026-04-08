@@ -120,8 +120,7 @@ function New-LabVM {
    
     # 2. Validate
     # Admin Session Check
-    If (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Warning "This script must be run elevated as Administrator!"
+    if (-not (Assert-LabAdminContext -WarnOnly)) {
         Return
     }
 
