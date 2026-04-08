@@ -4,7 +4,20 @@
         [switch]$Force=$false)
 
     # Admin Session Check
-    if (-not (Assert-LabAdminContext -WarnOnly)) {
+    $assertLabAdminContext = Get-Command Assert-LabAdminContext -ErrorAction SilentlyContinue
+    if ($null -ne $assertLabAdminContext) {
+        $isAdmin = Assert-LabAdminContext -WarnOnly
+    }
+    else {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+            [Security.Principal.WindowsBuiltInRole]::Administrator)
+
+        if (-not $isAdmin) {
+            Write-Warning "This command must be run elevated as Administrator!"
+        }
+    }
+
+    if (-not $isAdmin) {
         Return
     }
     
