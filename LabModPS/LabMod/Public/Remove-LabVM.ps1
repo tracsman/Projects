@@ -1,4 +1,34 @@
 Function Remove-LabVM {
+    <#
+    .SYNOPSIS
+        Removes one or more lab VMs and their associated VHDX files for a given tenant.
+
+    .DESCRIPTION
+        Stops, removes the Hyper-V VM object, and deletes the VHDX disk for the specified tenant.
+        By default all VMs for the tenant are removed. Use -VMInstance to target a specific VM
+        number (e.g. 01, 02).
+
+    .PARAMETER TenantID
+        The tenant ID whose VMs should be removed.
+
+    .PARAMETER VMInstance
+        The specific VM instance number to remove (e.g. 1 for VM01, 2 for VM02).
+        When 0 (the default), all VMs for the tenant are removed.
+
+    .EXAMPLE
+        Remove-LabVM -TenantID 16
+
+        Removes all VMs for tenant 16 on this host.
+
+    .EXAMPLE
+        Remove-LabVM -TenantID 16 -VMInstance 2
+
+        Removes only VM02 for tenant 16.
+
+    .LINK
+        New-LabVM
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, HelpMessage = 'Enter Tenant ID')]
@@ -35,11 +65,8 @@ Function Remove-LabVM {
     # 6. End nicely
     $EndTime = Get-Date
     $TimeDiff = New-TimeSpan $StartTime $EndTime
-    $Mins = $TimeDiff.Minutes
-    $Secs = $TimeDiff.Seconds
-    $RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Delete completed successfully" -ForegroundColor Green
-    Write-Host "Time to delete $VMCount VM(s): $RunTime"
+    $RunTime = $TimeDiff.ToString('hh\:mm\:ss')
+    Write-Log "Delete completed successfully" -TimeStamp
+    Write-Log "Time to delete $VMCount VM(s): $RunTime"
     Write-Host
 }

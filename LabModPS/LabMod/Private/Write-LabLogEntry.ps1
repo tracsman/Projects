@@ -1,3 +1,4 @@
+# Appends a structured JSON log entry to the common JSONL log file.
 function Write-LabLogEntry {
     [CmdletBinding()]
     param(

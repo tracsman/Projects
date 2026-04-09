@@ -1,4 +1,44 @@
 function Start-LabVmRequest {
+    <#
+    .SYNOPSIS
+        Creates a lab VM with structured status tracking and logging.
+
+    .DESCRIPTION
+        Wraps New-LabVM with run-status tracking (queued, running, completed, failed) and
+        structured JSON log entries. Returns a result object with the RunId, status, and
+        created VM names. Supports -WhatIf for preview without changes.
+
+    .PARAMETER TenantID
+        The two-digit tenant ID in the lab. Valid values are 10 to 99.
+
+    .PARAMETER OS
+        The operating system for the VM. Valid values are "Server2025" and "Ubuntu".
+        Defaults to "Server2025".
+
+    .PARAMETER RunId
+        An optional run identifier for correlating logs. If omitted, one is generated
+        automatically.
+
+    .PARAMETER AdminCred
+        Optional server admin credential. If omitted, the user is prompted interactively.
+
+    .PARAMETER UserCred
+        Optional environment user credential. If omitted, the user is prompted interactively.
+
+    .EXAMPLE
+        Start-LabVmRequest -TenantID 16
+
+        Creates a Server2025 VM for tenant 16 with automatic run tracking.
+
+    .EXAMPLE
+        Start-LabVmRequest -TenantID 22 -OS Ubuntu -WhatIf
+
+        Previews the VM creation for tenant 22 without making changes.
+
+    .LINK
+        New-LabVM
+    #>
+
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
     param(
         [Parameter(Mandatory = $true, ValueFromPipeline = $true, HelpMessage = 'Enter Tenant ID')]

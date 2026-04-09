@@ -16,8 +16,8 @@ function New-LabVM {
         Valid values are "ExpressRoute-Lab" and "Pathfinder", the default value is "ExpressRoute-Lab".
 
     .PARAMETER OS
-        This optional parameter signifies the requested operating system for the VM. Valid values are "Server2019", "CentOS",
-        and "Ubuntu", the default value is "Server2019".
+        This optional parameter signifies the requested operating system for the VM. Valid values are "Server2025"
+        and "Ubuntu", the default value is "Server2025".
 
     .PARAMETER CopyOnly
         This optional parameter instructs this command to only create the new VM VHDX, and doesn't configure it for use or
@@ -39,13 +39,13 @@ function New-LabVM {
         New-LabVM 16
 
         This command creates a VM for tenant 16. The subscription and OS would default to "ExpressRoute-Lab" and 
-        "Server2019" respectively
+        "Server2025" respectively
 
     .EXAMPLE
-        New-LabVM -TenantID 16 -Subscription "Pathfinder" -OS "Centos"
+        New-LabVM -TenantID 16 -OS "Ubuntu"
 
-        This command creates a VM for tenant 16. The subscription and OS are specifically called out to override the
-        default values.
+        This command creates a VM for tenant 16. The OS is specifically called out to override the
+        default value.
 
     .LINK
         https://github.com/tracsman/ERPath/tree/master/Team/Jon/LabPSModule
@@ -53,8 +53,8 @@ function New-LabVM {
     .NOTES
         If this is the first VM tenant on this server the VM name will be suffixed with "01", if this command is run
         multiple times for the same tenant the suffix is automatically incremented by 1, ie 01, 02, 03, etc. The
-        parameters of each machine can be different as needed. For instance the 01 VM may be Server2019 and the 02
-        VM be Centos and VM03 Ubuntu if required for the tenant.
+        parameters of each machine can be different as needed. For instance the 01 VM may be Server2025 and the 02
+        VM be Ubuntu if required for the tenant.
 
     #>
 
@@ -117,6 +117,7 @@ function New-LabVM {
     ElseIf ($CopyOnly) {$Action = "Coping VM drive"}
     ElseIf ($VMCreateOnly) {$Action = "Creating VM (no post build)"}
     ElseIf ($PostBuildOnly ) {$Action = "Post build script deployment"}
+    ElseIf ($PwdUpdateOnly) {$Action = "Updating VM password"}
    
     # 2. Validate
     # Admin Session Check
@@ -208,18 +209,18 @@ function New-LabVM {
                     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
                     # Turn On ICMPv4
-                    Write-Log "  Opening ICMPv4 Port"
+                    Write-Host "  Opening ICMPv4 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv4_in -ErrorAction Stop | Out-Null
-                        Write-Log "    Port already open"}
+                        Write-Host "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv4" -Name Allow_ICMPv4_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv4 | Out-Null
-                        Write-Log "    Port opened"}
+                        Write-Host "    Port opened"}
 
                     # Turn On ICMPv6
-                    Write-Log "  Opening ICMPv6 Port"
+                    Write-Host "  Opening ICMPv6 Port"
                     Try {Get-NetFirewallRule -Name Allow_ICMPv6_in -ErrorAction Stop | Out-Null
-                        Write-Log "    Port already open"}
+                        Write-Host "    Port already open"}
                     Catch {New-NetFirewallRule -DisplayName "Allow ICMPv6" -Name Allow_ICMPv6_in -Action Allow -Enabled True -Profile Any -Protocol ICMPv6 | Out-Null
-                        Write-Log "    Port opened"}
+                        Write-Host "    Port opened"}
 
                     # Get usernames and passwords
                     $VM_UserName = $Users[0]
@@ -232,7 +233,7 @@ function New-LabVM {
                     # Rename and restart
                     Rename-Computer -NewName "$VMName" -Restart
 
-                } -ArgumentList $VMName, $TenantID, $Users
+                } -ArgumentList $VMName, $TenantID, (,$Users)
             }
             "Ubuntu" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
@@ -327,9 +328,7 @@ function New-LabVM {
     # 6. End nicely
     $EndTime = Get-Date
     $TimeDiff = New-TimeSpan $StartTime $EndTime
-    $Mins = $TimeDiff.Minutes
-    $Secs = $TimeDiff.Seconds
-    $RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs
+    $RunTime = $TimeDiff.ToString('hh\:mm\:ss')
     Write-Log "$Action completed successfully" -TimeStamp
     Write-Log "Time to create: $RunTime" -TimeStamp
     Write-Host

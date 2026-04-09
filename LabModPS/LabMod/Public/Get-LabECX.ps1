@@ -1,4 +1,43 @@
 function Get-LabECX {
+    <#
+    .SYNOPSIS
+        Retrieves Equinix Fabric connection details from the Equinix API.
+
+    .DESCRIPTION
+        Authenticates to the Equinix Fabric v4 API and retrieves connection information.
+        Use this to examine the structure of working connections and compare with what you're sending.
+        By default, retrieves a specific connection by UUID. Use -ConnectionName to search by name,
+        or pass an empty string to -ConnectionUUID to list all connections.
+
+    .PARAMETER ConnectionUUID
+        The UUID of a specific connection to retrieve. Defaults to a known lab connection.
+        Pass an empty string to list all connections instead.
+
+    .PARAMETER ConnectionName
+        A connection name (or partial name) to search for. Only used when not retrieving by UUID.
+
+    .PARAMETER FullJson
+        When specified, outputs the full JSON response instead of the formatted summary.
+
+    .EXAMPLE
+        Get-LabECX
+
+        Retrieves the default lab connection.
+
+    .EXAMPLE
+        Get-LabECX -ConnectionUUID "12345678-1234-1234-1234-123456789012"
+
+        Retrieves a specific connection by UUID.
+
+    .EXAMPLE
+        Get-LabECX -ConnectionName "ASH-Cust10-ER1-pri" -FullJson
+
+        Searches for a connection by name and displays the full JSON response.
+
+    .LINK
+        New-LabECX
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$false, HelpMessage='Enter Connection UUID to retrieve specific connection')]
@@ -8,27 +47,6 @@ function Get-LabECX {
         [Parameter(Mandatory=$false, HelpMessage='Output full JSON response')]
         [switch]$FullJson
     )
-
-    <#
-    .SYNOPSIS
-        Retrieves Equinix Fabric Connection details from the Equinix API
-    
-    .DESCRIPTION
-        This script retrieves connection information from the Equinix Fabric API.
-        Use this to examine the structure of working connections and compare with what you're sending.
-    
-    .EXAMPLE
-        Get-LabECX
-        Lists all connections in your account
-    
-    .EXAMPLE
-        Get-LabECX -ConnectionUUID "12345678-1234-1234-1234-123456789012"
-        Retrieves a specific connection by UUID
-    
-    .EXAMPLE
-        Get-LabECX -ConnectionName "ASH-Cust10-ER1-pri" -FullJson
-        Searches for a connection by name and displays the full JSON response
-    #>
 
     # 1. Get ECX Token
     Write-Host (Get-Date)' - ' -NoNewline

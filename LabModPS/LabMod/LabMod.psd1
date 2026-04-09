@@ -13,7 +13,7 @@ RootModule = 'LabMod.psm1'
 
 # Version number of this module.
 # https://msdn.microsoft.com/en-us/library/system.version(v=vs.110).aspx Remarks section
-ModuleVersion = '1.4.3.9'
+ModuleVersion = '1.5.0.0'
 
 # ID used to uniquely identify this module
 GUID = '60052e85-08ba-4495-bd55-f8d3ef1339ff'
@@ -75,7 +75,6 @@ FunctionsToExport = @(
     'New-LabECX',
     'Start-LabVmRequest',
     'New-LabVM',
-    'New-LabVMDrive',
     'Remove-LabECX',
     'Remove-LabVM',
     'Uninstall-LabMod',

@@ -1,4 +1,29 @@
 function Build-LabBaseVHDX{
+    <#
+    .SYNOPSIS
+        Creates a base Hyper-V VM for building a gold-image VHDX.
+
+    .DESCRIPTION
+        Creates a Generation 2 Hyper-V VM with the specified OS ISO attached, configured
+        with standard lab settings (4 vCPU, 4-8 GB dynamic memory, VLAN 7). After the VM
+        is created, follow the README instructions to complete the OS install and sysprep
+        the image into a reusable base VHDX.
+
+    .PARAMETER OS
+        The operating system to build. Valid values are "Server2025" and "Ubuntu".
+        Defaults to "Server2025".
+
+    .EXAMPLE
+        Build-LabBaseVHDX
+
+        Creates a Server 2025 base VM using the default ISO path.
+
+    .EXAMPLE
+        Build-LabBaseVHDX -OS Ubuntu
+
+        Creates an Ubuntu base VM using the default ISO path.
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(ValueFromPipeline = $true, HelpMessage = 'Enter OS')]
@@ -20,8 +45,7 @@ function Build-LabBaseVHDX{
     $VMDisk = $VHDDest + $VMName + ".vhdx"
 
     $StartTime = Get-Date
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Creating $OS Base VM" -ForegroundColor Cyan
+    Write-Log "Creating $OS Base VM" -TimeStamp
     $VM = New-VM -Name $VMName -NewVHDPath $VMDisk -NewVHDSizeBytes 128000000000 -Path $VMConfig -MemoryStartupBytes 4GB -Generation 2
     Set-VM -VM $VM -SnapshotFileLocation $VMConfig -SmartPagingFilePath $VMConfig
     Add-VMScsiController -VMName $VMName
@@ -38,19 +62,15 @@ function Build-LabBaseVHDX{
         "Server2025" {Set-VMFirmware -VMName $VMName -EnableSecureBoot On -FirstBootDevice $MyDVD}
         default {Set-VMFirmware -VMName $VMName -SecureBootTemplate "MicrosoftUEFICertificateAuthority" -FirstBootDevice $MyDVD}
     }
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "VM Build complete!" -ForegroundColor Cyan
+    Write-Log "VM Build complete!" -TimeStamp
     Write-Host
-    Write-Host "Follow the instructions at https://github.com/tracsman/Projects/blob/master/LabModPS/README.md to completed the build of the base VHDX file."
+    Write-Log "Follow the instructions at https://github.com/tracsman/Projects/blob/master/LabModPS/README.md to completed the build of the base VHDX file."
     Write-Host
     
     $EndTime = Get-Date
     $TimeDiff = New-TimeSpan $StartTime $EndTime
-    $Mins = $TimeDiff.Minutes
-    $Secs = $TimeDiff.Seconds
-    $RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "VM build completed successfully" -ForegroundColor Green
-    Write-Host "Time to create: $RunTime"
+    $RunTime = $TimeDiff.ToString('hh\:mm\:ss')
+    Write-Log "VM build completed successfully" -TimeStamp
+    Write-Log "Time to create: $RunTime"
     Write-Host
 }

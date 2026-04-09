@@ -1,4 +1,37 @@
 ﻿function New-LabECX{
+    <#
+    .SYNOPSIS
+        Provisions Equinix Fabric connections for ExpressRoute circuits in the Pathfinder lab.
+
+    .DESCRIPTION
+        Authenticates to the Equinix Fabric v4 API, retrieves all ExpressRoute circuits for the
+        specified tenant, and provisions primary and secondary EVPL connections for each circuit
+        that is enabled but not yet provisioned. Connection UUIDs are tagged back onto the Azure
+        circuit resource for later deprovisioning with Remove-LabECX.
+
+    .PARAMETER TenantID
+        The two-digit tenant ID in the lab. Valid values are 10 to 99.
+
+    .PARAMETER PeeringLocation
+        The Equinix peering location for the connections. Valid values are "Ashburn" and "Seattle".
+
+    .PARAMETER Subscription
+        The Azure subscription containing the tenant resource group. Defaults to "ExpressRoute-Lab".
+
+    .EXAMPLE
+        New-LabECX -TenantID 16 -PeeringLocation Ashburn
+
+        Provisions ECX connections for all enabled circuits in tenant 16 at Ashburn.
+
+    .EXAMPLE
+        New-LabECX -TenantID 22 -PeeringLocation Seattle -Subscription "Hybrid-PM-Test-1"
+
+        Provisions ECX connections for tenant 22 at Seattle using a non-default subscription.
+
+    .LINK
+        Remove-LabECX
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true, ValueFromPipeline=$true, HelpMessage='Enter Tenant ID')]
@@ -26,14 +59,7 @@
     $StartTime = Get-Date
     $ProvisionCount = 0
     $CircuitCount = 0
-    Switch ($Subscription) {
-        'ExpressRoute-Lab'     {$SubID = '4bffbb15-d414-4874-a2e4-c548c6d45e2a'}
-        'ExpressRoute-lab-bvt' {$SubID = '79573dd5-f6ea-4fdc-a3aa-d05586980843'}
-        'Hybrid-PM-Demo-1'     {$SubID = '28bf59a7-de1b-4c94-92ec-a5aab87885f7'}
-        'Hybrid-PM-Test-1'     {$SubID = 'f2a54638-fcdc-443b-a6fe-5ea64d2c9e0e'}
-        'Hybrid-PM-Test-2'     {$SubID = '43467485-b19a-4b68-ac94-c9a8e980ca7f'}
-        'Hybrid-PM-Repro-1'    {$SubID = '79573dd5-f6ea-4fdc-a3aa-d05586980843'}
-    }
+    $SubID = $script:SubscriptionMap[$Subscription]
 
     # Azure Variables
     If ($PeeringLocation -eq "Seattle") {$RGName = "SEA-Cust$TenantID"}
@@ -58,32 +84,30 @@
         }
 
     # Login and permissions check
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Checking login and permissions" -ForegroundColor Cyan
+    Write-Log "Checking login and permissions" -TimeStamp
     $CurrentContext = Get-AzContext
     If ($CurrentContext.Subscription.Id -ne $SubID) {
         # Login and set subscription for ARM
-        Write-Host "  Logging in to ARM"
+        Write-Log "  Logging in to ARM"
         Try {$Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
         Catch {Connect-AzAccount | Out-Null
                 $Sub = (Set-AzContext -Subscription $subID -ErrorAction Stop).Subscription}
-        Write-Host "  Current Sub:",$Sub.Name,"(",$Sub.Id,")"
+        Write-Log "  Current Sub: $($Sub.Name) ($($Sub.Id))"
     }
     Else {
-        Write-Host "  Current Sub:",$CurrentContext.Subscription.Name,"(",$CurrentContext.Subscription.Id,")"
+        Write-Log "  Current Sub: $($CurrentContext.Subscription.Name) ($($CurrentContext.Subscription.Id))"
     }
     
     # 3. Get ECX Token
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Getting ECX OAuth Token" -ForegroundColor Cyan
-    Write-Host "  Grabbing ECX secrets..." -NoNewline
+    Write-Log "Getting ECX OAuth Token" -TimeStamp
+    Write-Log "  Grabbing ECX secrets"
     $kvName = "LabSecrets"
     $ECXClientID = Get-AzKeyVaultSecret -VaultName $kvName -Name "ECXClientID" -AsPlainText
     $ECXSecret = Get-AzKeyVaultSecret -VaultName $kvName -Name "ECXSecret" -AsPlainText
-    Write-Host "Success" -ForegroundColor Green
+    Write-Log "  ECX secrets retrieved"
 
     # Get REST OAuth Token
-    Write-Host "  Getting OAuth Token...." -NoNewline
+    Write-Log "  Getting OAuth Token"
     $TokenURI = "https://api.equinix.com/oauth2/v1/token"
     $TokenBody = "{" + 
                 "  ""grant_type"": ""client_credentials""," +
@@ -91,17 +115,15 @@
                 "  ""client_secret"": ""$ECXSecret""" +
                 "}"
     Try {$token = Invoke-RestMethod -Method Post -Uri $TokenURI -Body $TokenBody -ContentType application/json}
-    Catch {Write-Host
+    Catch {
         Write-Warning "An error occurred getting an OAuth certificate from Equinix."
-        Write-Host
-        Write-Host $error[0].ErrorDetails.Message
+        Write-Log $error[0].ErrorDetails.Message
         Return }
     $ConnHeader =  @{"Authorization" = "Bearer $($token.access_token)"}
-    Write-Host "Success" -ForegroundColor Green
+    Write-Log "  OAuth Token retrieved"
 
     # 4. Load all ER circuits into an array
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "Pulling ER Circuit(s)" -ForegroundColor Cyan
+    Write-Log "Pulling ER Circuit(s)" -TimeStamp
     $Circuits = Get-AzExpressRouteCircuit -ResourceGroupName $RGName | Where-Object Name -Like "$TenantStub*"
 
     # 5. Loop through Circuit array
@@ -169,11 +191,15 @@
             } | ConvertTo-Json -Depth 5
 
             # Provision Primary Connection
-            $connectionPri = Invoke-RestMethod -Method Post -Uri $ConnURI -Headers $ConnHeader -Body $ConnBodyPri -ContentType application/json
+            Try {
+                $connectionPri = Invoke-RestMethod -Method Post -Uri $ConnURI -Headers $ConnHeader -Body $ConnBodyPri -ContentType application/json
+            }
+            Catch {
+                Write-Warning "$($Circuit.Name) primary connection provisioning failed: $($_.Exception.Message)"
+                continue
+            }
             If ($connectionPri.operation.equinixStatus -eq "PROVISIONING") {
-                Write-Host (Get-Date)' - ' -NoNewline
-                Write-Host $Circuit.Name'Primary' -NoNewline -ForegroundColor Yellow
-                Write-Host " has been submitted for provisioning"
+                Write-Log "$($Circuit.Name) Primary has been submitted for provisioning" -TimeStamp
                 $PriUUID = $connectionPri.uuid
                 
                 # Build and provision Secondary Connection with redundancy group
@@ -224,9 +250,7 @@
 
                 $connectionSec = Invoke-RestMethod -Method Post -Uri $ConnURI -Headers $ConnHeader -Body $ConnBodySec -ContentType application/json
                 If ($connectionSec.operation.equinixStatus -eq "PROVISIONING") {
-                    Write-Host (Get-Date)' - ' -NoNewline
-                    Write-Host $Circuit.Name'Secondary' -NoNewline -ForegroundColor Yellow
-                    Write-Host " has been submitted for provisioning"
+                    Write-Log "$($Circuit.Name) Secondary has been submitted for provisioning" -TimeStamp
                     $SecUUID = $connectionSec.uuid
                     
                     # Update circuit tags with connection UUIDs
@@ -237,7 +261,7 @@
                     Try {
                         #$Circuit | Set-AzExpressRouteCircuit -ErrorAction Stop | Out-Null
                         Update-AzTag -ResourceId $Circuit.Id -Tag $Tags -Operation Merge -ErrorAction Stop | Out-Null
-                        Write-Host "  Tagged circuit with connection UUIDs"
+                        Write-Log "  Tagged circuit with connection UUIDs"
                     }
                     Catch {
                         Write-Warning "  Failed to tag circuit with UUIDs: $($_.Exception.Message)"
@@ -250,30 +274,21 @@
             Else {Write-Warning $Circuit.Name "primary connection provisioning has failed"} 
         }
         ElseIf ($Circuit.ServiceProviderProvisioningState -eq "Provisioned") {
-            Write-Host (Get-Date)' - ' -NoNewline
-            Write-Host $Circuit.Name -NoNewline -ForegroundColor Yellow
-            Write-Host " is already provisioned"
+            Write-Log "$($Circuit.Name) is already provisioned" -TimeStamp
         }
         ElseIf ($Circuit.CircuitProvisioningState -ne "Enabled") {
-            Write-Host (Get-Date)' - ' -NoNewline
-            Write-Host $Circuit.Name -NoNewline -ForegroundColor Yellow
-            Write-Host " is not yet ready for provisioning"
+            Write-Log "$($Circuit.Name) is not yet ready for provisioning" -TimeStamp
         }
         Else {
-            Write-Host (Get-Date)' - ' -NoNewline
-            Write-Host $Circuit.Name -NoNewline -ForegroundColor Red
-            Write-Host " is in an unknown state"
+            Write-Log "$($Circuit.Name) is in an unknown state" -TimeStamp
         }
     }
 
     # 6. End nicely
     $EndTime = Get-Date
     $TimeDiff = New-TimeSpan $StartTime $EndTime
-    $Mins = $TimeDiff.Minutes
-    $Secs = $TimeDiff.Seconds
-    $RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs
-    Write-Host (Get-Date)' - ' -NoNewline
-    Write-Host "$ProvisionCount circuits submitted for provisioning ($($ProvisionCount*2) ECX connections)" -ForegroundColor Green
-    Write-Host "Time to create: $RunTime"
+    $RunTime = $TimeDiff.ToString('hh\:mm\:ss')
+    Write-Log "$ProvisionCount circuits submitted for provisioning ($($ProvisionCount*2) ECX connections)" -TimeStamp
+    Write-Log "Time to create: $RunTime"
     Write-Host
 }

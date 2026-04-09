@@ -1,12 +1,15 @@
+# Copies a VHDX file with progress reporting. Internal helper for New-LabVM.
 Function New-LabVMDrive {
     param( [string]$From, [string]$To)
-    $ffile = [io.file]::OpenRead($From)
-    $tofile = [io.file]::OpenWrite($To)
+    $ffile = $null
+    $tofile = $null
     Write-Progress `
         -Activity "Copying file" `
         -status ($From.Split("\") | Select-Object -last 1) `
         -PercentComplete 0
     try {
+        $ffile = [io.file]::OpenRead($From)
+        $tofile = [io.file]::OpenWrite($To)
         $sw = [System.Diagnostics.Stopwatch]::StartNew();
         [byte[]]$buff = new-object byte[] (4096 * 1024)
         [long]$total = [long]$count = 0
@@ -42,10 +45,15 @@ Function New-LabVMDrive {
     }
     finally {
         Write-Progress -Activity "Copying file" -Status "Ready" -Completed
-        write-host " " (($from.Split("\") | Select-Object -last 1) + `
-                " copied in " + $secselapsed + " seconds at " + `
-                "{0:n2}" -f [int](($ffile.length / $secselapsed) / 1mb) + " MB/s.");
-        $ffile.Close();
-        $tofile.Close();
+        if ($null -ne $ffile -and $secselapsed -gt 0) {
+            Write-Log (($from.Split("\") | Select-Object -last 1) + `
+                    " copied in " + $secselapsed + " seconds at " + `
+                    ("{0:n2}" -f [int](($ffile.length / $secselapsed) / 1mb)) + " MB/s.")
+        }
+        elseif ($null -ne $ffile) {
+            Write-Log (($from.Split("\") | Select-Object -last 1) + " copied in under 1 second.")
+        }
+        if ($null -ne $ffile)  { $ffile.Close() }
+        if ($null -ne $tofile) { $tofile.Close() }
     }
 }

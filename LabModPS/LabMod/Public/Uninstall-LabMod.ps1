@@ -1,7 +1,20 @@
 ﻿function Uninstall-LabMod {
+    <#
+    .SYNOPSIS
+        Removes the LabMod module from the local machine.
+
+    .DESCRIPTION
+        Deletes the LabMod module directory from the PowerShell 7 modules path,
+        unloads the module from the current session, and confirms removal.
+        Requires an elevated session.
+
+    .EXAMPLE
+        Uninstall-LabMod
+
+        Removes the LabMod module files and unloads it from memory.
+    #>
     # Admin Session Check
-    If (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-Warning "This script must be run elevated as Administrator!"
+    if (-not (Assert-LabAdminContext -WarnOnly)) {
         Return
     }
 
@@ -11,7 +24,7 @@
     If (Test-Path $Destination) {
         Try {
             Remove-Item $Destination -Recurse
-            Write-Host "LabMod PowerShell Module removed" -ForegroundColor Green
+            Write-Log "LabMod PowerShell Module removed"
         }
         Catch {
             Write-Warning "The LabMod PowerShell Module was not removed."
@@ -20,11 +33,11 @@
         } #End Try
     }
     Else {
-        Write-Host "The LabMod PowerShell Module was not found on this machine."
+        Write-Log "The LabMod PowerShell Module was not found on this machine."
     } # End If
     
     Remove-Module -Name LabMod -ErrorAction SilentlyContinue
-    Write-Host "LabMod module unloaded from memory" -ForegroundColor Green
+    Write-Log "LabMod module unloaded from memory"
 
-    Write-Host "LabMod removed" -ForegroundColor Green
+    Write-Log "LabMod removed"
 } # End Function

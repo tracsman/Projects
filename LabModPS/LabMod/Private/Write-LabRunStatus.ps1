@@ -1,3 +1,4 @@
+# Writes/updates a per-run status JSON file and logs the status change.
 function Write-LabRunStatus {
     [CmdletBinding()]
     param(

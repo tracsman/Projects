@@ -42,7 +42,7 @@ Write-Host "Good" -ForegroundColor Green
 
 '@
     $ScriptText | Out-Clipboard
-    Write-host "Script part 1 of 2 copied to clipboard, paste in Base VM Admin PowerShell ISE, and then return here for part 2."
+    Write-Log "Script part 1 of 2 copied to clipboard, paste in Base VM Admin PowerShell ISE, and then return here for part 2."
     Pause
 
     $ScriptText = @'
@@ -80,7 +80,7 @@ Write-Host "All Done!" -ForegroundColor Green
 
 '@
     $ScriptText | Out-Clipboard
-    Write-host "Script part 2 of 2 copied to clipboard, paste in Base VM Admin Powershell ISE, and then run the entire script (part 1 and 2)."
+    Write-Log "Script part 2 of 2 copied to clipboard, paste in Base VM Admin Powershell ISE, and then run the entire script (part 1 and 2)."
     Write-Host
 }
 
