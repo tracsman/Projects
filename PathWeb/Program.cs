@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -51,6 +52,7 @@ else
     builder.Services.AddSingleton(new SecretClient(new Uri("https://localhost/"), new DefaultAzureCredential()));
 }
 builder.Services.AddScoped<SshService>();
+builder.Services.AddSingleton<LabVmRunTracker>();
 
 // Check if running on Azure App Service with Easy Auth
 var isEasyAuth = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
@@ -708,10 +710,28 @@ app.MapGet("/diag", async (
     });
 });
 
+const string labVmSpikeTargetServerName = "SEA-ER-08";
+const string labVmSpikeTargetLab = "SEA";
+const short labVmSpikeTargetTenantId = 18;
+const string labVmSpikeConfigType = "LabVMPowerShell";
+const string labVmSpikeAdminVaultName = "LabSecrets";
+const string labVmSpikeAdminSecretName = "Server-Admin";
+const string labVmSpikeAdminUserName = "Administrator";
+const string labVmSpikeTenantUserSecretName = "PathLabUser";
+const string labVmSpikeTenantUserName = "PathLabUser";
+
+static string EscapePowerShellSingleQuotedString(string value) => value.Replace("'", "''");
+
+static SecretClient CreateSecretClient(string vaultName) =>
+    new(new Uri($"https://{vaultName.ToLowerInvariant()}.vault.azure.net/"), new DefaultAzureCredential());
+
+// Lab VM spike — direct SSH execution: credentials stay in-memory as PSCredential,
+// no wrapper scripts on disk, no scheduled tasks. Status tracked in-process.
 app.MapGet("/diag/test-labvm-ssh", async (
     HttpContext ctx,
     LabConfigContext db,
     SshService sshService,
+    LabVmRunTracker tracker,
     ILoggerFactory loggerFactory,
     CancellationToken cancellationToken) =>
 {
@@ -726,47 +746,228 @@ app.MapGet("/diag/test-labvm-ssh", async (
         }, statusCode: StatusCodes.Status403Forbidden);
     }
 
-    const string targetServerName = "SEA-ER-08";
     var logger = loggerFactory.CreateLogger("LabVmDiagnostics");
 
     var device = await db.Devices
         .AsNoTracking()
-        .FirstOrDefaultAsync(d => d.Name == targetServerName, cancellationToken);
+        .FirstOrDefaultAsync(d => d.Name == labVmSpikeTargetServerName, cancellationToken);
 
     if (device == null || string.IsNullOrWhiteSpace(device.MgmtIpv4))
     {
         return Results.Json(new
         {
             success = false,
-            error = $"Device '{targetServerName}' was not found or does not have a management IP in the Devices table."
+            error = $"Device '{labVmSpikeTargetServerName}' was not found or does not have a management IP in the Devices table."
         }, statusCode: StatusCodes.Status404NotFound);
     }
 
-    const string script = """
-$ErrorActionPreference = 'Stop'
-'pwsh-ok'
-hostname
-whoami
-Get-Module -ListAvailable LabMod | Select-Object Name,Version,Path | Format-List
-""";
+    var tenant = await db.Tenants
+        .AsNoTracking()
+        .FirstOrDefaultAsync(t => t.Lab == labVmSpikeTargetLab && t.TenantId == labVmSpikeTargetTenantId && t.DeletedDate == null, cancellationToken);
 
-    logger.LogInformation("Lab VM SSH diagnostic requested by {User} for {DeviceName} ({Host})",
-        ctx.User?.Identity?.Name ?? "(unknown)", device.Name, device.MgmtIpv4);
+    if (tenant == null)
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = $"Active tenant '{labVmSpikeTargetLab}-Cust{labVmSpikeTargetTenantId}' was not found."
+        }, statusCode: StatusCodes.Status404NotFound);
+    }
 
-    var (success, output) = await sshService.RunPowerShellCommandAsync(device.MgmtIpv4, 22, script);
+    var config = await db.Configs
+        .AsNoTracking()
+        .Where(c => c.TenantGuid == tenant.TenantGuid && c.ConfigVersion == tenant.ConfigVersion && c.ConfigType == labVmSpikeConfigType)
+        .OrderByDescending(c => c.CreatedDate)
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (config == null || string.IsNullOrWhiteSpace(config.Config1))
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = $"Config '{labVmSpikeConfigType}' was not found for tenant '{tenant.TenantName}'."
+        }, statusCode: StatusCodes.Status404NotFound);
+    }
+
+    var vmRequests = config.Config1
+        .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(line => line.StartsWith("New-LabVM ", StringComparison.OrdinalIgnoreCase))
+        .Select((command, index) =>
+        {
+            var osMatch = System.Text.RegularExpressions.Regex.Match(command, @"(?:^|\s)-OS\s+(?<os>[A-Za-z0-9]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return new { Index = index + 1, Os = osMatch.Success ? osMatch.Groups["os"].Value : "Server2025" };
+        })
+        .ToList();
+
+    if (vmRequests.Count == 0)
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = $"Config '{labVmSpikeConfigType}' for tenant '{tenant.TenantName}' does not contain any New-LabVM commands."
+        }, statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    var adminSecretClient = CreateSecretClient(labVmSpikeAdminVaultName);
+    var tenantVaultName = $"{tenant.Lab}-Cust{tenant.TenantId}-kv";
+    var tenantSecretClient = CreateSecretClient(tenantVaultName);
+
+    KeyVaultSecret adminSecret;
+    KeyVaultSecret tenantUserSecret;
+    try
+    {
+        adminSecret = (await adminSecretClient.GetSecretAsync(labVmSpikeAdminSecretName, cancellationToken: cancellationToken)).Value;
+        tenantUserSecret = (await tenantSecretClient.GetSecretAsync(labVmSpikeTenantUserSecretName, cancellationToken: cancellationToken)).Value;
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Lab VM SSH diagnostic secret retrieval failed for {TenantName}", tenant.TenantName);
+        return Results.Json(new
+        {
+            success = false,
+            error = $"Failed to retrieve one or more Key Vault secrets: {ex.Message}",
+            tenant = tenant.TenantName,
+            adminVault = labVmSpikeAdminVaultName,
+            tenantVault = tenantVaultName
+        }, statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    var runId = $"labvm-{tenant.Lab.ToLowerInvariant()}-cust{tenant.TenantId}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+
+    // Build a compact script: credentials live only as in-memory PSCredential objects,
+    // Start-LabVmRequest runs directly, and structured JSON comes back over stdout.
+    var sb = new StringBuilder();
+    sb.AppendLine("$ErrorActionPreference = 'Stop'");
+    sb.AppendLine($"$ap = ConvertTo-SecureString '{EscapePowerShellSingleQuotedString(adminSecret.Value)}' -AsPlainText -Force");
+    sb.AppendLine($"$ac = [pscredential]::new('{EscapePowerShellSingleQuotedString(labVmSpikeAdminUserName)}', $ap)");
+    sb.AppendLine($"$up = ConvertTo-SecureString '{EscapePowerShellSingleQuotedString(tenantUserSecret.Value)}' -AsPlainText -Force");
+    sb.AppendLine($"$uc = [pscredential]::new('{EscapePowerShellSingleQuotedString(labVmSpikeTenantUserName)}', $up)");
+    sb.AppendLine("$results = @()");
+
+    foreach (var vm in vmRequests)
+    {
+        var requestRunId = $"{runId}-{vm.Index:00}";
+        sb.AppendLine("try {");
+        sb.AppendLine($"  $results += Start-LabVmRequest -TenantID {tenant.TenantId} -OS '{EscapePowerShellSingleQuotedString(vm.Os)}' -RunId '{EscapePowerShellSingleQuotedString(requestRunId)}' -AdminCred $ac -UserCred $uc -Confirm:$false 3>$null 6>$null");
+        sb.AppendLine("} catch {");
+        sb.AppendLine($"  $results += [pscustomobject]@{{ RunId='{EscapePowerShellSingleQuotedString(requestRunId)}'; Status='Failed'; Success=$false; Message=$_.Exception.Message; CreatedVmNames=@() }}");
+        sb.AppendLine("}");
+    }
+
+    sb.AppendLine("Write-Output '---LABVM-JSON---'");
+    sb.AppendLine("$results | ConvertTo-Json -Compress -Depth 5");
+
+    var script = sb.ToString();
+    var hostIp = device.MgmtIpv4;
+    var tenantName = tenant.TenantName;
+
+    // Track the run in-memory and launch the SSH call in the background
+    var run = new LabVmRunInfo
+    {
+        RunId = runId,
+        TenantName = tenantName,
+        TenantId = tenant.TenantId,
+        TargetServer = device.Name,
+        TargetHost = hostIp,
+        RequestCount = vmRequests.Count,
+        StartedAt = DateTimeOffset.UtcNow
+    };
+    tracker.Track(runId, run);
+
+    logger.LogInformation("Lab VM SSH spike: launching background execution on {DeviceName} ({Host}), tenant {TenantName}, {Count} request(s), runId {RunId}",
+        device.Name, hostIp, tenantName, vmRequests.Count, runId);
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            var (success, output) = await sshService.RunPowerShellCommandAsync(hostIp, 22, script, keepAlive: TimeSpan.FromSeconds(15));
+            run.RawOutput = output;
+
+            if (!success)
+            {
+                run.Status = "Failed";
+                run.Error = output;
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                logger.LogError("Lab VM SSH spike failed on {DeviceName}: {Output}", device.Name, output);
+                return;
+            }
+
+            const string jsonMarker = "---LABVM-JSON---";
+            var markerIndex = output.LastIndexOf(jsonMarker, StringComparison.Ordinal);
+            if (markerIndex >= 0)
+            {
+                var jsonText = output[(markerIndex + jsonMarker.Length)..].Trim();
+                if (!string.IsNullOrEmpty(jsonText))
+                {
+                    try { run.Results = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(jsonText); }
+                    catch { /* results stay null — raw output is still available */ }
+                }
+            }
+
+            run.Status = "Completed";
+            run.CompletedAt = DateTimeOffset.UtcNow;
+            logger.LogInformation("Lab VM SSH spike completed on {DeviceName}, runId {RunId}", device.Name, runId);
+        }
+        catch (Exception ex)
+        {
+            run.Status = "Failed";
+            run.Error = ex.Message;
+            run.CompletedAt = DateTimeOffset.UtcNow;
+            logger.LogError(ex, "Lab VM SSH spike background task failed for runId {RunId}", runId);
+        }
+    });
 
     return Results.Ok(new
     {
-        success,
-        target = new
+        success = true,
+        started = true,
+        runId,
+        tenant = new { tenant.TenantGuid, tenant.TenantId, tenantName, tenant.ConfigVersion },
+        target = new { device.Name, device.Lab, host = hostIp, note = "Temporary Lab VM SSH spike — direct execution on SEA-ER-08." },
+        requestCount = vmRequests.Count,
+        statusEndpoint = $"/diag/test-labvm-ssh/status?runId={Uri.EscapeDataString(runId)}"
+    });
+});
+
+app.MapGet("/diag/test-labvm-ssh/status", (
+    HttpContext ctx,
+    LabVmRunTracker tracker,
+    string runId) =>
+{
+    var authLevel = ctx.Items["AuthLevel"] as byte? ?? 0;
+    if (authLevel < (byte)AuthLevels.SiteAdmin)
+    {
+        return Results.Json(new
         {
-            device.Name,
-            device.Lab,
-            host = device.MgmtIpv4,
-            hardcoded = true,
-            note = "Temporary Lab VM SSH spike endpoint targeting SEA-ER-08 only."
-        },
-        output
+            success = false,
+            error = "Permission denied. SiteAdmin access is required.",
+            authLevel
+        }, statusCode: StatusCodes.Status403Forbidden);
+    }
+
+    var run = tracker.Get(runId);
+    if (run == null)
+    {
+        return Results.Json(new
+        {
+            success = false,
+            error = "Run not found. It may have expired after an app restart."
+        }, statusCode: StatusCodes.Status404NotFound);
+    }
+
+    return Results.Ok(new
+    {
+        success = run.Status != "Failed",
+        runId = run.RunId,
+        status = run.Status,
+        startedAt = run.StartedAt,
+        completedAt = run.CompletedAt,
+        tenant = new { run.TenantId, run.TenantName },
+        target = new { server = run.TargetServer, host = run.TargetHost },
+        requestCount = run.RequestCount,
+        results = (object?)run.Results,
+        error = run.Error
     });
 });
 

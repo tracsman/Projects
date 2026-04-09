@@ -49,7 +49,13 @@
   - `1.2` tested on `SEA-ER-08` — non-interactive remote PowerShell works when SSH explicitly launches `pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass`
   - `1.2` module check passed on `SEA-ER-08` — `LabMod` is visible to PowerShell 7 (`LabMod` `1.4.1.7` under `C:\Program Files\PowerShell\7\Modules\LabMod`)
   - current working assumption: PathWeb should connect by management IP from the `Devices` table and explicitly invoke `pwsh` rather than relying on the SSH default shell
-  - temporary admin-only diagnostic endpoint added: `/diag/test-labvm-ssh` resolves hardcoded `SEA-ER-08` from `Devices`, SSHes by management IP, explicitly launches `pwsh`, and returns raw output for the spike/proof-of-concept
+  - first `LabMod` simplification chunk completed — added private `Assert-LabAdminContext`, `Write-LabLogEntry`, and `Write-LabRunStatus` helpers, set default module log paths under `C:\Hyper-V\Logs`, and switched `New-LabVM` / `Remove-LabVM` to use the shared admin validation helper
+  - second `LabMod` simplification chunk completed — added public `Start-LabVmRequest`, defaulted it to the shared `C:\Hyper-V\Logs\LabMod.log.jsonl` log plus per-run default status files, and validated a safe `-WhatIf` preview path after bumping the module version to `1.4.3.5`
+  - third simplification chunk completed — the PathWeb spike wrapper now calls `Start-LabVmRequest` instead of embedding the full `New-LabVM` body, and `LabMod` now accepts an optional caller-supplied `RunId` for correlation (`1.4.3.8`)
+  - simplified spike path validated end-to-end on `SEA-ER-08` — after updating `LabMod` on the host, the PathWeb spike successfully launched two `Start-LabVmRequest` calls for Seattle Tenant 18 and created `SEA-ER-18-VM03` / `SEA-ER-18-VM04`
+  - **spike rewritten to direct SSH execution** — replaced the staged-script/scheduled-task/status-polling architecture (~500 lines, two endpoints) with a single synchronous endpoint (~170 lines) that runs `Start-LabVmRequest` directly over SSH; credentials exist only as in-memory PSCredential objects passed via `-EncodedCommand` (never written to disk), no wrapper `.ps1` files, no `schtasks`, no `/status` polling endpoint
+  - synchronous approach hit Azure App Service 230-second gateway timeout (504); switched to fire-and-forget SSH with in-memory `LabVmRunTracker` (singleton `ConcurrentDictionary`) — launch returns immediately, `/status` endpoint is a zero-cost dictionary lookup instead of SSH round-trips
+  - **rewritten spike validated end-to-end on `SEA-ER-08`** — two Ubuntu VMs created (`SEA-ER-18-VM07`, `SEA-ER-18-VM08`) in ~4.5 minutes; no timeouts, no files on disk, credentials in-memory only; minor: `Assert-LabAdminContext` leaks `$true` into the results array
 
 ---
 

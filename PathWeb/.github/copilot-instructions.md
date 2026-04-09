@@ -7,6 +7,9 @@
 - The Tenant metadata/display label for the temporary pre-save value represented by ConfigVersion=0 should remain 'Server Preference'; ConfigVersion is persisted terminology, but the create/edit UI concept here is still Server Preference and it is not saved to SQL in that form.
 - The project should use SQL-backed logging settings with a global key plus per-category overrides using the `Logging:<category>` key structure.
 - For PathWeb lab VM work, reuse the same username/password Key Vault secret pattern as network devices for on-prem servers, and identify Hyper-V servers by the `<lab>-ER-xx` naming convention (look for `-ER-`).
+- For the Lab VM spike, do not add persistence/history; run the full `New-LabVM` command (not a reduced safe-mode variant), target only `SEA-ER-08`, and use the `LabVMPowerShell` config from Seattle Tenant 18 as the test input source from SQL. The admin Key Vault name is `LabSecrets` (not `LabInfrastructure`) for the `Server-Admin` secret.
+- For Lab VM work, add `Start-LabVmRequest` in `LabMod` with default log/status paths, no `VMInstance`, no explicit `Import-Module`, and move common admin validation and logging into private module helpers; replace routine `Write-Host` with structured/loggable output across module cmdlets over time.
+- For Lab VM work, writing passwords to disk is a non-starter; avoid any design that persists credentials in local wrapper scripts or files. Additionally, for Server 08, passwords must be passed in by PathWeb at runtime since it cannot reach Key Vault.
 
 ## Naming Conventions
 - Use Azure connector/resource naming to follow the pattern `PathWeb-<purpose>-conn`, e.g., `PathWeb-ADO-conn`, instead of generic connector names.

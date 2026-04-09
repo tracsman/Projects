@@ -34,7 +34,10 @@ public class SshService
     /// <summary>
     /// Connects to a device via SSH using Key Vault credentials, runs a single command, and returns the output.
     /// </summary>
-    public async Task<(bool Success, string Output)> RunCommandAsync(string host, int port, string command = "show version")
+    public Task<(bool Success, string Output)> RunCommandAsync(string host, int port, string command = "show version")
+        => RunCommandAsync(host, port, command, logCommandText: true);
+
+    private async Task<(bool Success, string Output)> RunCommandAsync(string host, int port, string command, bool logCommandText, TimeSpan? keepAlive = null)
     {
         try
         {
@@ -45,12 +48,22 @@ public class SshService
             using var client = new SshClient(host, port, username, password);
             client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(10);
 
+            if (keepAlive.HasValue)
+                client.KeepAliveInterval = keepAlive.Value;
+
             await Task.Run(() => client.Connect());
 
             if (!client.IsConnected)
                 return (false, "Connection failed — client did not connect.");
 
-            _logger.LogInformation("SSH connected to {Host}, running command: {Command}", host, command);
+            if (logCommandText)
+            {
+                _logger.LogInformation("SSH connected to {Host}, running command: {Command}", host, command);
+            }
+            else
+            {
+                _logger.LogInformation("SSH connected to {Host}, running redacted command", host);
+            }
 
             var result = client.RunCommand(command);
 
@@ -74,15 +87,16 @@ public class SshService
 
     /// <summary>
     /// Connects to a host via SSH, explicitly launches pwsh non-interactively, and runs a PowerShell script.
+    /// Optionally accepts a keepAlive interval to prevent connection drops during long-running commands.
     /// </summary>
-    public Task<(bool Success, string Output)> RunPowerShellCommandAsync(string host, int port, string script)
+    public Task<(bool Success, string Output)> RunPowerShellCommandAsync(string host, int port, string script, TimeSpan? keepAlive = null)
     {
         if (string.IsNullOrWhiteSpace(script))
             return Task.FromResult((false, "PowerShell script is empty."));
 
         var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var command = $"pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encodedCommand}";
-        return RunCommandAsync(host, port, command);
+        return RunCommandAsync(host, port, command, logCommandText: false, keepAlive: keepAlive);
     }
 
     /// <summary>

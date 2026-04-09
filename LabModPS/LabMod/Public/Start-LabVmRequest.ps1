@@ -51,7 +51,7 @@ function Start-LabVmRequest {
         return
     }
 
-    Assert-LabAdminContext
+    Assert-LabAdminContext | Out-Null
 
     $existingVmNames = @(Get-VM -Name $vmPattern -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
 
