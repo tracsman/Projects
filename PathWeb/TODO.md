@@ -39,80 +39,35 @@
 - [x] **View released tenants on index** — The Tenants index page now supports switching between active and released tenants using `DeletedDate == null` vs `DeletedDate != null`, and includes server-side pagination so the larger released-tenant list remains usable
 - [x] **Clone released tenant from Details** — Inactive tenant Details pages now hide `Edit` / `Release` / `Create Config`, add a clone confirmation step, and create a new active tenant record with a fresh GUID/TenantID and reset post-deploy fields before redirecting to the new tenant's Details page
 - [x] **Inactive tenant Config page is read-only** — Released tenant Config pages now hide `Create/Regenerate Config`, suppress per-config action buttons, keep copy-to-clipboard available, and prevent UI-triggered config changes for inactive tenants
+- [x] **Create Lab VMs** — Full production integration of on-prem VM creation via direct SSH to Hyper-V hosts:
+  - **LabMod module work:** Added private helpers (`Assert-LabAdminContext`, `Write-LabLogEntry`, `Write-LabRunStatus`), public `Start-LabVmRequest` with caller-supplied `RunId`, structured JSON output via `---LABVM-JSON---` marker, and fixed `Assert-LabAdminContext | Out-Null` to prevent `$true` leaking into results (`LabMod` 1.4.3.9)
+  - **SSH execution architecture:** Credentials exist only as in-memory PSCredential objects passed via `-EncodedCommand` (never written to disk); SSH keepalive prevents connection drops during long-running commands; fire-and-forget background tasks with in-memory `LabVmRunTracker` (`ConcurrentDictionary`) avoid the Azure App Service 230-second gateway timeout
+  - **`LabVmController`** with four endpoints: `Servers` (available Hyper-V hosts for a lab), `Requests` (parsed VM rows from `LabVMPowerShell` config), `Submit` (accepts per-VM server overrides, launches background SSH), `Status` (instant in-memory lookup with per-request progress)
+  - **Dynamic server resolution:** Target Hyper-V server derived from first digit of TenantId (e.g., tenant 18 → `SEA-ER-01`), with per-VM server override dropdowns in the UI
+  - **Per-request live progress:** Each VM runs as its own SSH command so the tracker updates after each VM completes (not all-at-once at the end); VMs on different servers run in parallel via `Task.WhenAll`
+  - **Config page modal UI:** Table with `#`, `OS`, `Target Server` (dropdown), and `Status` columns; per-row ✅/⏳/❌ indicators with VM names; resume-on-reopen (close modal during creation, reopen to see current state)
+  - **SQL persistence:** `LabVmRun` table stores completed runs with success/failure, VM names, timestamps, and per-request output; status badge + timestamp displayed on the `On-prem VM PowerShell` card header (matches existing firewall/email badge pattern); badge updates live when a run finishes without page refresh
+  - **Validated end-to-end on `SEA-ER-08`** with Seattle Tenant 18: multiple Ubuntu VMs created in ~4.5 minutes per pair, no timeouts, no files on disk
+  - **Spike endpoints** (`/diag/test-labvm-ssh` and `/diag/test-labvm-ssh/status`) still present in `Program.cs` for reference; to be removed in cleanup pass
 
 ---
 
 ## 🔧 In Progress
 
-- [ ] **Create Lab VMs prerequisites in progress**
-  - `1.1` tested on `SEA-ER-08` — OpenSSH access is working via management IP `10.1.7.81`
-  - `1.2` tested on `SEA-ER-08` — non-interactive remote PowerShell works when SSH explicitly launches `pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass`
-  - `1.2` module check passed on `SEA-ER-08` — `LabMod` is visible to PowerShell 7 (`LabMod` `1.4.1.7` under `C:\Program Files\PowerShell\7\Modules\LabMod`)
-  - current working assumption: PathWeb should connect by management IP from the `Devices` table and explicitly invoke `pwsh` rather than relying on the SSH default shell
-  - first `LabMod` simplification chunk completed — added private `Assert-LabAdminContext`, `Write-LabLogEntry`, and `Write-LabRunStatus` helpers, set default module log paths under `C:\Hyper-V\Logs`, and switched `New-LabVM` / `Remove-LabVM` to use the shared admin validation helper
-  - second `LabMod` simplification chunk completed — added public `Start-LabVmRequest`, defaulted it to the shared `C:\Hyper-V\Logs\LabMod.log.jsonl` log plus per-run default status files, and validated a safe `-WhatIf` preview path after bumping the module version to `1.4.3.5`
-  - third simplification chunk completed — the PathWeb spike wrapper now calls `Start-LabVmRequest` instead of embedding the full `New-LabVM` body, and `LabMod` now accepts an optional caller-supplied `RunId` for correlation (`1.4.3.8`)
-  - simplified spike path validated end-to-end on `SEA-ER-08` — after updating `LabMod` on the host, the PathWeb spike successfully launched two `Start-LabVmRequest` calls for Seattle Tenant 18 and created `SEA-ER-18-VM03` / `SEA-ER-18-VM04`
-  - **spike rewritten to direct SSH execution** — replaced the staged-script/scheduled-task/status-polling architecture (~500 lines, two endpoints) with a single synchronous endpoint (~170 lines) that runs `Start-LabVmRequest` directly over SSH; credentials exist only as in-memory PSCredential objects passed via `-EncodedCommand` (never written to disk), no wrapper `.ps1` files, no `schtasks`, no `/status` polling endpoint
-  - synchronous approach hit Azure App Service 230-second gateway timeout (504); switched to fire-and-forget SSH with in-memory `LabVmRunTracker` (singleton `ConcurrentDictionary`) — launch returns immediately, `/status` endpoint is a zero-cost dictionary lookup instead of SSH round-trips
-  - **rewritten spike validated end-to-end on `SEA-ER-08`** — two Ubuntu VMs created (`SEA-ER-18-VM07`, `SEA-ER-18-VM08`) in ~4.5 minutes; no timeouts, no files on disk, credentials in-memory only; minor: `Assert-LabAdminContext` leaks `$true` into the results array
+- [ ] **Create Lab VMs — cleanup and hardening**
+  - [x] Remove spike endpoints from `Program.cs`
+  - [x] Duplicate/concurrent request guardrails — UI-level: active run resumes on reopen, confirm dialog after previous completion; server-side not needed for internal tool
+  - [x] Add warmup query for `LabVmRun` table to `/warmup` endpoint
+  - [ ] Validate on additional Hyper-V servers beyond `SEA-ER-08`
 
 ---
 
 ## 💡 Ideas / Future Work
 
-### Automation & Deployment (next up)
+### Automation & Deployment
 
-- [ ] **Create Lab VMs button** — Execute LabVMPowerShell on the target Hyper-V server via SSH:
-  - **Server prep (one-time per server):** Enable OpenSSH Server on each Windows Server 2026 Hyper-V host, configure the service account credentials in Key Vault (same pattern as network device creds)
-  - **LabMod module update:** Add a `-Password` (or `-Credential`) parameter to `New-LabVM` / `Remove-LabVM` so the script can run non-interactively via SSH instead of prompting for passwords
-  - **App code:** Look up target server from tenant config (e.g., `SEA-ER-04`), resolve its management IP, SSH in via existing `SshService`, run the LabVM PowerShell command, stream output to the modal
-
-#### Create Lab VMs — Plan of Attack
-
-1. **Prerequisites and host readiness**
-   1.1. Enable and verify OpenSSH Server on each Windows Server 2026 Hyper-V host that PathWeb may target.
-   1.2. Confirm the service account can sign in over SSH and launch PowerShell non-interactively on each target host.
-   1.3. Store Hyper-V host credentials in Azure Key Vault using a clear per-host or per-lab naming convention.
-   1.4. Confirm PathWeb can resolve and read those credentials using the existing managed identity + Key Vault path.
-   1.5. Define the deterministic mapping from tenant/lab/server preference to target Hyper-V host name (for example `SEA` → `SEA-ER-04`).
-
-2. **LabMod and remote command contract**
-   2.1. Update `New-LabVM` / `Remove-LabVM` to accept `-Password` or `-Credential` so they never prompt interactively.
-   2.2. Manually test the non-interactive PowerShell command on a host before wiring it into PathWeb.
-   2.3. Decide the exact command contract PathWeb will send to the host, including tenant inputs, VM selections, credentials, and expected output format.
-   2.4. Define a clean end-of-run output pattern so remote execution can return a useful success/failure summary.
-
-3. **Backend proof-of-concept execution path**
-   3.1. Build a small backend proof-of-concept that resolves tenant → host → management IP → credentials without touching the UI yet.
-   3.2. Reuse `SshService` to connect to a target host and execute the intended PowerShell command remotely.
-   3.3. Capture stdout/stderr and confirm the output is stable enough to surface in the app.
-   3.4. Fail early and clearly when host mapping, management IP, credentials, or SSH connectivity are missing.
-
-4. **App abstractions and safety checks**
-   4.1. Add a dedicated helper/service for tenant-to-host resolution and host credential lookup so controllers stay thin.
-   4.2. Validate that the tenant is active and has sufficient information to determine a target host before running any VM action.
-   4.3. Add guardrails against duplicate/concurrent Lab VM create requests for the same tenant.
-   4.4. Decide whether remove/backout will share the same abstraction once create is working.
-
-5. **UI and operator workflow**
-   5.1. Enable the `Create Lab VMs` action from the `LabVMPowerShell` config card only after backend execution is proven.
-   5.2. Reuse the existing modal pattern if possible so output streaming and status behavior stay consistent with other actions.
-   5.3. Show target host, running state, output, and success/failure clearly in the modal.
-   5.4. Add a confirmation step before the actual create action if the workflow feels risky in practice.
-
-6. **Run history and persistence**
-   6.1. Decide whether Lab VM actions should be persisted similarly to Azure Automation and device actions.
-   6.2. If yes, store tenant, action, target host, submitted by/date, success/failure, and output summary in SQL.
-   6.3. Surface the latest attempt and recent history in the Config page if that proves useful.
-
-7. **Incremental rollout and validation**
-   7.1. Test with a single lab and a single Hyper-V host first.
-   7.2. Validate one simple create scenario end-to-end before generalizing.
-   7.3. After create works, add and test the corresponding remove/backout path.
-   7.4. Only then expand the feature to additional labs/hosts and broader tenant combinations.
-
-### Post-Deploy Automation
+- [ ] **Remove Lab VMs** — Corresponding remove/backout path for on-prem VMs via SSH, reusing the same `LabVmController` / `SshService` / `LabMod` architecture
+- [ ] **Expand Lab VM to additional labs** — Enable OpenSSH on Ashburn Hyper-V hosts, validate the `<Lab>-ER-xx` naming convention works for ASH
 
 - [ ] **Auto S-Key retrieval** — Button to auto-retrieve the ExpressRoute Service Key from Azure (via Resource ID or circuit name) and populate the config
 - [ ] **Auto VPN Endpoints** — Button to retrieve VPN gateway public IPs from Azure and update the firewall VPN config with actual endpoint addresses

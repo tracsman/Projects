@@ -53,6 +53,18 @@
     var automationHistoryJson = System.Text.Json.JsonSerializer.Serialize(automationHistory);
     var deviceApplyRunsJson = System.Text.Json.JsonSerializer.Serialize(deviceApplyRuns);
     var emailSendRunsJson = System.Text.Json.JsonSerializer.Serialize(emailSendRuns);
+    var labVmRunJson = Model.LatestLabVmRun != null
+        ? System.Text.Json.JsonSerializer.Serialize(new
+        {
+            success = Model.LatestLabVmRun.Success,
+            status = Model.LatestLabVmRun.Status,
+            requestCount = Model.LatestLabVmRun.RequestCount,
+            createdVmNames = Model.LatestLabVmRun.CreatedVmNames,
+            submittedBy = Model.LatestLabVmRun.SubmittedBy,
+            submittedDate = Model.LatestLabVmRun.SubmittedDate,
+            completedDate = Model.LatestLabVmRun.CompletedDate
+        })
+        : "null";
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
@@ -166,6 +178,11 @@ else
                         }
                         <small class="text-body-secondary d-none" id="deviceApplyStatusText-@configType"></small>
                     }
+                    else if (configType == "LabVMPowerShell")
+                    {
+                        <span class="badge text-bg-secondary border-0 d-none" id="labVmStatusBadge"></span>
+                        <small class="text-body-secondary d-none" id="labVmStatusText"></small>
+                    }
                 </div>
                 <div class="d-flex gap-1 flex-wrap">
                     @if (!Model.IsInactive && isEmail)
@@ -180,7 +197,7 @@ else
                     }
                     else if (!Model.IsInactive && configType == "LabVMPowerShell")
                     {
-                        <button disabled class="btn btn-sm btn-outline-primary">Create Lab VMs</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="openLabVmModal()"@(authLevel < 8 ? " disabled" : "")>Create Lab VMs</button>
                     }
                     else if (!Model.IsInactive && configType == "ServiceProviderInstructions")
                     {
@@ -283,6 +300,37 @@ else
     </div>
 </div>
 
+<div class="modal fade" id="labVmModal" tabindex="-1" aria-labelledby="labVmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="labVmModalLabel">Create Lab VMs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="labVmStatus" class="mb-2"></div>
+                <table class="table table-sm mb-0" id="labVmTable">
+                    <thead>
+                        <tr>
+                            <th style="width:50px">#</th>
+                            <th style="width:130px">OS</th>
+                            <th>Target Server</th>
+                            <th style="width:200px">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="labVmTableBody"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="labVmRunBtn" onclick="submitLabVmRun()">
+                    <i class="bi bi-play-fill"></i> Create VMs
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         function runDeviceAction(configType) {
@@ -311,6 +359,7 @@ else
         var _automationHistory = @Html.Raw(automationHistoryJson);
         var _deviceApplyRuns = @Html.Raw(deviceApplyRunsJson);
         var _emailSendRuns = @Html.Raw(emailSendRunsJson);
+        var _labVmRun = @Html.Raw(labVmRunJson);
         var _canRunAutomation = @(authLevel >= 8 ? "true" : "false");
 
         function resetModal() {
@@ -610,6 +659,57 @@ else
             Object.keys(_emailSendRuns).forEach(renderEmailSendSummary);
         }
 
+        function renderLabVmSummary() {
+            var badge = document.getElementById('labVmStatusBadge');
+            var text = document.getElementById('labVmStatusText');
+            if (!badge || !text) return;
+
+            if (!_labVmRun) {
+                badge.className = 'badge text-bg-secondary border-0 d-none';
+                badge.textContent = '';
+                text.classList.add('d-none');
+                text.textContent = '';
+                return;
+            }
+
+            if (_labVmRun.status === 'Running') {
+                badge.className = 'badge border-0 text-bg-warning';
+                badge.textContent = 'Running';
+                badge.classList.remove('d-none');
+                text.textContent = 'Started ' + formatAutomationDate(_labVmRun.submittedDate);
+                text.classList.remove('d-none');
+                return;
+            }
+
+            badge.className = 'badge border-0 ' + (_labVmRun.success ? 'text-bg-success' : 'text-bg-danger');
+            badge.textContent = _labVmRun.status || (_labVmRun.success ? 'Completed' : 'Failed');
+            badge.classList.remove('d-none');
+
+            var dateText = _labVmRun.completedDate
+                ? formatAutomationDate(_labVmRun.completedDate)
+                : formatAutomationDate(_labVmRun.submittedDate);
+            var vmText = _labVmRun.createdVmNames ? ' · ' + _labVmRun.createdVmNames : '';
+            text.textContent = (_labVmRun.success ? 'Completed ' : 'Failed ') + dateText + vmText;
+            text.classList.remove('d-none');
+        }
+
+        function updateLabVmBadge(data) {
+            var vmNames = (data.requests || [])
+                .filter(function (r) { return r.createdVmName; })
+                .map(function (r) { return r.createdVmName; })
+                .join(', ');
+
+            _labVmRun = {
+                success: data.status === 'Completed',
+                status: data.status,
+                createdVmNames: vmNames || null,
+                submittedBy: data.submittedBy,
+                submittedDate: data.startedAt,
+                completedDate: data.completedAt
+            };
+            renderLabVmSummary();
+        }
+
         function openDeviceApplyRunModal(configType) {
             var run = getDeviceApplyRun(configType);
             if (!run) return;
@@ -841,17 +941,320 @@ else
             }
         }
 
+        // --- Lab VM Modal ---
+        var _labVmRunId = null;
+        var _labVmPollTimer = null;
+        var _labVmServers = [];
+        var _labVmRequests = [];
+        var _labVmDefaultServer = '';
+
+        function setLabVmStatus(html) {
+            document.getElementById('labVmStatus').innerHTML = html;
+        }
+
+        function stopLabVmPolling() {
+            if (_labVmPollTimer) {
+                clearTimeout(_labVmPollTimer);
+                _labVmPollTimer = null;
+            }
+        }
+
+        function resetLabVmModal(clearRun) {
+            stopLabVmPolling();
+            if (clearRun) _labVmRunId = null;
+            _labVmServers = [];
+            _labVmRequests = [];
+            _labVmDefaultServer = '';
+            setLabVmStatus('');
+            document.getElementById('labVmTableBody').innerHTML = '';
+            var btn = document.getElementById('labVmRunBtn');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+        }
+
+        function buildServerSelect(index, selectedServer) {
+            var html = '<select class="form-select form-select-sm" id="labVmServer-' + index + '">';
+            for (var i = 0; i < _labVmServers.length; i++) {
+                var s = _labVmServers[i];
+                var label = s.name + (s.name === _labVmDefaultServer ? ' (default)' : '');
+                var selected = s.name === selectedServer ? ' selected' : '';
+                html += '<option value="' + s.name + '"' + selected + '>' + label + '</option>';
+            }
+            return html + '</select>';
+        }
+
+        function renderLabVmTable() {
+            var tbody = document.getElementById('labVmTableBody');
+            var html = '';
+            for (var i = 0; i < _labVmRequests.length; i++) {
+                var req = _labVmRequests[i];
+                html += '<tr id="labVmRow-' + req.index + '">'
+                    + '<td>' + req.index + '</td>'
+                    + '<td><code>' + req.os + '</code></td>'
+                    + '<td>' + buildServerSelect(req.index, _labVmDefaultServer) + '</td>'
+                    + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Ready</span></td>'
+                    + '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        function renderLabVmRequestStatus(requests) {
+            for (var i = 0; i < requests.length; i++) {
+                var req = requests[i];
+                var cell = document.getElementById('labVmRowStatus-' + req.index);
+                if (!cell) continue;
+
+                if (req.status === 'Completed') {
+                    cell.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + (req.createdVmName || 'Created') + '</span>';
+                } else if (req.status === 'Failed') {
+                    cell.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + (req.message || 'Failed') + '</span>';
+                } else if (req.status === 'Running') {
+                    cell.innerHTML = '<span class="text-warning"><i class="bi bi-hourglass-split"></i> Running...</span>';
+                } else {
+                    cell.innerHTML = '<span class="text-body-secondary">' + (req.status || 'Pending') + '</span>';
+                }
+
+                // Lock the server dropdown for non-pending requests
+                var select = document.getElementById('labVmServer-' + req.index);
+                if (select && req.status !== 'Pending' && req.status !== 'Ready') {
+                    select.disabled = true;
+                }
+            }
+        }
+
+        async function openLabVmModal() {
+            var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('labVmModal'));
+
+            // If there's an active or recently finished run, restore it
+            if (_labVmRunId) {
+                stopLabVmPolling();
+                setLabVmStatus('<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split"></i> Reconnecting to active run...</div>');
+                modal.show();
+                await resumeLabVmRun();
+                return;
+            }
+
+            // Warn if VMs have already been deployed for this tenant
+            if (_labVmRun && (_labVmRun.status === 'Completed' || _labVmRun.status === 'Failed')) {
+                var prevStatus = _labVmRun.status === 'Completed' ? 'successfully deployed' : 'attempted (with failures)';
+                if (!confirm('Lab VMs were previously ' + prevStatus + '.\n\nAre you sure you want to create VMs again?')) {
+                    return;
+                }
+            }
+
+            resetLabVmModal(true);
+            setLabVmStatus('<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split"></i> Loading VM requests...</div>');
+            modal.show();
+
+            try {
+                var [reqResp, srvResp] = await Promise.all([
+                    fetch('@Url.Action("Requests", "LabVm")?tenantGuid=' + encodeURIComponent(_tenantGuid)),
+                    fetch('@Url.Action("Servers", "LabVm")?tenantGuid=' + encodeURIComponent(_tenantGuid))
+                ]);
+                var reqData = await reqResp.json();
+                var srvData = await srvResp.json();
+
+                if (!reqData.success) {
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + reqData.error + '</div>');
+                    document.getElementById('labVmRunBtn').disabled = true;
+                    return;
+                }
+                if (!srvData.success) {
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + srvData.error + '</div>');
+                    document.getElementById('labVmRunBtn').disabled = true;
+                    return;
+                }
+
+                _labVmRequests = reqData.requests;
+                _labVmServers = srvData.servers;
+                _labVmDefaultServer = srvData.defaultServer || (srvData.servers.length > 0 ? srvData.servers[0].name : '');
+
+                document.getElementById('labVmModalLabel').textContent = 'Create Lab VMs: ' + reqData.tenant.tenantName;
+                setLabVmStatus('<div class="alert alert-info mb-0"><i class="bi bi-info-circle-fill"></i> Review target servers and click <strong>Create VMs</strong>. Default server: <code>' + _labVmDefaultServer + '</code></div>');
+                renderLabVmTable();
+            } catch (err) {
+                setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Failed to load: ' + err + '</div>');
+                document.getElementById('labVmRunBtn').disabled = true;
+            }
+        }
+
+        async function resumeLabVmRun() {
+            try {
+                var response = await fetch('@Url.Action("Status", "LabVm")?runId=' + encodeURIComponent(_labVmRunId));
+                var data = await response.json();
+
+                if (!data.success) {
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.error + '</div>');
+                    _labVmRunId = null;
+                    return;
+                }
+
+                var tenantLabel = data.tenant ? data.tenant.tenantName || '' : '';
+                document.getElementById('labVmModalLabel').textContent = 'Create Lab VMs: ' + tenantLabel;
+
+                // Rebuild table from status data (server shown as text, not dropdown)
+                renderLabVmTableFromStatus(data.requests || []);
+                renderLabVmRequestStatus(data.requests || []);
+
+                var isTerminal = data.status === 'Completed' || data.status === 'Failed';
+                var btn = document.getElementById('labVmRunBtn');
+
+                if (data.status === 'Completed') {
+                    setLabVmStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> All VMs created successfully.</div>');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+                    _labVmRunId = null;
+                } else if (data.status === 'Failed') {
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || 'One or more VM requests failed.') + '</div>');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+                    _labVmRunId = null;
+                } else {
+                    setLabVmStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> VMs are being created. This may take several minutes...</div>');
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Running...';
+                    pollLabVmStatus();
+                }
+            } catch (err) {
+                setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Failed to reconnect: ' + err + '</div>');
+                _labVmRunId = null;
+            }
+        }
+
+        function renderLabVmTableFromStatus(requests) {
+            var tbody = document.getElementById('labVmTableBody');
+            var html = '';
+            for (var i = 0; i < requests.length; i++) {
+                var req = requests[i];
+                html += '<tr id="labVmRow-' + req.index + '">'
+                    + '<td>' + req.index + '</td>'
+                    + '<td><code>' + req.os + '</code></td>'
+                    + '<td><code>' + (req.targetServer || '') + '</code></td>'
+                    + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Pending</span></td>'
+                    + '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+
+        async function submitLabVmRun() {
+            var btn = document.getElementById('labVmRunBtn');
+            setSpinner(btn, 'Submitting...');
+
+            var overrides = [];
+            for (var i = 0; i < _labVmRequests.length; i++) {
+                var req = _labVmRequests[i];
+                var select = document.getElementById('labVmServer-' + req.index);
+                if (select) {
+                    overrides.push({ index: req.index, targetServer: select.value });
+                }
+            }
+
+            try {
+                var response = await fetch('@Url.Action("Submit", "LabVm")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': getToken()
+                    },
+                    body: JSON.stringify({
+                        tenantGuid: _tenantGuid,
+                        vmOverrides: overrides
+                    })
+                });
+
+                var data = await response.json();
+                if (!data.success) {
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.error + '</div>');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+                    return;
+                }
+
+                _labVmRunId = data.runId;
+                setLabVmStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> VMs are being created. This may take several minutes...</div>');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Running...';
+
+                // Show running badge on the card header immediately
+                _labVmRun = { status: 'Running', submittedDate: new Date().toISOString() };
+                renderLabVmSummary();
+
+                // Lock all server dropdowns
+                for (var i = 0; i < _labVmRequests.length; i++) {
+                    var select = document.getElementById('labVmServer-' + _labVmRequests[i].index);
+                    if (select) select.disabled = true;
+                }
+
+                if (data.requests) renderLabVmRequestStatus(data.requests);
+                pollLabVmStatus();
+            } catch (err) {
+                setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Submit failed: ' + err + '</div>');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+            }
+        }
+
+        async function pollLabVmStatus() {
+            if (!_labVmRunId) return;
+
+            var modalOpen = document.getElementById('labVmModal').classList.contains('show');
+
+            try {
+                var response = await fetch('@Url.Action("Status", "LabVm")?runId=' + encodeURIComponent(_labVmRunId));
+                var data = await response.json();
+
+                if (!data.success && data.error) {
+                    if (modalOpen) setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.error + '</div>');
+                    return;
+                }
+
+                // Update modal table if it's open
+                if (modalOpen && data.requests) renderLabVmRequestStatus(data.requests);
+
+                if (data.status === 'Completed') {
+                    if (modalOpen) {
+                        setLabVmStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> All VMs created successfully.</div>');
+                        var btn = document.getElementById('labVmRunBtn');
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+                    }
+                    updateLabVmBadge(data);
+                    _labVmRunId = null;
+                } else if (data.status === 'Failed') {
+                    if (modalOpen) {
+                        setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || 'One or more VM requests failed.') + '</div>');
+                        var btn = document.getElementById('labVmRunBtn');
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-play-fill"></i> Create VMs';
+                    }
+                    updateLabVmBadge(data);
+                    _labVmRunId = null;
+                } else {
+                    // Still running — keep polling regardless of modal state
+                    _labVmPollTimer = setTimeout(pollLabVmStatus, 3000);
+                }
+            } catch (err) {
+                setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Poll failed: ' + err + '</div>');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             renderAllAutomationSummaries();
             renderAllAutomationHistory();
             renderAllDeviceApplySummaries();
             renderAllEmailSendSummaries();
+            renderLabVmSummary();
             refreshAutomationSummaries();
 
             document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {
                 stopAutomationPolling();
                 _automationConfigType = null;
                 _automationJobId = null;
+            });
+
+            document.getElementById('labVmModal').addEventListener('hidden.bs.modal', function () {
+                // Don't stop polling — it continues in the background for the badge.
+                // Polling self-terminates when the run reaches a terminal state.
             });
         });
 

@@ -522,6 +522,11 @@ public class TenantsController : BaseController
             .OrderByDescending(r => r.SubmittedDate)
             .ToListAsync();
 
+        var latestLabVmRun = await _context.LabVmRuns
+            .Where(r => r.TenantGuid == id)
+            .OrderByDescending(r => r.SubmittedDate)
+            .FirstOrDefaultAsync();
+
         var model = new TenantConfigViewModel
         {
             TenantGuid = id.Value,
@@ -540,7 +545,8 @@ public class TenantsController : BaseController
                 .ToDictionary(g => g.Key, g => g.First()),
             EmailSendRuns = latestEmailSendRuns
                 .GroupBy(r => r.ConfigType)
-                .ToDictionary(g => g.Key, g => g.First())
+                .ToDictionary(g => g.Key, g => g.First()),
+            LatestLabVmRun = latestLabVmRun
         };
 
         _logger.LogInformation("Tenants.Config for {TenantName} ({ConfigCount} configs) by {User}", tenant.TenantName, configs.Count, GetUserEmail());
