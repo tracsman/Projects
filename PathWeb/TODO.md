@@ -49,12 +49,25 @@
   - **SQL persistence:** `LabVmRun` table stores completed runs with success/failure, VM names, timestamps, and per-request output; status badge + timestamp displayed on the `On-prem VM PowerShell` card header (matches existing firewall/email badge pattern); badge updates live when a run finishes without page refresh
   - **Validated end-to-end on `SEA-ER-08` and `SEA-ER-09`** with Seattle Tenant 18: multiple VMs created, no timeouts, no files on disk; fixed SSH credential bug (was using network device credentials instead of server admin credentials from `LabSecrets` vault)
   - **Spike endpoints** (`/diag/test-labvm-ssh` and `/diag/test-labvm-ssh/status`) still present in `Program.cs` for reference; to be removed in cleanup pass
+- [x] **Device Validate action** — Per-row "Validate" button on the Devices index page (and on the individual Device details page) to spot-check SSH connectivity and readiness:
+  - **Routers/switches**: SSH with device credentials, runs `show version brief` (Juniper) or `show version` (Cisco) to confirm connectivity and auth
+  - **Servers**: SSH with server admin credentials from `LabSecrets` vault, runs a multi-check script via `pwsh` — PowerShell 7 installed, Windows Server 2025, sshd running, LabMod module ≥ 1.5.0, log directory exists — displayed as a pass/fail table
+  - Inline result on Details page, modal on Index page; `SshService.RunCommandWithCredentialsAsync` and `RunPowerShellCommandWithCredentialsAsync` added for explicit credential support
 
 ---
 
 ## 🔧 In Progress
 
-*(No active items)*
+- [ ] **Config card action dropdowns + removal actions** — Replace standalone buttons with unified action dropdowns on non-device config cards (matching the existing network device pattern), and wire up removal/teardown actions:
+  - **UI refactor:** Swap individual buttons for `<select>` + `▶ Run` dropdown on PowerShell, provider, and Lab VM cards; keep Re-open button separate (contextual, not a new action); keep Copy to Clipboard standalone
+  - **Dropdown options per config type:**
+    - `CreateERPowerShell` / `CreateAzurePowerShell`: Deploy to Azure | Remove from Azure
+    - `ServiceProviderInstructions`: Provision at Provider | Deprovision at Provider
+    - `LabVMPowerShell`: Create Lab VMs | Remove Lab VMs
+  - **Network device cards** (SRX, MX, ASR, NX): Already have dropdowns with Remove from Device — test the existing flow end-to-end
+  - **Removal backends:** Wire up each removal action to the appropriate LabMod command or Automation runbook as they are tackled; some commands exist, others may need to be created
+  - Respect the same auth-level and inactive-tenant guards as other config actions
+- [ ] **Remove Lab VMs** — Corresponding remove/backout path for on-prem VMs via SSH, reusing the same `LabVmController` / `SshService` / `LabMod` architecture
 
 ---
 
@@ -62,18 +75,12 @@
 
 ### Automation & Deployment
 
-- [ ] **Remove Lab VMs** — Corresponding remove/backout path for on-prem VMs via SSH, reusing the same `LabVmController` / `SshService` / `LabMod` architecture
-- [ ] **Expand Lab VM to additional labs** — Enable OpenSSH on Ashburn Hyper-V hosts, validate the `<Lab>-ER-xx` naming convention works for ASH
+- [ ] **Expand Lab VM to additional labs**
 - [ ] **LabMod log viewer** — Admin tool to view the `LabMod.log.jsonl` file on a given Hyper-V server via SSH:
   - SSH to the selected server's management IP using existing `SshService` and read `C:\Hyper-V\Logs\LabMod.log.jsonl`
   - Parse the JSONL lines and display in a searchable/filterable table (timestamp, level, RunId, message)
   - Server picker dropdown reusing the `LabVmController.Servers` pattern (or a standalone Admin page with a server selector)
   - Optional: tail/refresh to watch recent activity; filter by RunId to correlate with a specific Lab VM run
-- [x] **Device Validate action** — Per-row "Validate" button on the Devices index page (and on the individual Device details page) to spot-check SSH connectivity and readiness:
-  - **Routers/switches**: SSH with device credentials, runs `show version brief` (Juniper) or `show version` (Cisco) to confirm connectivity and auth
-  - **Servers**: SSH with server admin credentials from `LabSecrets` vault, runs a multi-check script via `pwsh` — PowerShell 7 installed, Windows Server 2025, sshd running, LabMod module ≥ 1.5.0, log directory exists — displayed as a pass/fail table
-  - Inline result on Details page, modal on Index page; `SshService.RunCommandWithCredentialsAsync` and `RunPowerShellCommandWithCredentialsAsync` added for explicit credential support
-
 - [ ] **Auto S-Key retrieval**
 - [ ] **Auto VPN Endpoints** — Button to retrieve VPN gateway public IPs from Azure and update the firewall VPN config with actual endpoint addresses
 - [ ] **Post-deploy value injection** — Resolve placeholder values (e.g., `<REQUIRED-IP>`, S-TAGs) that are only known after Azure deployment:
