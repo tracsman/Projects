@@ -321,7 +321,8 @@ public class LabVmController : BaseController
 
             try
             {
-                var (success, output) = await _sshService.RunPowerShellCommandAsync(hostIp, 22, sb.ToString(), keepAlive: TimeSpan.FromSeconds(15));
+                var (success, output) = await _sshService.RunPowerShellCommandWithCredentialsAsync(
+                    hostIp, 22, AdminUserName, adminPassword, sb.ToString(), keepAlive: TimeSpan.FromSeconds(15));
 
                 if (!success)
                 {

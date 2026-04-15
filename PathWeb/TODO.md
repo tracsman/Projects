@@ -47,18 +47,14 @@
   - **Per-request live progress:** Each VM runs as its own SSH command so the tracker updates after each VM completes (not all-at-once at the end); VMs on different servers run in parallel via `Task.WhenAll`
   - **Config page modal UI:** Table with `#`, `OS`, `Target Server` (dropdown), and `Status` columns; per-row ✅/⏳/❌ indicators with VM names; resume-on-reopen (close modal during creation, reopen to see current state)
   - **SQL persistence:** `LabVmRun` table stores completed runs with success/failure, VM names, timestamps, and per-request output; status badge + timestamp displayed on the `On-prem VM PowerShell` card header (matches existing firewall/email badge pattern); badge updates live when a run finishes without page refresh
-  - **Validated end-to-end on `SEA-ER-08`** with Seattle Tenant 18: multiple Ubuntu VMs created in ~4.5 minutes per pair, no timeouts, no files on disk
+  - **Validated end-to-end on `SEA-ER-08` and `SEA-ER-09`** with Seattle Tenant 18: multiple VMs created, no timeouts, no files on disk; fixed SSH credential bug (was using network device credentials instead of server admin credentials from `LabSecrets` vault)
   - **Spike endpoints** (`/diag/test-labvm-ssh` and `/diag/test-labvm-ssh/status`) still present in `Program.cs` for reference; to be removed in cleanup pass
 
 ---
 
 ## 🔧 In Progress
 
-- [ ] **Create Lab VMs — cleanup and hardening**
-  - [x] Remove spike endpoints from `Program.cs`
-  - [x] Duplicate/concurrent request guardrails — UI-level: active run resumes on reopen, confirm dialog after previous completion; server-side not needed for internal tool
-  - [x] Add warmup query for `LabVmRun` table to `/warmup` endpoint
-  - [ ] Validate on additional Hyper-V servers beyond `SEA-ER-08`
+*(No active items)*
 
 ---
 
@@ -68,8 +64,17 @@
 
 - [ ] **Remove Lab VMs** — Corresponding remove/backout path for on-prem VMs via SSH, reusing the same `LabVmController` / `SshService` / `LabMod` architecture
 - [ ] **Expand Lab VM to additional labs** — Enable OpenSSH on Ashburn Hyper-V hosts, validate the `<Lab>-ER-xx` naming convention works for ASH
+- [ ] **LabMod log viewer** — Admin tool to view the `LabMod.log.jsonl` file on a given Hyper-V server via SSH:
+  - SSH to the selected server's management IP using existing `SshService` and read `C:\Hyper-V\Logs\LabMod.log.jsonl`
+  - Parse the JSONL lines and display in a searchable/filterable table (timestamp, level, RunId, message)
+  - Server picker dropdown reusing the `LabVmController.Servers` pattern (or a standalone Admin page with a server selector)
+  - Optional: tail/refresh to watch recent activity; filter by RunId to correlate with a specific Lab VM run
+- [x] **Device Validate action** — Per-row "Validate" button on the Devices index page (and on the individual Device details page) to spot-check SSH connectivity and readiness:
+  - **Routers/switches**: SSH with device credentials, runs `show version brief` (Juniper) or `show version` (Cisco) to confirm connectivity and auth
+  - **Servers**: SSH with server admin credentials from `LabSecrets` vault, runs a multi-check script via `pwsh` — PowerShell 7 installed, Windows Server 2025, sshd running, LabMod module ≥ 1.5.0, log directory exists — displayed as a pass/fail table
+  - Inline result on Details page, modal on Index page; `SshService.RunCommandWithCredentialsAsync` and `RunPowerShellCommandWithCredentialsAsync` added for explicit credential support
 
-- [ ] **Auto S-Key retrieval** — Button to auto-retrieve the ExpressRoute Service Key from Azure (via Resource ID or circuit name) and populate the config
+- [ ] **Auto S-Key retrieval**
 - [ ] **Auto VPN Endpoints** — Button to retrieve VPN gateway public IPs from Azure and update the firewall VPN config with actual endpoint addresses
 - [ ] **Post-deploy value injection** — Resolve placeholder values (e.g., `<REQUIRED-IP>`, S-TAGs) that are only known after Azure deployment:
   - Firewall: replace VPN gateway `address <REQUIRED-IP>` in `gw_Cust{Id}` IKE gateway config with actual customer peer IP
@@ -98,11 +103,10 @@
 
 - [ ] **Storage access for post-install VM scripts** — Post-SFI: investigate whether the App Service Managed Identity can access the Scripts storage account directly, and pass credentials/SAS to VMs during provisioning
 
-### PowerShell Runbook Output Hygiene
+### Runbook Output Hygiene
 
-- [ ] **Replace routine `Write-Host` with `Write-Verbose`** — Update generated/submitted PowerShell scripts so step-by-step chatter goes to the verbose stream instead of the main output stream
-- [ ] **Add final structured `Write-Output` result object** — Emit a concise end-of-run object with multiple properties summarizing the job outcome; exact property schema to be decided later
-- [ ] **Parse structured runbook result objects in PathWeb** — Once runbooks emit a final structured `Write-Output` object, detect and present its properties cleanly in the modal/history UI instead of showing only raw text
+- [ ] **Parse structured runbook result objects in PathWeb**
+   Once runbooks emit a final structured `Write-Output` object, detect and present its properties cleanly in the modal/history UI instead of showing only raw text.
 
 ---
 

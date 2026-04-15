@@ -100,6 +100,64 @@ public class SshService
     }
 
     /// <summary>
+    /// Connects to a host via SSH using explicit credentials, launches pwsh non-interactively, and runs a PowerShell script.
+    /// Used for server operations where credentials differ from network device credentials.
+    /// </summary>
+    public Task<(bool Success, string Output)> RunPowerShellCommandWithCredentialsAsync(
+        string host, int port, string username, string password, string script, TimeSpan? keepAlive = null)
+    {
+        if (string.IsNullOrWhiteSpace(script))
+            return Task.FromResult((false, "PowerShell script is empty."));
+
+        var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var command = $"pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encodedCommand}";
+        return RunCommandWithCredentialsAsync(host, port, username, password, command, keepAlive);
+    }
+
+    /// <summary>
+    /// Connects to a host via SSH using explicit credentials (bypassing Key Vault device credentials)
+    /// and runs a single command. Used for server operations where credentials differ from network devices.
+    /// </summary>
+    public async Task<(bool Success, string Output)> RunCommandWithCredentialsAsync(
+        string host, int port, string username, string password, string command, TimeSpan? keepAlive = null)
+    {
+        try
+        {
+            _logger.LogInformation("SSH connecting to {Host}:{Port} as {User}", host, port, username);
+
+            using var client = new SshClient(host, port, username, password);
+            client.ConnectionInfo.Timeout = TimeSpan.FromSeconds(10);
+
+            if (keepAlive.HasValue)
+                client.KeepAliveInterval = keepAlive.Value;
+
+            await Task.Run(() => client.Connect());
+
+            if (!client.IsConnected)
+                return (false, "Connection failed — client did not connect.");
+
+            _logger.LogInformation("SSH connected to {Host}, running command: {Command}", host, command);
+
+            var result = client.RunCommand(command);
+            client.Disconnect();
+
+            if (result.ExitStatus != 0 && !string.IsNullOrEmpty(result.Error))
+            {
+                _logger.LogWarning("SSH command returned exit code {ExitCode}: {Error}", result.ExitStatus, result.Error);
+                return (false, $"Exit code {result.ExitStatus}: {result.Error}");
+            }
+
+            _logger.LogInformation("SSH command succeeded on {Host}", host);
+            return (true, result.Result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SSH connection failed to {Host}:{Port}", host, port);
+            return (false, $"Error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Opens an interactive shell session to apply configuration lines to a network device.
     /// Juniper: configure → load set terminal → commit check → show | compare → commit and-quit
     /// Cisco: configure terminal → apply lines → end → wr

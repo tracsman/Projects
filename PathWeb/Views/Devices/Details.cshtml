@@ -52,5 +52,78 @@
     {
         <a asp-action="Edit" asp-route-id="@Model.DeviceId" class="btn btn-primary">Edit</a>
     }
+    @if (!string.IsNullOrEmpty(Model.MgmtIpv4))
+    {
+        <button type="button" class="btn btn-outline-primary" id="validateBtn" onclick="validateDevice()">
+            <i class="bi bi-shield-check"></i> Validate
+        </button>
+    }
     <a asp-action="Index" class="btn btn-secondary">Back to List</a>
 </div>
+
+@if (!string.IsNullOrEmpty(Model.MgmtIpv4))
+{
+    @Html.AntiForgeryToken()
+
+    <div id="validateResult" class="mt-3" style="display:none;">
+        <div id="validateStatus"></div>
+        <pre id="validateOutput" class="bg-dark text-light p-3 rounded mt-2" style="max-height:400px; overflow:auto; white-space:pre-wrap; display:none;"></pre>
+    </div>
+
+    @section Scripts {
+        <script>
+            async function validateDevice() {
+                var btn = document.getElementById('validateBtn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validating...';
+
+                document.getElementById('validateResult').style.display = '';
+                document.getElementById('validateStatus').innerHTML = '<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split"></i> Connecting via SSH...</div>';
+                document.getElementById('validateOutput').style.display = 'none';
+                document.getElementById('validateOutput').textContent = '';
+
+                try {
+                    var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                    var response = await fetch('@Url.Action("Validate", "Devices")?id=@Model.DeviceId', {
+                        method: 'POST',
+                        headers: { 'RequestVerificationToken': token }
+                    });
+                    var data = await response.json();
+
+                    if (data.success && data.checks) {
+                        var icon = data.allPassed ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+                        var alertClass = data.allPassed ? 'alert-success' : 'alert-warning';
+                        var html = '<div class="alert ' + alertClass + ' mb-2"><i class="bi ' + icon + '"></i> <strong>' + data.device + '</strong> (' + data.host + ') — SSH connected as Administrator</div>';
+                        html += '<table class="table table-sm mb-0"><thead><tr><th>Check</th><th class="text-center">Result</th><th>Detail</th></tr></thead><tbody>';
+                        for (var i = 0; i < data.checks.length; i++) {
+                            var c = data.checks[i];
+                            var badge = c.pass
+                                ? '<span class="badge text-bg-success">Pass</span>'
+                                : '<span class="badge text-bg-danger">Fail</span>';
+                            html += '<tr><td>' + c.check + '</td><td class="text-center">' + badge + '</td><td><small>' + (c.detail || '') + '</small></td></tr>';
+                        }
+                        html += '</tbody></table>';
+                        document.getElementById('validateStatus').innerHTML = html;
+                    } else if (data.success) {
+                        document.getElementById('validateStatus').innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> <strong>' + data.device + '</strong> (' + data.host + ') — show version passed</div>';
+                        if (data.output) {
+                            document.getElementById('validateOutput').textContent = data.output;
+                            document.getElementById('validateOutput').style.display = '';
+                        }
+                    } else {
+                        document.getElementById('validateStatus').innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> <strong>' + (data.device || '@Model.Name') + '</strong> — ' + (data.error || 'Validation failed') + '</div>';
+                        if (data.output) {
+                            document.getElementById('validateOutput').textContent = data.output;
+                            document.getElementById('validateOutput').style.display = '';
+                        }
+                    }
+                } catch (err) {
+                    document.getElementById('validateStatus').innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Request failed: ' + err + '</div>';
+                }
+
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-shield-check"></i> Validate';
+            }
+        </script>
+    }
+}

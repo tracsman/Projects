@@ -64,8 +64,95 @@
                         <span>|</span>
                     }
                     <a asp-action="Details" asp-route-id="@item.DeviceId">Details</a>
+                    @if (!string.IsNullOrEmpty(item.MgmtIpv4))
+                    {
+                        <span>|</span>
+                        <a href="#" class="validate-link" data-device-id="@item.DeviceId" data-device-name="@item.Name">Validate</a>
+                    }
                 </td>
             </tr>
         }
     </tbody>
 </table>
+
+@Html.AntiForgeryToken()
+
+<div class="modal fade" id="validateModal" tabindex="-1" aria-labelledby="validateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="validateModalLabel">Validate Device</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="validateStatus" class="mb-2"></div>
+                <pre id="validateOutput" class="bg-dark text-light p-3 rounded" style="max-height:400px; overflow:auto; white-space:pre-wrap; display:none;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.validate-link').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                var deviceId = this.dataset.deviceId;
+                var deviceName = this.dataset.deviceName;
+                validateDevice(deviceId, deviceName);
+            });
+        });
+
+        async function validateDevice(deviceId, deviceName) {
+            document.getElementById('validateModalLabel').textContent = 'Validate: ' + deviceName;
+            document.getElementById('validateStatus').innerHTML = '<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split"></i> Connecting via SSH...</div>';
+            document.getElementById('validateOutput').style.display = 'none';
+            document.getElementById('validateOutput').textContent = '';
+
+            var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('validateModal'));
+            modal.show();
+
+            try {
+                var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                var response = await fetch('@Url.Action("Validate", "Devices")?id=' + encodeURIComponent(deviceId), {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token }
+                });
+                var data = await response.json();
+
+                if (data.success && data.checks) {
+                    var icon = data.allPassed ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+                    var alertClass = data.allPassed ? 'alert-success' : 'alert-warning';
+                    var html = '<div class="alert ' + alertClass + ' mb-2"><i class="bi ' + icon + '"></i> <strong>' + data.device + '</strong> (' + data.host + ') — SSH connected as Administrator</div>';
+                    html += '<table class="table table-sm mb-0"><thead><tr><th>Check</th><th class="text-center">Result</th><th>Detail</th></tr></thead><tbody>';
+                    for (var i = 0; i < data.checks.length; i++) {
+                        var c = data.checks[i];
+                        var badge = c.pass
+                            ? '<span class="badge text-bg-success">Pass</span>'
+                            : '<span class="badge text-bg-danger">Fail</span>';
+                        html += '<tr><td>' + c.check + '</td><td class="text-center">' + badge + '</td><td><small>' + (c.detail || '') + '</small></td></tr>';
+                    }
+                    html += '</tbody></table>';
+                    document.getElementById('validateStatus').innerHTML = html;
+                } else if (data.success) {
+                    document.getElementById('validateStatus').innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> <strong>' + data.device + '</strong> (' + data.host + ') — show version passed</div>';
+                    if (data.output) {
+                        document.getElementById('validateOutput').textContent = data.output;
+                        document.getElementById('validateOutput').style.display = '';
+                    }
+                } else {
+                    document.getElementById('validateStatus').innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> <strong>' + (data.device || deviceName) + '</strong> — ' + (data.error || 'Validation failed') + '</div>';
+                    if (data.output) {
+                        document.getElementById('validateOutput').textContent = data.output;
+                        document.getElementById('validateOutput').style.display = '';
+                    }
+                }
+            } catch (err) {
+                document.getElementById('validateStatus').innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Request failed: ' + err + '</div>';
+            }
+        }
+    </script>
+}

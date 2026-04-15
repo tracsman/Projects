@@ -7,6 +7,11 @@
 1. [ ] **Add final structured `Write-Output` result object**
    Emit a concise end-of-run object with multiple properties summarizing the job outcome; exact property schema to be decided later.
 
+### Log Tooling
+
+2. [ ] **Create `Get-LabLog` cmdlet to parse JSONL log files**
+   Add a public function that reads `*.log.jsonl` files from the logs folder, deserializes each line, and returns structured objects for filtering/reporting.
+
 
 
 ## Completed

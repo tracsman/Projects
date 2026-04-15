@@ -1,3 +1,5 @@
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PathWeb.Data;
@@ -280,5 +282,132 @@ public class DevicesController : BaseController
             .Where(d => NetworkDeviceTypes.Contains(d.Type) && d.InService && d.MgmtIpv4 != null)
             .OrderBy(d => d.Name)
             .ToListAsync();
+    }
+
+    private static readonly string[] ServerTypes = ["Server"];
+    private const string ServerAdminVaultName = "LabSecrets";
+    private const string ServerAdminSecretName = "Server-Admin";
+    private const string ServerAdminUserName = "Administrator";
+
+    /// <summary>
+    /// Validates SSH connectivity and readiness for a device.
+    /// Network devices: runs "show version" with device credentials.
+    /// Servers: runs a multi-check script via pwsh with server admin credentials:
+    ///   SSH connectivity, PowerShell 7, Windows Server 2025, sshd running, LabMod module, log directory.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Validate(Guid id)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.DataAdminReadOnly)
+            return Json(new { success = false, error = "Permission denied." });
+
+        var device = await _context.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == id);
+        if (device == null)
+            return Json(new { success = false, error = "Device not found." });
+
+        if (string.IsNullOrWhiteSpace(device.MgmtIpv4))
+            return Json(new { success = false, error = "Device has no management IPv4 address.", device = device.Name });
+
+        var isServer = ServerTypes.Contains(device.Type) || device.Name.Contains("-ER-", StringComparison.OrdinalIgnoreCase);
+
+        _logger.LogInformation("Device.Validate for {DeviceName} ({Host}), isServer={IsServer}, by {User}",
+            device.Name, device.MgmtIpv4, isServer, GetUserEmail());
+
+        bool success;
+        string output;
+
+        if (isServer)
+        {
+            try
+            {
+                var secretClient = new SecretClient(
+                    new Uri($"https://{ServerAdminVaultName.ToLowerInvariant()}.vault.azure.net/"),
+                    new DefaultAzureCredential());
+                var secret = await secretClient.GetSecretAsync(ServerAdminSecretName);
+
+                var script = """
+                    $checks = @()
+                    # PowerShell 7
+                    $pwshOk = $PSVersionTable.PSVersion.Major -ge 7
+                    $checks += [pscustomobject]@{ check='PowerShell 7'; pass=$pwshOk; detail="v$($PSVersionTable.PSVersion)" }
+                    # Windows Server 2025
+                    $os = (Get-CimInstance Win32_OperatingSystem).Caption
+                    $osOk = $os -match '2025'
+                    $checks += [pscustomobject]@{ check='Windows Server 2025'; pass=[bool]$osOk; detail=$os }
+                    # sshd running
+                    $sshd = Get-Service sshd -ErrorAction SilentlyContinue
+                    $sshdOk = $sshd -and $sshd.Status -eq 'Running'
+                    $checks += [pscustomobject]@{ check='SSH Server (sshd)'; pass=[bool]$sshdOk; detail=if($sshd){"Status: $($sshd.Status)"}else{"Not installed"} }
+                    # LabMod module
+                    $mod = Get-Module -ListAvailable -Name LabMod -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                    $modOk = $mod -and $mod.Version -ge [version]'1.5.0.0'
+                    $checks += [pscustomobject]@{ check='LabMod module (>= 1.5.0)'; pass=[bool]$modOk; detail=if($mod){"v$($mod.Version) at $($mod.ModuleBase)"}else{"Not found"} }
+                    # Log directory
+                    $logOk = Test-Path 'C:\Hyper-V\Logs'
+                    $checks += [pscustomobject]@{ check='Log directory (C:\Hyper-V\Logs)'; pass=$logOk; detail=if($logOk){"Exists"}else{"Missing"} }
+                    $checks | ConvertTo-Json -Compress -Depth 3
+                    """;
+                var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+                var command = $"pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}";
+
+                (success, output) = await _sshService.RunCommandWithCredentialsAsync(
+                    device.MgmtIpv4, 22, ServerAdminUserName, secret.Value.Value, command);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Device.Validate credential retrieval failed for {DeviceName}", device.Name);
+                return Json(new { success = false, error = $"Failed to retrieve server credentials: {ex.Message}", device = device.Name });
+            }
+        }
+        else
+        {
+            var platform = PlatformDetector.DetectPlatform(device.Name);
+            var command = platform == "Juniper" ? "show version brief" : "show version";
+            (success, output) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, command);
+        }
+
+        _logger.LogInformation("Device.Validate result for {DeviceName}: {Success}", device.Name, success);
+
+        // For servers, parse the structured check results and determine overall pass/fail
+        if (isServer && success)
+        {
+            try
+            {
+                var checks = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(output.Trim());
+                var items = checks.ValueKind == System.Text.Json.JsonValueKind.Array
+                    ? checks.EnumerateArray().ToList()
+                    : [checks];
+
+                var allPassed = items.All(c => c.TryGetProperty("pass", out var p) && p.GetBoolean());
+                return Json(new
+                {
+                    success = true,
+                    allPassed,
+                    device = device.Name,
+                    host = device.MgmtIpv4,
+                    isServer,
+                    checks = items.Select(c => new
+                    {
+                        check = c.TryGetProperty("check", out var ch) ? ch.GetString() : "Unknown",
+                        pass = c.TryGetProperty("pass", out var p) && p.GetBoolean(),
+                        detail = c.TryGetProperty("detail", out var d) ? d.GetString() : ""
+                    })
+                });
+            }
+            catch
+            {
+                // JSON parse failed — fall through to raw output
+            }
+        }
+
+        return Json(new
+        {
+            success,
+            device = device.Name,
+            host = device.MgmtIpv4,
+            isServer,
+            output = output.Length > 2000 ? output[..2000] : output
+        });
     }
 }
