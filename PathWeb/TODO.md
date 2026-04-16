@@ -59,6 +59,8 @@
 ## 🔧 In Progress
 
 - [ ] **Comprehensive testing phase** — End-to-end validation of all config card actions, removal flows, and modal behaviors before marking the feature set as production-ready
+- [x] **Architecture diagrams** — Created `Docs/Architecture.md` with 8 Mermaid diagrams (system overview, controller/service deps, data model, config card actions, SSH ops, Lab VM pattern, auth flow, Automation lifecycle)
+- [x] **Manual test plan** — Created `Docs/TestPlan.md` with 235 test cases across 15 sections; iteratively expanded with config integration depth, tenant option→config variation matrix, and gap analysis pass
 
 ---
 
