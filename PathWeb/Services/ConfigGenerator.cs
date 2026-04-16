@@ -861,7 +861,17 @@ public class ConfigGenerator
 
             // Back out script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding backout script for Azure resources");
-            var strBackout = $"$RGName='{strRGName}'\r\n" +
+            var strBackout = "# Output helper: Write-Host for console color, Write-Output for runbook capture\r\n" +
+                          "$Script:IsRunbook = $null -ne $PSPrivateMetadata -and $null -ne $PSPrivateMetadata.JobId\r\n" +
+                          "function Write-Status {\r\n" +
+                          "    param([string]$Message, [string]$ForegroundColor, [switch]$NoNewline)\r\n" +
+                          "    $hostArgs = @{ Object = $Message }\r\n" +
+                          "    if ($ForegroundColor) { $hostArgs['ForegroundColor'] = $ForegroundColor }\r\n" +
+                          "    if ($NoNewline) { $hostArgs['NoNewline'] = $true }\r\n" +
+                          "    Write-Host @hostArgs\r\n" +
+                          "    if ($Script:IsRunbook -and -not $NoNewline) { Write-Output $Message }\r\n" +
+                          "}\r\n\r\n" +
+                          $"$RGName='{strRGName}'\r\n" +
                           $"$UserName='{_userEmail.Split('@')[0]}'\r\n" +
                           $"$TenantGUID='{tenant.TenantGuid}'\r\n";
             if (HasERDirect)
@@ -871,40 +881,39 @@ public class ConfigGenerator
             else
             {
                 strBackout += "$OkToDelete = $false\r\n\r\n" +
-                              "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                              "Write-Host 'Deleting ' -NoNewline -ForegroundColor Cyan\r\n" +
-                              "Write-Host $RGName -ForegroundColor Cyan\r\n" +
-                              "Write-Host '  Checking ER circuit..........' -NoNewline\r\n" +
+                              "Write-Status \"$(Get-Date) - \" -NoNewline\r\n" +
+                              "Write-Status \"Deleting $RGName\" -ForegroundColor Cyan\r\n" +
+                              "Write-Status '  Checking ER circuit..........' -NoNewline\r\n" +
                               "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
-                              "Catch {Write-Host 'None found' -ForegroundColor Green\r\n" +
+                              "Catch {Write-Status 'None found' -ForegroundColor Green\r\n" +
                               "       $OkToDelete = $true}\r\n\r\n" +
                               "If (-not $OkToDelete) {\r\n" +
                               "    If ($circuit.ServiceProviderProvisioningState -contains 'Provisioned') {\r\n" +
-                              "        Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                              "        Write-Status 'Failed' -ForegroundColor Red\r\n" +
                               "        Write-Warning 'An ExpressRoute Circuit in this resource group is still provisioned, and as such this delete opertaion cannot continue, get this circuit into the \"Not Provisioned\" state before running this script!'\r\n" +
                               "        Return}\r\n" +
-                              "    Else {Write-Host 'NotProvisioned' -ForegroundColor Green\r\n" +
+                              "    Else {Write-Status 'NotProvisioned' -ForegroundColor Green\r\n" +
                               "          $OkToDelete = $true}\r\n" +
                               "}\r\n\r\n";
             }
-            strBackout += "Try {Write-Host '  Pulling config for archive...' -NoNewline\r\n" +
+            strBackout += "Try {Write-Status '  Pulling config for archive...' -NoNewline\r\n" +
                           "     mkdir \"$env:TEMP\\ConfigGen\\\" -Force -ErrorAction Stop | Out-Null\r\n" +
                           "     Export-AzResourceGroup -ResourceGroupName $RGName -Path \"$env:TEMP\\ConfigGen\\$TenantGUID\" -IncludeComments -SkipAllParameterization -Force -ErrorAction Stop | Out-Null\r\n" +
-                          "     Write-Host 'Archive File Created' -ForegroundColor Green}\r\n" +
-                          "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                          "     Write-Status 'Archive File Created' -ForegroundColor Green}\r\n" +
+                          "Catch {Write-Status 'Failed' -ForegroundColor Red\r\n" +
                           "       Write-Warning 'Pulling or creating config file failed, the resource group was not found or was not deleted.'\r\n" +
                           "       Return}\r\n\r\n" +
-                          "Try {Write-Host '  Writing file to archive......' -NoNewline\r\n" +
+                          "Try {Write-Status '  Writing file to archive......' -NoNewline\r\n" +
                           "     $sa = Get-AzStorageAccount -ResourceGroupName LabInfrastructure -Name labconfig\r\n" +
                           "     $ctx = $sa.Context\r\n" +
                           "     Set-AzStorageBlobContent -Context $ctx -Container archive -Blob \"$TenantGUID.json\" -File \"$env:TEMP\\ConfigGen\\$TenantGUID.json\" -Metadata @{ArchiveDate=(Get-Date -Format s);ArchiveBy=$UserName;ResourceGroup=$RGName} -Force | Out-Null\r\n" +
-                          "     Write-Host 'File saved' -ForegroundColor Green}\r\n" +
-                          "Catch {Write-Host 'Failed' -ForegroundColor Red\r\n" +
+                          "     Write-Status 'File saved' -ForegroundColor Green}\r\n" +
+                          "Catch {Write-Status 'Failed' -ForegroundColor Red\r\n" +
                           "       Write-Warning 'Saving config to the archive storage account failed, the resource group was not deleted.'\r\n" +
                           "       Return}\r\n\r\n" +
                           "If ($OkToDelete) {Try {Get-AzResourceGroup -Name $RGName -ErrorAction Stop | Out-Null\r\n" +
                           "                       Remove-AzResourceGroup -Name $RGName -Force -AsJob | Out-Null\r\n" +
-                          "                       Write-Host '  resource group deletion requested as a job (Run Get-Job to see status)'}\r\n" +
+                          "                       Write-Status '  Resource group deletion requested as a job (Run Get-Job to see status)'}\r\n" +
                           "                  Catch {Write-Warning 'Something happened and the resource group was not found or was not deleted.'}\r\n" +
                           "}\r\n\r\n";
            _strDelete += "#######\r\n### Remove Azure Resources\r\n#######\r\n" + strBackout + "\r\n";

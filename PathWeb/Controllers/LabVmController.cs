@@ -289,7 +289,273 @@ public class LabVmController : BaseController
         });
     }
 
+    /// <summary>
+    /// Scans all candidate Hyper-V servers for a tenant's lab to discover existing VMs.
+    /// Returns discovered VMs grouped by server.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Scan(Guid tenantGuid)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
+            return Json(new { success = false, error = "Permission denied." });
+
+        var tenant = await _context.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid && t.DeletedDate == null);
+        if (tenant == null)
+            return Json(new { success = false, error = "Tenant not found." });
+
+        var servers = await _context.Devices.AsNoTracking()
+            .Where(d => d.Lab == tenant.Lab && d.Name.Contains("-ER-") && d.InService && !string.IsNullOrEmpty(d.MgmtIpv4))
+            .OrderBy(d => d.Name)
+            .Select(d => new { d.Name, d.MgmtIpv4 })
+            .ToListAsync();
+
+        if (servers.Count == 0)
+            return Json(new { success = false, error = "No Hyper-V servers found for this lab." });
+
+        // Fetch admin credentials
+        KeyVaultSecret adminSecret;
+        try
+        {
+            adminSecret = (await CreateSecretClient(AdminVaultName).GetSecretAsync(AdminSecretName)).Value;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lab VM scan: failed to retrieve admin secret");
+            return Json(new { success = false, error = $"Failed to retrieve Key Vault secret: {ex.Message}" });
+        }
+
+        var vmPattern = $"{tenant.Lab}-ER-{tenant.TenantId}-VM*";
+        var scanResults = new List<object>();
+
+        // SSH to each server in parallel to check for tenant VMs
+        var scanTasks = servers.Select(async server =>
+        {
+            try
+            {
+                var script = $"Get-VM -Name '{Escape(vmPattern)}' -ErrorAction SilentlyContinue | Select-Object Name, State | ConvertTo-Json -Compress";
+                var (success, output) = await _sshService.RunPowerShellCommandWithCredentialsAsync(
+                    server.MgmtIpv4!, 22, AdminUserName, adminSecret.Value, script, keepAlive: TimeSpan.FromSeconds(10));
+
+                if (!success || string.IsNullOrWhiteSpace(output))
+                    return new { Server = server.Name, Vms = Array.Empty<object>(), Error = success ? (string?)null : output };
+
+                var trimmed = output.Trim();
+                if (trimmed == "" || trimmed == "null")
+                    return new { Server = server.Name, Vms = Array.Empty<object>(), Error = (string?)null };
+
+                // Parse JSON — single object or array
+                var vms = new List<object>();
+                var json = JsonSerializer.Deserialize<JsonElement>(trimmed);
+                if (json.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in json.EnumerateArray())
+                    {
+                        var name = item.TryGetProperty("Name", out var n) ? n.GetString() : null;
+                        var state = item.TryGetProperty("State", out var s) ? s.ToString() : null;
+                        if (name != null) vms.Add(new { name, state });
+                    }
+                }
+                else if (json.ValueKind == JsonValueKind.Object)
+                {
+                    var name = json.TryGetProperty("Name", out var n) ? n.GetString() : null;
+                    var state = json.TryGetProperty("State", out var s) ? s.ToString() : null;
+                    if (name != null) vms.Add(new { name, state });
+                }
+
+                return new { Server = server.Name, Vms = vms.ToArray(), Error = (string?)null };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lab VM scan: failed to scan {Server}", server.Name);
+                return new { Server = server.Name, Vms = Array.Empty<object>(), Error = ex.Message };
+            }
+        });
+
+        var results = await Task.WhenAll(scanTasks);
+        var serversWithVms = results.Where(r => r.Vms.Length > 0).ToList();
+        var totalVms = serversWithVms.Sum(r => r.Vms.Length);
+
+        return Json(new
+        {
+            success = true,
+            tenant = new { tenant.TenantGuid, tenant.TenantId, tenant.TenantName, tenant.Lab },
+            totalVms,
+            servers = results.Select(r => new { server = r.Server, vms = r.Vms, error = r.Error })
+        });
+    }
+
+    /// <summary>
+    /// Launches Lab VM removal on all servers that have tenant VMs.
+    /// Returns immediately with a runId; poll Status for progress.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveSubmit([FromBody] LabVmRemoveRequest request)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
+            return Json(new { success = false, error = "Permission denied." });
+
+        if (request.TenantGuid == Guid.Empty || request.Servers == null || request.Servers.Count == 0)
+            return Json(new { success = false, error = "Missing tenant or server list." });
+
+        var tenant = await _context.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TenantGuid == request.TenantGuid && t.DeletedDate == null);
+        if (tenant == null)
+            return Json(new { success = false, error = "Tenant not found." });
+
+        // Resolve management IPs
+        var devices = await _context.Devices.AsNoTracking()
+            .Where(d => request.Servers.Contains(d.Name) && !string.IsNullOrEmpty(d.MgmtIpv4))
+            .ToDictionaryAsync(d => d.Name, d => d.MgmtIpv4!);
+
+        var missingServers = request.Servers.Where(s => !devices.ContainsKey(s)).ToList();
+        if (missingServers.Count > 0)
+            return Json(new { success = false, error = $"Server(s) not found: {string.Join(", ", missingServers)}" });
+
+        // Fetch admin credentials
+        KeyVaultSecret adminSecret;
+        try
+        {
+            adminSecret = (await CreateSecretClient(AdminVaultName).GetSecretAsync(AdminSecretName)).Value;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lab VM remove: failed to retrieve admin secret");
+            return Json(new { success = false, error = $"Failed to retrieve Key Vault secret: {ex.Message}" });
+        }
+
+        var runId = $"labvm-rm-{tenant.Lab.ToLowerInvariant()}-cust{tenant.TenantId}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+
+        // Build per-server tracking (one "request" per server)
+        var requestInfos = request.Servers.Select((server, i) => new LabVmRequestInfo
+        {
+            RequestId = $"{runId}-{i + 1:00}",
+            Index = i + 1,
+            Os = "Remove",
+            TargetServer = server,
+            TargetHost = devices[server]
+        }).ToList();
+
+        var run = new LabVmRunInfo
+        {
+            RunId = runId,
+            TenantName = tenant.TenantName,
+            TenantId = tenant.TenantId,
+            Lab = tenant.Lab,
+            SubmittedBy = GetUserEmail(),
+            StartedAt = DateTimeOffset.UtcNow,
+            Requests = requestInfos
+        };
+        _tracker.Track(runId, run);
+
+        _logger.LogInformation("Lab VM remove {RunId} submitted by {User} for {TenantName}: {Count} server(s)",
+            runId, GetUserEmail(), tenant.TenantName, request.Servers.Count);
+
+        // Launch background removal — one SSH per server, in parallel
+        var adminPassword = adminSecret.Value;
+        var tenantGuid = tenant.TenantGuid;
+        var tenantId = tenant.TenantId;
+        var submittedBy = GetUserEmail();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var removeTasks = requestInfos.Select(req => ExecuteRemoveOnServerAsync(req, tenantId, adminPassword));
+                await Task.WhenAll(removeTasks);
+
+                var failed = requestInfos.Where(r => r.Status == "Failed").ToList();
+                if (failed.Count > 0)
+                {
+                    run.Status = "Failed";
+                    run.Error = $"{failed.Count} of {requestInfos.Count} server(s) failed.";
+                }
+                else
+                {
+                    run.Status = "Completed";
+                }
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                _logger.LogInformation("Lab VM remove {RunId} finished: {Status}", runId, run.Status);
+            }
+            catch (Exception ex)
+            {
+                run.Status = "Failed";
+                run.Error = ex.Message;
+                run.CompletedAt = DateTimeOffset.UtcNow;
+                _logger.LogError(ex, "Lab VM remove {RunId} background task failed", runId);
+            }
+
+            await PersistLabVmRunAsync(tenantGuid, run, submittedBy);
+        });
+
+        return Json(new
+        {
+            success = true,
+            runId,
+            requests = requestInfos.Select(r => new { r.RequestId, r.Index, r.TargetServer, r.Status })
+        });
+    }
+
     // --- Private helpers ---
+
+    private async Task ExecuteRemoveOnServerAsync(LabVmRequestInfo req, int tenantId, string adminPassword)
+    {
+        req.Status = "Running";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("$ErrorActionPreference = 'Stop'");
+        sb.AppendLine($"$ap = ConvertTo-SecureString '{Escape(adminPassword)}' -AsPlainText -Force");
+        sb.AppendLine($"$ac = [pscredential]::new('{Escape(AdminUserName)}', $ap)");
+        sb.AppendLine("try {");
+        sb.AppendLine($"  Assert-LabAdminContext | Out-Null");
+        sb.AppendLine($"  Remove-LabVM -TenantID {tenantId}");
+        sb.AppendLine($"  $result = [pscustomobject]@{{ Status='Completed'; Success=$true; Message='VMs removed successfully' }}");
+        sb.AppendLine("} catch {");
+        sb.AppendLine($"  $result = [pscustomobject]@{{ Status='Failed'; Success=$false; Message=$_.Exception.Message }}");
+        sb.AppendLine("}");
+        sb.AppendLine($"Write-Output '{JsonMarker}'");
+        sb.AppendLine("$result | ConvertTo-Json -Compress -Depth 5");
+
+        try
+        {
+            var (success, output) = await _sshService.RunPowerShellCommandWithCredentialsAsync(
+                req.TargetHost, 22, AdminUserName, adminPassword, sb.ToString(), keepAlive: TimeSpan.FromSeconds(15));
+
+            if (!success)
+            {
+                req.Status = "Failed";
+                req.Message = output;
+                _logger.LogError("Lab VM remove SSH failed for {RequestId} on {Host}: {Output}", req.RequestId, req.TargetHost, output);
+                return;
+            }
+
+            // Parse structured result
+            var markerIndex = output.LastIndexOf(JsonMarker, StringComparison.Ordinal);
+            if (markerIndex >= 0)
+            {
+                var jsonText = output[(markerIndex + JsonMarker.Length)..].Trim();
+                try
+                {
+                    var item = JsonSerializer.Deserialize<JsonElement>(jsonText);
+                    req.Status = item.TryGetProperty("Status", out var s) ? s.GetString() ?? "Unknown" : "Unknown";
+                    req.Message = item.TryGetProperty("Message", out var m) ? m.GetString() : null;
+                    return;
+                }
+                catch (JsonException) { /* fall through */ }
+            }
+
+            // If no marker, treat non-empty output as success with raw message
+            req.Status = "Completed";
+            req.Message = string.IsNullOrWhiteSpace(output) ? "VMs removed" : output.Trim()[..Math.Min(output.Trim().Length, 200)];
+        }
+        catch (Exception ex)
+        {
+            req.Status = "Failed";
+            req.Message = ex.Message;
+            _logger.LogError(ex, "Lab VM remove SSH exception for {RequestId} on {Host}", req.RequestId, req.TargetHost);
+        }
+    }
 
     private async Task ExecuteServerBatchAsync(
         LabVmRunInfo run,
@@ -475,4 +741,10 @@ public sealed class LabVmOverride
 {
     public int Index { get; set; }
     public string? TargetServer { get; set; }
+}
+
+public sealed class LabVmRemoveRequest
+{
+    public Guid TenantGuid { get; set; }
+    public List<string> Servers { get; set; } = [];
 }

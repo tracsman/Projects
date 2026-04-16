@@ -224,6 +224,31 @@ public class AutomationController : BaseController
         public string? ScriptContent { get; set; }
     }
 
+    [HttpGet]
+    public async Task<IActionResult> BackoutScript(Guid tenantGuid, string configType)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantReadOnly)
+            return Json(new { success = false, error = "Permission denied." });
+
+        if (tenantGuid == Guid.Empty || string.IsNullOrWhiteSpace(configType))
+            return Json(new { success = false, error = "Missing tenant or config type." });
+
+        var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid);
+        if (tenant == null)
+            return Json(new { success = false, error = "Tenant not found." });
+
+        var backoutType = configType + "-out";
+        var config = await _context.Configs.FirstOrDefaultAsync(c =>
+            c.TenantGuid == tenantGuid &&
+            c.ConfigVersion == tenant.ConfigVersion &&
+            c.ConfigType == backoutType);
+
+        if (config == null || string.IsNullOrWhiteSpace(config.Config1))
+            return Json(new { success = false, error = $"No backout config found for '{configType}'." });
+
+        return Json(new { success = true, script = config.Config1 });
+    }
+
     private static void ApplyJobStatus(AutomationRun run, AutomationJobStatusResult result)
     {
         run.Status = result.Status;

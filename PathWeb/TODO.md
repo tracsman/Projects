@@ -58,16 +58,23 @@
 
 ## 🔧 In Progress
 
-- [ ] **Config card action dropdowns + removal actions** — Replace standalone buttons with unified action dropdowns on non-device config cards (matching the existing network device pattern), and wire up removal/teardown actions:
-  - **UI refactor:** Swap individual buttons for `<select>` + `▶ Run` dropdown on PowerShell, provider, and Lab VM cards; keep Re-open button separate (contextual, not a new action); keep Copy to Clipboard standalone
-  - **Dropdown options per config type:**
-    - `CreateERPowerShell` / `CreateAzurePowerShell`: Deploy to Azure | Remove from Azure
-    - `ServiceProviderInstructions`: Provision at Provider | Deprovision at Provider
-    - `LabVMPowerShell`: Create Lab VMs | Remove Lab VMs
-  - **Network device cards** (SRX, MX, ASR, NX): Already have dropdowns with Remove from Device — test the existing flow end-to-end
-  - **Removal backends:** Wire up each removal action to the appropriate LabMod command or Automation runbook as they are tackled; some commands exist, others may need to be created
-  - Respect the same auth-level and inactive-tenant guards as other config actions
-- [ ] **Remove Lab VMs** — Corresponding remove/backout path for on-prem VMs via SSH, reusing the same `LabVmController` / `SshService` / `LabMod` architecture
+- [ ] **Comprehensive testing phase** — End-to-end validation of all config card actions, removal flows, and modal behaviors before marking the feature set as production-ready
+
+---
+
+## ✅ Recently Completed
+
+- [x] **Config card action dropdowns + removal actions** — Replaced standalone buttons with unified `<select>` + `▶ Run` dropdowns on all non-device config cards, and wired up all removal/teardown actions:
+  - `CreateERPowerShell`: Deploy to Azure | Remove from Azure (info-only redirect to CreateAzurePowerShell card)
+  - `CreateAzurePowerShell`: Deploy to Azure | Remove from Azure (fetches `-out` backout script from SQL, opens in automation modal with `Write-Status` dual-output for runbook/console)
+  - `ServiceProviderInstructions`: Provision at Provider | Deprovision at Provider (swaps `New-LabECX` → `Remove-LabECX` in automation modal)
+  - `LabVMPowerShell`: Create Lab VMs | Remove Lab VMs (two-phase scan + remove via SSH)
+  - Network device cards already had dropdowns — included in test pass
+- [x] **Remove Lab VMs** — Two-phase remove for on-prem VMs via SSH:
+  - **Scan phase:** `LabVmController.Scan` SSHs to all candidate Hyper-V servers (`-ER-` devices) in parallel, runs `Get-VM -Name "{Lab}-ER-{TenantId}-VM*"` to discover existing VMs, returns per-server results with VM names and states
+  - **Remove phase:** `LabVmController.RemoveSubmit` accepts the list of servers with VMs, SSHs to each in parallel running `Remove-LabVM -TenantID {id}`, uses structured JSON output via `---LABVM-JSON---` marker, fire-and-forget with in-memory tracker and polling
+  - **UI:** Reuses `labVmModal` with mode awareness (`_labVmRemoveMode`); scan results show VM names/states per server; confirm dialog before removal; per-server progress indicators; mode-appropriate labels/messages throughout
+  - **Backout script improvement:** `CreateAzurePowerShell-out` now includes a `Write-Status` helper function that detects runbook context via `$PSPrivateMetadata.JobId` and emits `Write-Output` for Automation capture alongside `Write-Host` for console color
 
 ---
 
