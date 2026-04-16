@@ -368,7 +368,7 @@ public class LabVmController : BaseController
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Lab VM scan: failed to scan {Server}", server.Name);
-                return new { Server = server.Name, Vms = Array.Empty<object>(), Error = ex.Message };
+                return new { Server = server.Name, Vms = Array.Empty<object>(), Error = (string?)ex.Message };
             }
         });
 
