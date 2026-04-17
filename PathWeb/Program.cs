@@ -317,6 +317,11 @@ app.MapGet("/diag", async (
         }
     }
 
+    // Require SiteAdmin (14+) to access diagnostics
+    var diagAuthLevel = ctx.Items["AuthLevel"] as byte? ?? 0;
+    if (diagAuthLevel < (byte)AuthLevels.SiteAdmin)
+        return Results.Json(new { error = "Permission denied. Requires auth level 14+." }, statusCode: 403);
+
     var buildTime = GetBuildTimestamp();
     var dotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
     var deepRequested = string.Equals(ctx.Request.Query["deep"], "true", StringComparison.OrdinalIgnoreCase)

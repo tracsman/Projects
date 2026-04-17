@@ -38,7 +38,10 @@ param(
     [string]$KeyVaultName = "LabSecrets",
 
     [Parameter(Mandatory = $false)]
-    [string]$CustomHostname = "www.pathlab.xyz"
+    [string]$CustomHostname = "www.pathlab.xyz",
+
+    [Parameter(Mandatory = $false)]
+    [string]$LogicAppTriggerUrl
 )
 
 # Set strict mode
@@ -457,7 +460,6 @@ try {
         }
 
         $sshUsername = "PathWebSvc"
-        $logicAppTriggerUrl = "https://prod-15.westus2.logic.azure.com:443/workflows/aa6d3a4f104f4622a14b1c2be41a1d9b/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=***REMOVED***"
         $needsSettingsUpdate = $false
 
         if ($appSettings['KeyVaultUri'] -ne $kvUri) {
@@ -468,8 +470,8 @@ try {
             $appSettings['DeviceCredentials__Username'] = $sshUsername
             $needsSettingsUpdate = $true
         }
-        if ($appSettings['LogicApp__TriggerUrl'] -ne $logicAppTriggerUrl) {
-            $appSettings['LogicApp__TriggerUrl'] = $logicAppTriggerUrl
+        if ($LogicAppTriggerUrl -and $appSettings['LogicApp__TriggerUrl'] -ne $LogicAppTriggerUrl) {
+            $appSettings['LogicApp__TriggerUrl'] = $LogicAppTriggerUrl
             $needsSettingsUpdate = $true
         }
 

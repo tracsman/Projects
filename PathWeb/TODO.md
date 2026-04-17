@@ -53,19 +53,6 @@
   - **Routers/switches**: SSH with device credentials, runs `show version brief` (Juniper) or `show version` (Cisco) to confirm connectivity and auth
   - **Servers**: SSH with server admin credentials from `LabSecrets` vault, runs a multi-check script via `pwsh` — PowerShell 7 installed, Windows Server 2025, sshd running, LabMod module ≥ 1.5.0, log directory exists — displayed as a pass/fail table
   - Inline result on Details page, modal on Index page; `SshService.RunCommandWithCredentialsAsync` and `RunPowerShellCommandWithCredentialsAsync` added for explicit credential support
-
----
-
-## 🔧 In Progress
-
-- [ ] **Comprehensive testing phase** — End-to-end validation of all config card actions, removal flows, and modal behaviors before marking the feature set as production-ready
-- [x] **Architecture diagrams** — Created `Docs/Architecture.md` with 8 Mermaid diagrams (system overview, controller/service deps, data model, config card actions, SSH ops, Lab VM pattern, auth flow, Automation lifecycle)
-- [x] **Manual test plan** — Created `Docs/TestPlan.md` with 235 test cases across 15 sections; iteratively expanded with config integration depth, tenant option→config variation matrix, and gap analysis pass
-
----
-
-## ✅ Recently Completed
-
 - [x] **Config card action dropdowns + removal actions** — Replaced standalone buttons with unified `<select>` + `▶ Run` dropdowns on all non-device config cards, and wired up all removal/teardown actions:
   - `CreateERPowerShell`: Deploy to Azure | Remove from Azure (info-only redirect to CreateAzurePowerShell card)
   - `CreateAzurePowerShell`: Deploy to Azure | Remove from Azure (fetches `-out` backout script from SQL, opens in automation modal with `Write-Status` dual-output for runbook/console)
@@ -77,6 +64,16 @@
   - **Remove phase:** `LabVmController.RemoveSubmit` accepts the list of servers with VMs, SSHs to each in parallel running `Remove-LabVM -TenantID {id}`, uses structured JSON output via `---LABVM-JSON---` marker, fire-and-forget with in-memory tracker and polling
   - **UI:** Reuses `labVmModal` with mode awareness (`_labVmRemoveMode`); scan results show VM names/states per server; confirm dialog before removal; per-server progress indicators; mode-appropriate labels/messages throughout
   - **Backout script improvement:** `CreateAzurePowerShell-out` now includes a `Write-Status` helper function that detects runbook context via `$PSPrivateMetadata.JobId` and emits `Write-Output` for Automation capture alongside `Write-Host` for console color
+- [x] **Architecture diagrams** — Created `Docs/Architecture.md` with 8 Mermaid diagrams (system overview, controller/service deps, data model, config card actions, SSH ops, Lab VM pattern, auth flow, Automation lifecycle)
+- [x] **Manual test plan** — Created `Docs/TestPlan.md` with 235 test cases across 15 sections; iteratively expanded with config integration depth, tenant option→config variation matrix, and gap analysis pass
+
+---
+
+## 🔧 In Progress
+
+- [ ] **Comprehensive testing phase** — End-to-end validation of all config card actions, removal flows, and modal behaviors before marking the feature set as production-ready
+- [ ] **Restore auth cache TTL to 5 minutes** — `AuthLevelService.cs` line 53 was reduced from 5→1 minute to speed up manual auth-level testing; restore to `TimeSpan.FromMinutes(5)` when testing is complete
+- [x] **Remove hardcoded Logic App trigger URL from `deploy-to-azure.ps1`** — Corporate security flagged exposed SAS `sig=` in the hardcoded trigger URL; refactored to an optional `-LogicAppTriggerUrl` parameter (no default); existing App Service setting is preserved unless explicitly overridden; **key rotation still required**
 
 ---
 

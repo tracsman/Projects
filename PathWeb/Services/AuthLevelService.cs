@@ -6,7 +6,7 @@ namespace PathWeb.Services;
 
 /// <summary>
 /// Service that looks up a user's AuthLevel from the Users table in the database.
-/// Results are cached for 5 minutes to avoid a DB query on every request.
+/// Results are cached for 1 minute to avoid a DB query on every request (temporarily reduced from 5 min for testing).
 /// </summary>
 public class AuthLevelService
 {
@@ -50,7 +50,7 @@ public class AuthLevelService
             }
 
             _logger.LogDebug("User '{UserName}' has AuthLevel {AuthLevel}", userName, user.AuthLevel);
-            _cache.Set(cacheKey, user.AuthLevel, TimeSpan.FromMinutes(5));
+            _cache.Set(cacheKey, user.AuthLevel, TimeSpan.FromMinutes(1)); // Reduced from 5 min for testing — restore to 5 when done
             return user.AuthLevel;
         }
         catch (Exception ex)
