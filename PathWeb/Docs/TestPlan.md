@@ -1,4 +1,4 @@
-# PathWeb — Manual Test Plan
+q# PathWeb — Manual Test Plan
 
 > **Purpose:** Comprehensive site-wide manual test plan for end-to-end validation.  
 > **How to use:** Work through each section in order. Mark each test case ✅ Pass, ❌ Fail, or ⏭️ Skipped. Record notes in the right column. Auth levels are noted — log in as the appropriate user or have the DB updated to match.  
@@ -23,13 +23,14 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 1.1 | `/health` returns OK | `curl https://<site>/health` | 200 JSON with `status: "healthy"` and `build` timestamp | | |
-| 1.2 | `/warmup` succeeds | `curl https://<site>/warmup` | 200 JSON with `status: "warm"`, `durationMs`, pre-compiled query list | | |
+| 1.1 | `/health` returns OK | `curl https://<site>/health` | 200 JSON with `status: "healthy"` and `build` timestamp | ✅ | |
+| 1.2 | `/warmup` succeeds | `curl https://<site>/warmup` | 200 JSON with `status: "warm"`, `durationMs`, pre-compiled query list | ✅ | |
 | 1.3 | `/warmup` with broken SQL | Temporarily revoke DB access or wrong connection string | Returns structured error JSON, not a 500 stack trace | | |
-| 1.4 | `/diag` JSON (authed) | Browse to `/diag` while logged in (auth level ≥ 14) | JSON diagnostics payload with automation, KV, logging, cache sections | | |
-| 1.5 | `/diag?deep=true` live probes | Browse to `/diag?deep=true` | Additional live-probe results for Automation, Key Vault, Logic App | | |
-| 1.6 | `/diag/view` HTML page | Browse to `/diag/view` | Formatted HTML diagnostics page with expandable sections | | |
-| 1.7 | `/diag` blocked for low auth | Log in as auth level < 14, browse to `/diag` | Permission denied or 403 | | |
+| 1.4 | `/diag` JSON (authed) | Browse to `/diag` while logged in (auth level ≥ 14) | JSON diagnostics payload with automation, KV, logging, cache sections | ✅ | |
+| 1.5 | `/diag?deep=true` live probes | Browse to `/diag?deep=true` | Additional live-probe results for Automation, Key Vault, Logic App | ✅ | |
+| 1.6 | `/diag/view` HTML page | Browse to `/diag/view` | Formatted HTML diagnostics page with expandable sections | ✅ | |
+| 1.7 | `/diag/view?deep=true` HTML page | Browse to `/diag/view?deep=true` | Formatted HTML diagnostics page with additional live-probe results for Automation, Key Vault, Logic App | ✅ | |
+| 1.8 | `/diag` blocked for low auth | Log in as auth level < 14, browse to `/diag` | Permission denied or 403 | ❌ | Access successful with auth level 13 |
 
 ---
 

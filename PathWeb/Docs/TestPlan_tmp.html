@@ -1,0 +1,3142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>TestPlan.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> or <div class="page"></div> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="pathweb--manual-test-plan">PathWeb — Manual Test Plan</h1>
+<blockquote>
+<p><strong>Purpose:</strong> Comprehensive site-wide manual test plan for end-to-end validation.<br>
+<strong>How to use:</strong> Work through each section in order. Mark each test case ✅ Pass, ❌ Fail, or ⏭️ Skipped. Record notes in the right column. Auth levels are noted — log in as the appropriate user or have the DB updated to match.<br>
+<strong>Environments:</strong> Test against the deployed Azure App Service instance. For SSH/device tests, ensure lab connectivity.</p>
+</blockquote>
+<hr>
+<h2 id="legend">Legend</h2>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✅</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>❌</td>
+<td>Fail (describe in Notes)</td>
+</tr>
+<tr>
+<td>⏭️</td>
+<td>Skipped / N/A</td>
+</tr>
+<tr>
+<td>🔒</td>
+<td>Requires specific auth level</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="1-health--infrastructure-endpoints">1. Health &amp; Infrastructure Endpoints</h2>
+<p>These endpoints bypass authentication. Test from an unauthenticated browser / curl.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.1</td>
+<td><code>/health</code> returns OK</td>
+<td><code>curl https://&lt;site&gt;/health</code></td>
+<td>200 JSON with <code>status: &quot;healthy&quot;</code> and <code>build</code> timestamp</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.2</td>
+<td><code>/warmup</code> succeeds</td>
+<td><code>curl https://&lt;site&gt;/warmup</code></td>
+<td>200 JSON with <code>status: &quot;warm&quot;</code>, <code>durationMs</code>, pre-compiled query list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.3</td>
+<td><code>/warmup</code> with broken SQL</td>
+<td>Temporarily revoke DB access or wrong connection string</td>
+<td>Returns structured error JSON, not a 500 stack trace</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.4</td>
+<td><code>/diag</code> JSON (authed)</td>
+<td>Browse to <code>/diag</code> while logged in (auth level ≥ 14)</td>
+<td>JSON diagnostics payload with automation, KV, logging, cache sections</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.5</td>
+<td><code>/diag?deep=true</code> live probes</td>
+<td>Browse to <code>/diag?deep=true</code></td>
+<td>Additional live-probe results for Automation, Key Vault, Logic App</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.6</td>
+<td><code>/diag/view</code> HTML page</td>
+<td>Browse to <code>/diag/view</code></td>
+<td>Formatted HTML diagnostics page with expandable sections</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>1.7</td>
+<td><code>/diag</code> blocked for low auth</td>
+<td>Log in as auth level &lt; 14, browse to <code>/diag</code></td>
+<td>Permission denied or 403</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="2-authentication--authorization">2. Authentication &amp; Authorization</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2.1</td>
+<td>Unauthenticated access blocked</td>
+<td>Open site in incognito/private window, no login</td>
+<td>Redirected to Entra ID login (or Easy Auth challenge)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.2</td>
+<td>Auth level 0 — no nav items</td>
+<td>Log in as user with auth level 0</td>
+<td>Home page loads; no Tenants, Admin, or About links in nav</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.3</td>
+<td>Auth level 1–5 — About menu only</td>
+<td>Log in as auth level 1</td>
+<td>About dropdown visible; no Tenants or Admin links</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.4</td>
+<td>Auth level 6–7 — Tenants visible</td>
+<td>Log in as auth level 6</td>
+<td>Tenants nav link visible; Admin menu hidden</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.5</td>
+<td>Auth level 8–10 — Admin (requests)</td>
+<td>Log in as auth level 8</td>
+<td>Admin dropdown with &quot;Tenant Requests&quot;; no Devices/Addresses/Users/Settings</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.6</td>
+<td>Auth level 11–13 — Admin + Devices</td>
+<td>Log in as auth level 11</td>
+<td>Admin dropdown includes Devices and IP Addresses</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.7</td>
+<td>Auth level 14+ — Full admin</td>
+<td>Log in as auth level 14</td>
+<td>All Admin items visible: Users, Tooltips, Logs, Diagnostics, Settings</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.8</td>
+<td>Direct URL bypass — Tenants</td>
+<td>Auth level 0 user navigates to <code>/Tenants</code> directly</td>
+<td>PermissionError view shown (not raw data)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.9</td>
+<td>Direct URL bypass — Admin pages</td>
+<td>Auth level 6 user navigates to <code>/Settings</code> directly</td>
+<td>PermissionError or redirect</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.10</td>
+<td>Theme toggle</td>
+<td>Click 🌙 button in nav bar</td>
+<td>Page switches to dark/light mode; cookie persists across refresh</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2.11</td>
+<td>TempData messages render</td>
+<td>Trigger an action that sets TempData (e.g., create a tenant)</td>
+<td>Alert banner appears at top of page with correct color</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="3-home-page">3. Home Page</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.1</td>
+<td>Home page loads</td>
+<td>Navigate to <code>/</code></td>
+<td>Home/Index page renders without errors</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3.2</td>
+<td>Privacy page loads</td>
+<td>Click &quot;Privacy&quot; link in footer</td>
+<td>Privacy page renders</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="4-request-a-lab-public-facing">4. Request a Lab (Public-Facing)</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4.1</td>
+<td>Request index loads</td>
+<td>Click &quot;Request a Lab&quot; in nav</td>
+<td>Request list page loads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.2</td>
+<td>Create new request</td>
+<td>Click Create → fill all required fields → Submit</td>
+<td>Redirected to Details or Index; new request visible with &quot;Pending&quot; status</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.3</td>
+<td>Create with missing required fields</td>
+<td>Leave required fields blank → Submit</td>
+<td>Validation errors shown inline; form not submitted</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.4</td>
+<td>View request details</td>
+<td>Click a request row</td>
+<td>Details page shows all submitted fields</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.5</td>
+<td>Request queue (admin) 🔒8</td>
+<td>Admin → Tenant Requests</td>
+<td>Queue page lists pending requests with count matching nav badge</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.6</td>
+<td>Review a request 🔒8</td>
+<td>Click Review on a pending request</td>
+<td>Review page loads with approve/reject options</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.7</td>
+<td>Approve a request 🔒8</td>
+<td>Approve a pending request</td>
+<td>Status changes; tenant created; admin redirected to tenant Edit page; pending count decreases by 1</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.8</td>
+<td>Reject a request 🔒8</td>
+<td>Reject a pending request</td>
+<td>Status changes to rejected; item no longer in pending queue</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.9</td>
+<td>Approve creates ADO work item 🔒8</td>
+<td>Approve a request when Logic App is configured</td>
+<td>ADO work item created; <code>WorkItemId</code> shown on tenant; TempData shows success with work item number</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.10</td>
+<td>Approve — ADO failure is non-blocking 🔒8</td>
+<td>Approve a request when ADO Logic App is down/misconfigured</td>
+<td>Tenant still created successfully; TempData shows warning (yellow) with ADO error note</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.11</td>
+<td>Approve — already processed request 🔒8</td>
+<td>Use devtools to POST approve on an already-approved request</td>
+<td>&quot;Invalid or already processed request&quot; error; no duplicate tenant</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.12</td>
+<td>Approve — server preference parameter 🔒8</td>
+<td>Approve with a specific <code>serverPreference</code> value</td>
+<td>TenantId assigned in the matching range (e.g., preference=2 → TenantId 2x)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.13</td>
+<td>Non-admin sees only own requests</td>
+<td>Log in as non-admin; create a request; check Index</td>
+<td>Only requests where you are the requestor or listed in Contacts are visible</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.14</td>
+<td>Contacts-based visibility</td>
+<td>Log in as a user listed in another request's Contacts field (not the requestor)</td>
+<td>That request is visible in your list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4.15</td>
+<td>Request pagination</td>
+<td>Create &gt;25 requests (or verify in DB) → check Index</td>
+<td>Pagination controls appear; page 2 loads correctly</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="5-tenants--index--crud-6">5. Tenants — Index &amp; CRUD 🔒6</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5.1</td>
+<td>Tenant index loads</td>
+<td>Navigate to Tenants</td>
+<td>Paginated table of active tenants</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.2</td>
+<td>Sort by Lab</td>
+<td>Click &quot;Lab&quot; column header</td>
+<td>Rows sort ascending; click again for descending</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.3</td>
+<td>Sort by Tenant</td>
+<td>Click &quot;Tenant&quot; column header</td>
+<td>Rows sort by TenantId</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.4</td>
+<td>Sort by Ninja</td>
+<td>Click &quot;Ninja&quot; column header</td>
+<td>Rows sort by NinjaOwner</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.5</td>
+<td>Sort by Date</td>
+<td>Click &quot;Date&quot; column header</td>
+<td>Rows sort by date</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.6</td>
+<td>Sort by Usage</td>
+<td>Click &quot;Usage&quot; column header</td>
+<td>Rows sort by Usage</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.7</td>
+<td>Search filter</td>
+<td>Enter a lab name in search box → search</td>
+<td>Only matching tenants shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.8</td>
+<td>Search — no results</td>
+<td>Enter gibberish search string</td>
+<td>Empty table with appropriate message</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.9</td>
+<td>Show released tenants</td>
+<td>Toggle &quot;Show Released&quot;</td>
+<td>Table shows tenants with non-null DeletedDate</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.10</td>
+<td>Pagination (released)</td>
+<td>If &gt;50 released tenants, click page 2</td>
+<td>Second page of results loads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.11</td>
+<td>Create tenant 🔒8</td>
+<td>Click Create New → fill form → Save</td>
+<td>Redirected to Details with new tenant; TenantId auto-assigned</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.12</td>
+<td>Create — validation errors</td>
+<td>Leave required fields blank → Save</td>
+<td>Inline validation errors; no save</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.13</td>
+<td>View tenant Details</td>
+<td>Click a tenant row</td>
+<td>Details page shows all fields</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.14</td>
+<td>Edit tenant 🔒8</td>
+<td>Details → Edit → change a field → Save</td>
+<td>Updated value persists; returned to Details</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.15</td>
+<td>Release tenant 🔒8</td>
+<td>Details → Release → Confirm</td>
+<td>Tenant gets DeletedDate; disappears from active list; appears in released list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.16</td>
+<td>Clone released tenant 🔒8</td>
+<td>Switch to released → open a released tenant → Clone</td>
+<td>Confirmation step shown; new active tenant created with fresh GUID/TenantID; post-deploy fields reset; redirected to new tenant Details</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.17</td>
+<td>Clone — fields reset correctly 🔒8</td>
+<td>After cloning, check new tenant Details</td>
+<td><code>Msftp2p</code>, <code>Msftadv</code>, <code>Msfttags</code>, <code>Skey</code>, <code>VpnendPoint</code> are blank; <code>WorkItemId</code>=0; <code>ConfigVersion</code>=0; <code>DeletedDate</code>=null; design options (Ersku, VMs, etc.) carried over from source</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5.18</td>
+<td>Released tenant — no Edit button</td>
+<td>Open a released tenant's Details</td>
+<td>Edit, Release, Create Config buttons are hidden</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="6-tenant-config-page-6">6. Tenant Config Page 🔒6</h2>
+<h3 id="6a-config-generation--display">6A. Config Generation &amp; Display</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6A.1</td>
+<td>Config page loads</td>
+<td>Tenant Details → View Config</td>
+<td>Config page renders with config cards</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.2</td>
+<td>Create/Regenerate Config 🔒8</td>
+<td>Click Create Config (or Regenerate)</td>
+<td>Configs generated; cards appear for all expected ConfigTypes</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.3</td>
+<td>Regenerate overwrites previous</td>
+<td>Generate config → edit tenant field → Regenerate</td>
+<td>New config reflects updated tenant data; old config replaced</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.4</td>
+<td>Copy to clipboard</td>
+<td>Click copy icon on any config card</td>
+<td>Config text copied to clipboard; toast/feedback shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.5</td>
+<td>Copy large config</td>
+<td>Copy a multi-KB config (e.g., CreateAzurePowerShell)</td>
+<td>Full content copied without truncation</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.6</td>
+<td>Per-device <code>-out</code> cards hidden</td>
+<td>After config generation</td>
+<td>Individual <code>{DeviceName}-out</code> cards do NOT appear; only combined BackoutConfig (if any)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.7</td>
+<td>Inactive tenant — read-only</td>
+<td>Open Config page for a released tenant</td>
+<td>No Create/Regenerate button; no action dropdowns; copy still works</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.8</td>
+<td>Inactive tenant — direct POST blocked</td>
+<td>Use browser devtools to POST a config action on a released tenant</td>
+<td>Server rejects the action (not just UI hiding)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.9</td>
+<td>Server Preference (ConfigVersion 0)</td>
+<td>Create tenant with ConfigVersion=0</td>
+<td>UI label shows &quot;Server Preference&quot; (not &quot;0&quot; or &quot;ConfigVersion 0&quot;)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.10</td>
+<td>Config page with no configs yet</td>
+<td>Open Config page before ever generating</td>
+<td>No config cards; &quot;Create Config&quot; button visible (for admin); no JS errors</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6A.11</td>
+<td>Config card ordering</td>
+<td>Check card layout after generation</td>
+<td>Cards appear in a consistent, logical order across tenants</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6b-network-device-actions-apply--compare--patch--remove--verify">6B. Network Device Actions (Apply / Compare / Patch / Remove / Verify)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6B.1</td>
+<td>Compare to Device</td>
+<td>Select &quot;Compare to Device&quot; → Run on a device card</td>
+<td>Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.2</td>
+<td>Compare — device unreachable</td>
+<td>Run Compare against an offline device</td>
+<td>Error message in modal (timeout or connection refused); no hung spinner</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.3</td>
+<td>Compare — device in sync</td>
+<td>Run Compare when device already matches config</td>
+<td>&quot;No differences&quot; or empty diff message; no false positives</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.4</td>
+<td>Compare — ignores line ordering</td>
+<td>Reorder lines on device (manually or via different commit) → Compare</td>
+<td>Still shows &quot;no differences&quot; if same set of lines</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.5</td>
+<td>Apply to Device 🔒8</td>
+<td>Select &quot;Apply to Device&quot; → Run → review diff → Confirm</td>
+<td>Delta pushed via SSH; success message; status badge updates on card</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.6</td>
+<td>Apply — nothing to apply</td>
+<td>Run Apply when device already matches config</td>
+<td>&quot;No changes needed&quot; message; no SSH write commands sent</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.7</td>
+<td>Apply — Juniper commit check flow</td>
+<td>Apply config to a <code>-MX</code> or <code>-SRX</code> device</td>
+<td>Preview shows <code>commit check</code> / <code>show compare</code> output; confirm pushes <code>commit</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.8</td>
+<td>Apply — Juniper commit failure</td>
+<td>Apply invalid config to Juniper device</td>
+<td><code>commit check</code> fails; error shown in modal; no partial commit left</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.9</td>
+<td>Apply — Cisco write flow</td>
+<td>Apply config to a <code>-NX</code> or <code>-ASR</code>/<code>-ISR</code> device</td>
+<td>Uses <code>wr</code> (write memory) after config push</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.10</td>
+<td>Apply — SSH session drops mid-push</td>
+<td>Kill SSH connectivity during apply (e.g., brief network blip)</td>
+<td>Error reported; no partial config orphaned on device (Juniper rollback)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.11</td>
+<td>Patch Device 🔒8</td>
+<td>Select &quot;Patch Device&quot; → Run → review add/remove buckets → Confirm</td>
+<td>Both additions (new lines) and removals (delete/no-prefix) pushed; success badge</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.12</td>
+<td>Patch — additions only</td>
+<td>Patch when device has missing lines but nothing extra</td>
+<td>Only additions shown; no removal section</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.13</td>
+<td>Patch — removals only</td>
+<td>Patch when device has extra lines but nothing missing</td>
+<td>Only removals shown; no addition section</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.14</td>
+<td>Remove from Device 🔒8</td>
+<td>Select &quot;Remove from Device&quot; → Run → review backout config → Confirm</td>
+<td>Per-device <code>-out</code> backout config pushed via SSH; success badge</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.15</td>
+<td>Remove — no backout config</td>
+<td>Run Remove when no <code>-out</code> record exists in SQL</td>
+<td>Appropriate error message (&quot;no backout config found&quot;); no crash</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.16</td>
+<td>Verify Off Device 🔒8</td>
+<td>Select &quot;Verify Off Device&quot; → Run</td>
+<td>SSH grep for <code>Cust{TenantId}</code> references; results shown in modal</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.17</td>
+<td>Verify — clean device</td>
+<td>Run Verify on device with no tenant references</td>
+<td>&quot;No references found&quot; or equivalent clean result</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.18</td>
+<td>Device status badge — clickable</td>
+<td>Click a device status badge (✅/❌)</td>
+<td>Reopens the last apply result in modal</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.19</td>
+<td>Device status badge — shows timestamp</td>
+<td>Check badge after apply</td>
+<td>Timestamp of last apply attempt visible</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.20</td>
+<td>Multiple devices — independent badges</td>
+<td>Apply to device A (success), Apply to device B (fail)</td>
+<td>Device A shows ✅, Device B shows ❌; each is independent</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.21</td>
+<td>Dropdown — switch action without running</td>
+<td>Select &quot;Compare&quot; → switch to &quot;Apply&quot; without clicking Run</td>
+<td>Dropdown changes; no request sent; no stale state</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6B.22</td>
+<td>Dropdown — rapid double-click Run</td>
+<td>Double-click Run quickly on a device action</td>
+<td>Only one request sent; no duplicate SSH sessions</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6c-powershell--azure-automation-actions">6C. PowerShell / Azure Automation Actions</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Submit &amp; Execute</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.1</td>
+<td>Deploy ER to Azure 🔒8</td>
+<td><code>CreateERPowerShell</code> card → &quot;Deploy to Azure&quot; → Run</td>
+<td>Automation modal opens; runbook created via REST API; job submitted; status polls to completion</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.2</td>
+<td>Deploy Azure PS to Azure 🔒8</td>
+<td><code>CreateAzurePowerShell</code> card → &quot;Deploy to Azure&quot; → Run</td>
+<td>Same automation flow; runbook type matches <code>Settings.AutomationRunbookType</code> (<code>PowerShell72</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.3</td>
+<td>Script preparation — Managed Identity</td>
+<td>Open automation modal → check &quot;Prepared Script&quot; tab/section</td>
+<td>Interactive <code>Connect-AzAccount</code> stripped; replaced with Managed Identity auth</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.4</td>
+<td>Script preparation — no double-encoding</td>
+<td>Check prepared script for encoding artifacts</td>
+<td>No double-escaped characters or corrupted strings</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.5</td>
+<td>Runbook type from Settings</td>
+<td>Change <code>AutomationRunbookType</code> in Settings to a different value → Deploy</td>
+<td>Runbook created with the new type (verify via Azure portal or <code>/diag</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Remove from Azure</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.6</td>
+<td>Remove from Azure 🔒8</td>
+<td><code>CreateAzurePowerShell</code> card → &quot;Remove from Azure&quot; → Run</td>
+<td>Fetches <code>-out</code> backout script from SQL; opens in automation modal</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.7</td>
+<td>Remove — <code>Write-Status</code> dual output</td>
+<td>Check automation modal output during backout run</td>
+<td>Both colored console output AND captured runbook output visible</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.8</td>
+<td>Remove — no backout script</td>
+<td>Run Remove on a tenant that was never deployed (no <code>-out</code> config)</td>
+<td>Error message &quot;No backout config found for 'CreateAzurePowerShell'&quot;</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.9</td>
+<td>ER Remove redirects to Azure card</td>
+<td><code>CreateERPowerShell</code> card → &quot;Remove from Azure&quot;</td>
+<td>Info message directing user to <code>CreateAzurePowerShell</code> card</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Provider Provisioning</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.10</td>
+<td>Provision Provider 🔒8</td>
+<td><code>ServiceProviderInstructions</code> card → &quot;Provision at Provider&quot; → Run</td>
+<td><code>New-LabECX</code> submitted via Automation; status tracked in SQL</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.11</td>
+<td>Provision — non-ECX tenant (Direct)</td>
+<td>Run Provision on tenant with <code>EruplinkPort</code> ≠ &quot;ECX&quot;</td>
+<td>&quot;This tenant uses ExpressRoute Direct&quot; message; no runbook created</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.12</td>
+<td>Provision — no ER circuit</td>
+<td>Run Provision on tenant with <code>Ersku</code> = &quot;None&quot;</td>
+<td>&quot;No ExpressRoute circuit is configured&quot; message</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.13</td>
+<td>Deprovision Provider 🔒8</td>
+<td><code>ServiceProviderInstructions</code> card → &quot;Deprovision at Provider&quot; → Run</td>
+<td><code>Remove-LabECX</code> submitted (not <code>New-LabECX</code>); verify cmdlet name in prepared script</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Runbook Lifecycle &amp; Cleanup</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.14</td>
+<td>Runbook auto-delete on success</td>
+<td>Complete a runbook run with <code>AutoDeleteRunbook=true</code></td>
+<td>Runbook deleted from Azure Automation after terminal status persisted</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.15</td>
+<td>Runbook auto-delete on failure</td>
+<td>Runbook run fails with <code>AutoDeleteRunbook=true</code></td>
+<td>Runbook still deleted (cleanup applies to all terminal states)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.16</td>
+<td>Runbook auto-delete disabled</td>
+<td>Set <code>AutoDeleteRunbook=false</code>; complete a run</td>
+<td>Runbook remains in Azure Automation account</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.17</td>
+<td>Job status — Completed</td>
+<td>Run a simple script to completion</td>
+<td>Status shows &quot;Completed&quot; ✅; output captured</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.18</td>
+<td>Job status — Failed</td>
+<td>Run a script that throws an error</td>
+<td>Status shows &quot;Failed&quot; ❌; exception text captured and displayed</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.19</td>
+<td>Job status — long-running</td>
+<td>Submit a script that runs &gt; 60 seconds</td>
+<td>Polling continues; modal stays responsive; no timeout on PathWeb side</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.20</td>
+<td>Job status — Suspended/Stopped</td>
+<td>Manually suspend or stop a running job in Azure portal</td>
+<td>PathWeb picks up terminal status on next poll; badge updates</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Modal &amp; History</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.21</td>
+<td>Automation modal — reopen running</td>
+<td>Close modal during a running job → reopen same card action</td>
+<td>Modal resumes with current status/output from last poll</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.22</td>
+<td>Automation modal — reopen completed</td>
+<td>Reopen modal after job completed (page not refreshed)</td>
+<td>Shows completed status with full output</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.23</td>
+<td>Page refresh during running job</td>
+<td>Refresh the Config page while a job is running</td>
+<td><code>Latest</code> endpoint refreshes status; job continues; badge reflects current state</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.24</td>
+<td>Recent run history</td>
+<td>After completing 2+ runs for same config type</td>
+<td>Recent-run history section shows multiple entries, most recent first</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.25</td>
+<td>Recent run history — collapsed</td>
+<td>Check PS card recent-run section on page load</td>
+<td>Section defaults to collapsed; expandable on click</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.26</td>
+<td>Status badge persistence</td>
+<td>Complete a Deploy → hard refresh page (Ctrl+F5)</td>
+<td>Status badge + timestamp visible on card header (from SQL, not memory)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.27</td>
+<td>Multiple config types simultaneously</td>
+<td>Start Deploy on <code>CreateERPowerShell</code> AND <code>CreateAzurePowerShell</code> at same time</td>
+<td>Both jobs tracked independently; both modals work; both badges update</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Negative / Edge Cases</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.28</td>
+<td>Submit with empty config</td>
+<td>Delete config from SQL → try Deploy</td>
+<td>&quot;No stored config found&quot; error message</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.29</td>
+<td>Submit with invalid config type</td>
+<td>Use devtools to POST <code>configType=FakeType</code></td>
+<td>&quot;Config type 'FakeType' is not enabled for Azure Automation yet&quot;</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.30</td>
+<td>Submit with invalid TenantGuid</td>
+<td>Use devtools to POST <code>tenantGuid=00000000-...</code></td>
+<td>&quot;Missing tenant or config type&quot; error</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.31</td>
+<td>Azure Automation service unavailable</td>
+<td>Revoke Managed Identity permissions or block network</td>
+<td>Graceful error in modal (&quot;Automation submit failed&quot;); no unhandled exception</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6C.32</td>
+<td>Stale job ID in URL/memory</td>
+<td>Poll status for a deleted job ID</td>
+<td>Automation API returns error; PathWeb handles gracefully</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6d-lab-vm-actions-create--remove">6D. Lab VM Actions (Create / Remove)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Create Lab VMs</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.1</td>
+<td>Create Lab VMs 🔒8</td>
+<td><code>LabVMPowerShell</code> card → &quot;Create Lab VMs&quot; → Run</td>
+<td>Modal shows VM table with <code>#</code>, <code>OS</code>, <code>Target Server</code> (dropdown), <code>Status</code> columns</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.2</td>
+<td>Server dropdown defaults</td>
+<td>Check Target Server column</td>
+<td>Default server derived from first digit of TenantId (e.g., tenant 18 → <code>SEA-ER-01</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.3</td>
+<td>Server resolution — various TenantIds</td>
+<td>Check defaults: TenantId 10→Server01, 22→Server02, 81→Server08</td>
+<td>Each maps to correct server based on first digit</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.4</td>
+<td>Override target server</td>
+<td>Change a VM's target server dropdown → Submit</td>
+<td>VM created on the overridden server (not the default)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.5</td>
+<td>Per-VM progress indicators</td>
+<td>Watch modal during creation</td>
+<td>⏳ while running, ✅ on success with VM name, ❌ on failure with error</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.6</td>
+<td>Parallel server execution</td>
+<td>Submit VMs targeting 2+ different servers</td>
+<td>VMs on different servers run in parallel (<code>Task.WhenAll</code>); check timestamps are close</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.7</td>
+<td>Sequential on same server</td>
+<td>Submit 2+ VMs targeting the same server</td>
+<td>VMs on same server run sequentially; tracker updates after each VM completes</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.8</td>
+<td>Structured JSON output</td>
+<td>Check that <code>---LABVM-JSON---</code> marker is parsed correctly</td>
+<td>VM names, statuses extracted from JSON; no raw marker text shown in UI</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.9</td>
+<td>Resume on reopen</td>
+<td>Close modal during creation → reopen</td>
+<td>Current state restored from in-memory tracker; completed VMs show status</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.10</td>
+<td>VM run persists to SQL</td>
+<td>After completion, refresh page</td>
+<td>Status badge + timestamp on <code>LabVMPowerShell</code> card header; <code>LabVmRun</code> row in DB</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.11</td>
+<td>Badge updates without refresh</td>
+<td>Watch card header while run completes in background</td>
+<td>Badge appears/updates live via JS polling</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.12</td>
+<td>No credentials on disk</td>
+<td>Check Hyper-V server filesystem after VM creation</td>
+<td>No password files, wrapper scripts, or credential artifacts on disk</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.13</td>
+<td>SSH keepalive prevents timeout</td>
+<td>Create a VM that takes &gt; 2 minutes</td>
+<td>SSH connection stays alive; no dropped connection errors</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Remove Lab VMs</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.14</td>
+<td>Remove — Scan phase 🔒8</td>
+<td><code>LabVMPowerShell</code> card → &quot;Remove Lab VMs&quot; → Run</td>
+<td>Scan SSHs to all candidate <code>-ER-</code> servers in parallel; returns per-server VM list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.15</td>
+<td>Scan — shows VM names and states</td>
+<td>Check scan results in modal</td>
+<td>Each server section shows VM names (e.g., <code>SEA-ER-18-VM01</code>) and states (Running/Off)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.16</td>
+<td>Scan — no VMs found</td>
+<td>Scan on a tenant with no existing VMs on any server</td>
+<td>&quot;No VMs found&quot; message; confirm/remove button hidden</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.17</td>
+<td>Scan — partial results</td>
+<td>Some servers reachable, some not</td>
+<td>Reachable servers show results; unreachable show error; results not blocked by failures</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.18</td>
+<td>Remove — confirm dialog</td>
+<td>After scan shows VMs → click Remove</td>
+<td>Confirm dialog appears (&quot;Are you sure?&quot;); must explicitly confirm before removal starts</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.19</td>
+<td>Remove — confirm and execute</td>
+<td>Confirm removal</td>
+<td><code>Remove-LabVM -TenantID {id}</code> runs on each server with VMs; per-server progress shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.20</td>
+<td>Remove — mode labels</td>
+<td>Check modal title, buttons, messages during remove flow</td>
+<td>Mode-appropriate labels (&quot;Remove Lab VMs&quot; not &quot;Create Lab VMs&quot;) throughout</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.21</td>
+<td>Remove — polling and completion</td>
+<td>Watch modal during removal</td>
+<td>Status updates per-server; final badge shows success/failure</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>Negative / Edge Cases</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.22</td>
+<td>Create on server unreachable</td>
+<td>Target a Hyper-V server that is down or not responding</td>
+<td>❌ with connection error for that server; other servers unaffected</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.23</td>
+<td>Create with no <code>LabVMPowerShell</code> config</td>
+<td>Try Create before generating configs</td>
+<td>Error: no config found (or button disabled)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.24</td>
+<td>No <code>-ER-</code> servers in Devices table</td>
+<td>Try Create/Remove for a lab with no Hyper-V servers defined</td>
+<td>&quot;No servers found&quot; or empty server dropdown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.25</td>
+<td>Server admin creds missing from KV</td>
+<td>Remove <code>Server-Admin</code> secret from <code>LabSecrets</code> vault → try Create</td>
+<td>Key Vault error; graceful message; no unhandled exception</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.26</td>
+<td>Create → immediate Remove</td>
+<td>Create VMs → immediately run Remove scan</td>
+<td>Scan finds the just-created VMs; removal works</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.27</td>
+<td>Double-submit prevention</td>
+<td>Click Submit twice rapidly in Create modal</td>
+<td>Only one background task launched; no duplicate VMs</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6D.28</td>
+<td>App Service restart mid-run</td>
+<td>Restart App Service while a Lab VM run is in progress</td>
+<td>In-memory tracker lost; polling returns &quot;not found&quot;; no data corruption; SQL reflects last known state</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6e-email-actions">6E. Email Actions</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6E.1</td>
+<td>Send Email 🔒8</td>
+<td><code>NotificationEmail</code> card → &quot;Send Email&quot; → Run</td>
+<td>Email sent via Logic App webhook; success status badge</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.2</td>
+<td>Send Email — verify recipient</td>
+<td>Check received email</td>
+<td>Correct recipient, subject (&quot;Your PathLab Environment is Ready!&quot;), HTML body with logo</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.3</td>
+<td>Send Email — logo renders</td>
+<td>Check email body in recipient's inbox</td>
+<td>Logo image loads from public <code>email-assets</code> path (not broken image)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.4</td>
+<td>Send Email — no eMailHTML config</td>
+<td>Try Send before generating configs (or delete config)</td>
+<td>Error: &quot;No stored notification email found&quot;</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.5</td>
+<td>Send Email — wrong configType</td>
+<td>Use devtools to POST with <code>configType=FakeEmail</code></td>
+<td>Error: &quot;Config type 'FakeEmail' is not enabled for email sending&quot;</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.6</td>
+<td>Send Email — Logic App down</td>
+<td>Disconnect Logic App or use wrong webhook URL</td>
+<td>Error message in UI; failure badge persisted in SQL</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.7</td>
+<td>Email status badge</td>
+<td>After send, hard refresh page</td>
+<td>Badge + timestamp on card header (persisted from <code>EmailSendRun</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.8</td>
+<td>Send Email twice</td>
+<td>Send → wait for badge → Send again</td>
+<td>Second send succeeds; badge updates to new timestamp</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6E.9</td>
+<td>Send Email — tenant has no Contacts</td>
+<td>Clear Contacts field on tenant → try Send Email</td>
+<td>Error: &quot;Tenant has no contact email addresses configured&quot;</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6f-full-config-lifecycle-end-to-end-sequencing">6F. Full Config Lifecycle (End-to-End Sequencing)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6F.1</td>
+<td>Full deploy sequence</td>
+<td>Generate Config → Deploy ER → Deploy Azure PS → Provision Provider → Create VMs → Send Email</td>
+<td>Each step completes; all badges show ✅; no step blocks the next</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6F.2</td>
+<td>Full teardown sequence</td>
+<td>Remove VMs → Deprovision Provider → Remove from Azure → Remove from all Devices</td>
+<td>Each removal step completes; badges update; tenant left clean</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6F.3</td>
+<td>Deploy → Edit tenant → Regenerate</td>
+<td>Deploy to Azure → Edit tenant field → Regenerate Config</td>
+<td>New config generated; old automation run history preserved; re-deploy uses new config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6F.4</td>
+<td>Actions across ConfigVersions</td>
+<td>Create tenant (v0) → generate → create config (v1) → regenerate</td>
+<td>Configs target correct ConfigVersion; old v0 configs not leaked into v1 actions</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="6g-tenant-option--config-variation-matrix-8">6G. Tenant Option → Config Variation Matrix 🔒8</h3>
+<p>Each tenant option on the Create/Edit page drives conditional branches in config generation. These tests verify that changing a single option produces the correct config output and that downstream actions (Apply, Deploy, etc.) work with that variant.</p>
+<blockquote>
+<p><strong>How to test:</strong> For each row, create (or edit) a tenant with the specified option, generate config, and verify the expected config cards contain the described content. Where noted, also test the downstream action.</p>
+</blockquote>
+<h4 id="lab--region">Lab &amp; Region</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.1</td>
+<td>SEA lab tenant</td>
+<td>Lab=SEA</td>
+<td>Devices target <code>SEA-SRX42-01</code>, <code>SEA-MX480-01/02</code>, <code>SEA-NX93-01/02</code>; ER location=Seattle; IPv4 octets use SEA region values</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.2</td>
+<td>ASH lab tenant</td>
+<td>Lab=ASH</td>
+<td>Devices target <code>ASH-*</code> equivalents; ER location=Washington DC; region=East US</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.3</td>
+<td>Lab auto-selects Azure Region</td>
+<td>Change Lab dropdown from SEA to ASH (or vice versa)</td>
+<td>AzureRegion auto-populates (SEA→West US 2, ASH→East US) if empty</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="expressroute-sku--uplink">ExpressRoute SKU &amp; Uplink</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.4</td>
+<td>ER SKU = None</td>
+<td>Ersku=None</td>
+<td><code>CreateERPowerShell</code> says &quot;no ER required&quot;; <code>ServiceProviderInstructions</code> says &quot;no ER requested&quot;; no ER gateway in Azure PS; firewall/router sections that depend on ER are absent</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.5</td>
+<td>ER SKU = Standard, ECX uplink</td>
+<td>Ersku=Standard, EruplinkPort=ECX</td>
+<td><code>CreateERPowerShell</code> uses <code>ServiceProviderName=Equinix</code>; bandwidth in Mbps; <code>ServiceProviderInstructions</code> shows <code>New-LabECX</code> command; Provision at Provider button is active</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.6</td>
+<td>ER SKU = Premium, ECX uplink</td>
+<td>Ersku=Premium, EruplinkPort=ECX</td>
+<td>Same as Standard but <code>SkuTier=Premium</code> in ER creation script</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.7</td>
+<td>ER Direct — 100G Cisco MSEE (SEA)</td>
+<td>EruplinkPort=&quot;100G Direct Cisco MSEE&quot;</td>
+<td><code>CreateERPowerShell</code> loads <code>SEA-100Gb-Port-01</code>; bandwidth in Gbps; <code>ServiceProviderInstructions</code> says &quot;ExpressRoute Direct, no SP actions&quot;; Provision button shows &quot;not required&quot;</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.8</td>
+<td>ER Direct — 100G Juniper MSEE (SEA)</td>
+<td>EruplinkPort=&quot;100G Direct Juniper MSEE&quot;</td>
+<td>Loads <code>SEA-100Gb-Port-02</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.9</td>
+<td>ER Direct — 10G Juniper MSEE (ASH)</td>
+<td>Lab=ASH, EruplinkPort=&quot;10G Direct Juniper MSEE&quot;</td>
+<td>Loads <code>ASH-10Gb-PortPair-01</code></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="peering-options">Peering Options</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.10</td>
+<td>Private peering ON</td>
+<td>PvtPeering=true</td>
+<td>Azure PS: VNet created, private peering P2P addresses set, VLAN={TenantId}0; Firewall: BGP neighbor config for private peering; Router: private peering interface config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.11</td>
+<td>Private peering OFF</td>
+<td>PvtPeering=false</td>
+<td>No VNet (unless VMs or VPN need it); no private peering in Azure PS; no private peering in firewall/router config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.12</td>
+<td>Microsoft peering ON</td>
+<td>Msftpeering=true, Msfttags populated</td>
+<td>Azure PS: MSFT peering with route filter, BGP communities from Msfttags, NAT IP; Firewall: Microsoft peering policy/NAT rules</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.13</td>
+<td>Microsoft peering OFF</td>
+<td>Msftpeering=false</td>
+<td>No Microsoft peering section in any config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.14</td>
+<td>Both peerings ON</td>
+<td>PvtPeering=true, Msftpeering=true</td>
+<td>Both peering blocks appear in Azure PS, firewall, and router configs</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="er-gateway">ER Gateway</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.15</td>
+<td>ER Gateway = None</td>
+<td>ErgatewaySize=None</td>
+<td>No ER gateway block in Azure PS; no ER connection section</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.16</td>
+<td>ER Gateway = Standard/HighPerf/UltraPerf</td>
+<td>ErgatewaySize=ErGw1AZ (or similar)</td>
+<td>ER gateway creation block present with correct SKU; GatewaySubnet created; PIP allocated</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.17</td>
+<td>ER FastPath ON</td>
+<td>ErfastPath=true</td>
+<td>ER connection includes <code>-EnableFastPath</code> parameter</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.18</td>
+<td>ER FastPath OFF</td>
+<td>ErfastPath=false</td>
+<td>No FastPath parameter on ER connection</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="vpn-options">VPN Options</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.19</td>
+<td>VPN Gateway = None</td>
+<td>Vpngateway=None</td>
+<td>No VPN gateway, local gateway, or connection blocks in Azure PS; no VPN sections in firewall config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.20</td>
+<td>VPN Gateway — single active</td>
+<td>Vpngateway=VpnGw2, Vpnconfig=Single</td>
+<td>Single PIP, single ipconfig; one VPN connection; firewall: single IKE gateway</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.21</td>
+<td>VPN Gateway — Active-Active</td>
+<td>Vpngateway=VpnGw2, Vpnconfig=Active-Active</td>
+<td>Two PIPs (<code>pip1</code>/<code>pip2</code>), two ipconfigs, <code>-EnableActiveActiveFeature</code>; firewall: dual IKE gateways</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.22</td>
+<td>VPN + ER Gateway together</td>
+<td>Vpngateway≠None, ErgatewaySize≠None</td>
+<td>Both gateways share GatewaySubnet; BGP peer IPs differ based on combined presence (<code>.142/.143</code> vs <code>.132/.133</code> vs <code>.254</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.23</td>
+<td>VPN BGP ON</td>
+<td>Vpnbgp=true</td>
+<td>BGP parameters on VPN connection; firewall BGP neighbor for VPN</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="address-family-ipv4--ipv6--dual-stack">Address Family (IPv4 / IPv6 / Dual Stack)</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.24</td>
+<td>IPv4 only</td>
+<td>AddressFamily=IPv4</td>
+<td>VNet has only IPv4 address space; NICs have single ipconfig; no IPv6 PIPs; no <code>fd:</code> prefixes in any config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.25</td>
+<td>Dual stack (IPv4+IPv6)</td>
+<td>AddressFamily=Dual</td>
+<td>VNet has both IPv4 and IPv6 address spaces; NICs get <code>ipconfig1</code> (v4) + <code>ipconfig2</code> (v6); dual PIPs per VM; private peering has IPv6 P2P addresses; firewall/router have IPv6 interface + BGP config</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.26</td>
+<td>IPv6 only</td>
+<td>AddressFamily=IPv6</td>
+<td>Same IPv6 additions as Dual (verify no crash if IPv4 sections still generated)</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="azure-vms">Azure VMs</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.27</td>
+<td>No Azure VMs</td>
+<td>AzVm1-4=None</td>
+<td>No VM loop, NSG, PIP, NIC, or extension blocks in Azure PS</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.28</td>
+<td>1 Windows VM</td>
+<td>AzVm1=Windows, rest=None</td>
+<td>VM loop count=1; NSG opens RDP (3389); post-deploy extension=ICMPv4; <code>Set-AzVMSourceImage</code> uses WindowsServer</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.29</td>
+<td>1 Ubuntu VM</td>
+<td>AzVm1=Ubuntu</td>
+<td>NSG opens SSH (22); <code>Set-AzVMSourceImage</code> uses Canonical/ubuntu-24_04-lts; no post-deploy Windows extension</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.30</td>
+<td>Mixed VMs (Windows+Ubuntu)</td>
+<td>AzVm1=Windows, AzVm2=Ubuntu</td>
+<td>VM loop count=2; each VM gets OS-specific NSG and image; extension only runs for Windows VMs</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.31</td>
+<td>4 Azure VMs</td>
+<td>AzVm1-4 all set</td>
+<td>VM loop count=4; all 4 get PIPs, NICs, NSGs</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.32</td>
+<td>Azure VMs + Dual Stack</td>
+<td>AzVm1=Windows, AddressFamily=Dual</td>
+<td>Each VM gets both IPv4 and IPv6 PIPs; NIC has two ipconfigs</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="lab-on-prem-vms">Lab (On-Prem) VMs</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.33</td>
+<td>No Lab VMs</td>
+<td>LabVm1-4=None</td>
+<td><code>LabVMPowerShell</code> config says &quot;no on-prem VMs&quot;; firewall has no Lab VM policies; Create Lab VMs action shows no VM rows</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.34</td>
+<td>1 Lab VM</td>
+<td>LabVm1=Windows</td>
+<td><code>LabVMPowerShell</code> has 1 VM row; firewall includes RDP/internet policies for lab VM subnet; Create Lab VMs modal shows 1 row</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.35</td>
+<td>4 Lab VMs</td>
+<td>LabVm1-4 all set</td>
+<td><code>LabVMPowerShell</code> has 4 rows; firewall policies cover all; Create Lab VMs modal shows 4 rows with server dropdowns</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.36</td>
+<td>Lab VMs drive firewall config</td>
+<td>LabVm1=Windows, Vpngateway=None, Msftpeering=false</td>
+<td>Firewall config IS generated (because Lab VMs need RDP/internet policies even without VPN or MSFT peering)</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="combinatorial--edge-cases">Combinatorial / Edge Cases</h4>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Tenant Options</th>
+<th>Expected Config Impact</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6G.37</td>
+<td>Minimal tenant (no ER, no VPN, no VMs)</td>
+<td>Ersku=None, Vpngateway=None, AzVm1-4=None, LabVm1-4=None</td>
+<td>Config cards generated but all say &quot;not requested/required&quot;; no firewall config (or minimal); Deploy actions show &quot;no script required&quot; or equivalent</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.38</td>
+<td>Maximal tenant (everything ON)</td>
+<td>Ersku=Premium, ECX, PvtPeering=true, Msftpeering=true, ErGw=UltraPerf, FastPath=true, VPN=AA, Dual stack, 4 Azure VMs, 4 Lab VMs</td>
+<td>All config sections populated; largest possible Azure PS script; full firewall/router configs; all action buttons active</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.39</td>
+<td>Edit option → Regenerate</td>
+<td>Change Vpngateway from None to VpnGw2 → Regenerate</td>
+<td>VPN sections now appear in Azure PS and firewall configs that weren't there before</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.40</td>
+<td>Config reflects ER speed correctly</td>
+<td>ECX at 50 Mbps vs Direct at 10 Gbps</td>
+<td>ECX: <code>BandwidthInMbps 50</code>; Direct: <code>BandwidthinGbps 10</code> (note different parameter and unit)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>6G.41</td>
+<td>Server Preference = &quot;No on-prem needed&quot;</td>
+<td>serverPreference=100</td>
+<td>TenantId assigned in 100+ range; no Hyper-V server mapping (first digit &gt; available servers); Lab VM actions may show no available servers</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="7-devices-11">7. Devices 🔒11</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7.1</td>
+<td>Device index loads</td>
+<td>Admin → Devices</td>
+<td>Device list with all columns</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.2</td>
+<td>Device Details</td>
+<td>Click a device row</td>
+<td>Details page with all device fields</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.3</td>
+<td>Edit device 🔒11</td>
+<td>Details → Edit → change IP → Save</td>
+<td>Updated value persists</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.4</td>
+<td>Validate — router/switch</td>
+<td>Click Validate on a Juniper/Cisco device</td>
+<td>SSH <code>show version</code> (brief); connectivity confirmed in result</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.5</td>
+<td>Validate — Hyper-V server</td>
+<td>Click Validate on a <code>-ER-</code> server</td>
+<td>Multi-check table: PS7 installed, Win Server 2025, sshd running, LabMod ≥ 1.5.0, log dir exists</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.6</td>
+<td>Validate — unreachable device</td>
+<td>Validate against an offline device</td>
+<td>Error message (timeout / connection refused)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.7</td>
+<td>Validate — Index modal</td>
+<td>Click Validate on Index page row (not Details)</td>
+<td>Result appears in a modal</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.8</td>
+<td>Validate — Details inline</td>
+<td>Click Validate on Details page</td>
+<td>Result appears inline on the page</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.9</td>
+<td>Platform detection — Juniper</td>
+<td>Device named <code>*-MX*</code> or <code>*-SRX*</code></td>
+<td>Detected as Juniper</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.10</td>
+<td>Platform detection — NX-OS</td>
+<td>Device named <code>*-NX*</code></td>
+<td>Detected as NX-OS</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.11</td>
+<td>Platform detection — IOS-XE</td>
+<td>Device named <code>*-ASR*</code> or <code>*-ISR*</code></td>
+<td>Detected as IOS-XE</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.12</td>
+<td>Run Command page</td>
+<td>Devices → Details → Run Command (if present)</td>
+<td>Command entry and output display</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.13</td>
+<td>Sort by Lab</td>
+<td>Click &quot;Lab&quot; column header</td>
+<td>Rows sort ascending; click again for descending</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.14</td>
+<td>Sort by Name</td>
+<td>Click &quot;Name&quot; column header</td>
+<td>Rows sort by device name</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.15</td>
+<td>Sort by Type</td>
+<td>Click &quot;Type&quot; column header</td>
+<td>Rows sort by device type</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.16</td>
+<td>Sort by OS</td>
+<td>Click &quot;OS&quot; column header</td>
+<td>Rows sort by OS</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.17</td>
+<td>Sort by InService</td>
+<td>Click &quot;InService&quot; column header</td>
+<td>Rows sort by in-service status</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>7.18</td>
+<td>Auth gating — level &lt; 11 blocked</td>
+<td>Log in as auth level 6–10 → navigate to <code>/Devices</code> directly</td>
+<td>PermissionError view shown</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="8-ip-addresses-11">8. IP Addresses 🔒11</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8.1</td>
+<td>Address index loads</td>
+<td>Admin → IP Addresses</td>
+<td>Address list with all columns</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>8.2</td>
+<td>Address Details</td>
+<td>Click a row</td>
+<td>Details page</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>8.3</td>
+<td>Edit address</td>
+<td>Details → Edit → change a field → Save</td>
+<td>Updated value persists</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>8.4</td>
+<td>Release address</td>
+<td>Release action on an address</td>
+<td>Address released; row updated</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>8.5</td>
+<td>Auth gating — level &lt; 11 blocked</td>
+<td>Log in as auth level 6–10 → navigate to <code>/Addresses</code> directly</td>
+<td>PermissionError view shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>8.6</td>
+<td>Details — invalid/missing ID</td>
+<td>Navigate to <code>/Addresses/Details</code> with no ID or a bogus GUID</td>
+<td>TempData error message and redirect (not unhandled exception)</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="9-users-14">9. Users 🔒14</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>9.1</td>
+<td>User index loads</td>
+<td>Admin → Users</td>
+<td>User list with email and auth level</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>9.2</td>
+<td>Create user</td>
+<td>Create New → fill email + auth level → Save</td>
+<td>User created; appears in list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>9.3</td>
+<td>Create — duplicate email</td>
+<td>Enter an existing email → Save</td>
+<td>Validation error (or DB constraint error handled gracefully)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>9.4</td>
+<td>Edit user auth level</td>
+<td>Edit a user → change auth level → Save</td>
+<td>Updated level persists; user sees different nav items on next request</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>9.5</td>
+<td>Delete user</td>
+<td>Delete a user → Confirm</td>
+<td>User removed from list</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>9.6</td>
+<td>Delete — self deletion</td>
+<td>Try to delete your own user record</td>
+<td>Should warn or prevent self-lockout</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="10-tooltips-14">10. Tooltips 🔒14</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10.1</td>
+<td>Tooltip index loads</td>
+<td>Admin → Tooltips</td>
+<td>Tooltip list/editor loads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>10.2</td>
+<td>Edit and save tooltips 🔒14</td>
+<td>Change a tooltip text → Save</td>
+<td>Updated text persists; success message shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>10.3</td>
+<td>Tooltip cache invalidation</td>
+<td>Edit a tooltip → Save → open Tenant Create form (no app restart)</td>
+<td>New tooltip text appears immediately (cache refreshed on save)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>10.4</td>
+<td>Tooltips render on forms</td>
+<td>Open Tenant Create/Edit form</td>
+<td>Field help icons/tooltips visible and functional</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>10.5</td>
+<td>Auth gating — level &lt; 14 blocked</td>
+<td>Log in as auth level 11 → navigate to <code>/ToolTips</code> directly</td>
+<td>PermissionError view shown</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="11-logs-14">11. Logs 🔒14</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>11.1</td>
+<td>Logs page loads</td>
+<td>Admin → Logs</td>
+<td>Log table with level, category, message, timestamp</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>11.2</td>
+<td>Filter by level</td>
+<td>Select &quot;Warning&quot; from level dropdown</td>
+<td>Only Warning+ entries shown</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>11.3</td>
+<td>Search by text</td>
+<td>Enter a search term</td>
+<td>Filtered results matching message text</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>11.4</td>
+<td>Pagination</td>
+<td>Navigate pages if &gt;1 page of results</td>
+<td>Correct page loads; page indicators accurate</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>11.5</td>
+<td>Color-coded levels</td>
+<td>Check log rows</td>
+<td>Different colors for Debug, Info, Warning, Error, Critical</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>11.6</td>
+<td>Logs are being written</td>
+<td>Perform some actions → check Logs</td>
+<td>Recent entries appear with correct category and user</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="12-settings-14">12. Settings 🔒14</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>12.1</td>
+<td>Settings page loads</td>
+<td>Admin → Settings</td>
+<td>Page shows Auto Delete Runbooks toggle and Automation Runbook Type field</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.2</td>
+<td>Toggle Auto Delete Runbooks</td>
+<td>Flip the toggle → Save</td>
+<td>Value persists in SQL <code>Settings</code> table (<code>AutoDeleteRunbook</code>)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.3</td>
+<td>Change Automation Runbook Type</td>
+<td>Change value → Save</td>
+<td>Value persists (<code>AutomationRunbookType</code>); next runbook creation uses new type</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.4</td>
+<td>Logging:Default level</td>
+<td>Change default log level → Save</td>
+<td>DB logger adjusts; verify by checking what appears in Logs page</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.5</td>
+<td>Add logging category override</td>
+<td>Add <code>Logging:Microsoft.EntityFrameworkCore</code> = <code>Warning</code></td>
+<td>EF Core debug/info logs suppressed; category-specific override active</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.6</td>
+<td>Hierarchical subcategory matching</td>
+<td>Set <code>Logging:PathWeb</code> = <code>Debug</code></td>
+<td>All <code>PathWeb.*</code> subcategories inherit Debug level</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.7</td>
+<td>Remove logging override</td>
+<td>Delete a category override → Save</td>
+<td>Falls back to <code>Logging:Default</code> for that category</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>12.8</td>
+<td>Auth gating — level &lt; 14 blocked</td>
+<td>Log in as auth level 11 → navigate to <code>/Settings</code> directly</td>
+<td>PermissionError view shown</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="13-about-pages">13. About Pages</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>13.1</td>
+<td>About this Site</td>
+<td>About → ...this Site</td>
+<td>Page renders with app description</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>13.2</td>
+<td>About the Physical Lab</td>
+<td>About → ...the Physical Lab</td>
+<td>Lab info page renders</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>13.3</td>
+<td>About the Logical Tenant</td>
+<td>About → ...the Logical Tenant</td>
+<td>Tenant concept page renders</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>13.4</td>
+<td>Site Dev Progress</td>
+<td>About → ...Site Dev Progress</td>
+<td>Progress/changelog page renders</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="14-cross-cutting-concerns">14. Cross-Cutting Concerns</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>14.1</td>
+<td>Dark mode across all pages</td>
+<td>Enable dark mode → visit every major page</td>
+<td>Consistent dark theme; no unreadable text or invisible elements</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.2</td>
+<td>Light mode across all pages</td>
+<td>Enable light mode → visit every major page</td>
+<td>Consistent light theme</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.3</td>
+<td>Modal readability — dark mode</td>
+<td>Open Compare/Apply/Automation/LabVM modals in dark mode</td>
+<td>Bright text on <code>#1a1a2e</code> background; all text legible</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.4</td>
+<td>Modal readability — light mode</td>
+<td>Open same modals in light mode</td>
+<td>Proper contrast; no dark-on-dark text</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.5</td>
+<td>Browser cache busting</td>
+<td>Deploy a new build → browse the site</td>
+<td>No stale CSS/JS served (Cache-Control headers set)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.6</td>
+<td>Build timestamp in footer</td>
+<td>Check footer on any page</td>
+<td>Shows current build date/time</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.7</td>
+<td>Error page</td>
+<td>Navigate to <code>/nonexistent</code> or trigger a 500</td>
+<td>Custom error page renders (not raw stack trace)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.8</td>
+<td>Responsive layout — mobile</td>
+<td>Resize browser to mobile width</td>
+<td>Navbar collapses to hamburger menu; tables scroll horizontally</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.9</td>
+<td>Responsive layout — tablet</td>
+<td>Resize to tablet width</td>
+<td>Layout adapts; no horizontal overflow</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.10</td>
+<td>Concurrent users</td>
+<td>Two users perform actions on same tenant simultaneously</td>
+<td>No data corruption; last write wins or appropriate conflict handling</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.11</td>
+<td>SQL injection — search fields</td>
+<td>Enter <code>'; DROP TABLE Tenants; --</code> in tenant search</td>
+<td>No SQL error; search returns no results; database intact</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.12</td>
+<td>XSS — text fields</td>
+<td>Enter <code>&lt;script&gt;alert('xss')&lt;/script&gt;</code> in a tenant name</td>
+<td>Script NOT executed; rendered as escaped text</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.13</td>
+<td>CSRF protection</td>
+<td>POST to a form endpoint without antiforgery token</td>
+<td>Request rejected (400 or redirect)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.14</td>
+<td>Long-running SSH timeout</td>
+<td>Initiate SSH to a very slow device</td>
+<td>Timeout handled gracefully; not a hung page</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>14.15</td>
+<td>Key Vault unavailable</td>
+<td>Temporarily block KV access → try a device action</td>
+<td>Graceful error message; no unhandled exception</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="15-deployment--warmup">15. Deployment &amp; Warmup</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Test Case</th>
+<th>Steps</th>
+<th>Expected Result</th>
+<th>Pass/Fail</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>15.1</td>
+<td>Quick deploy script</td>
+<td>Run <code>quick-deploy.ps1</code></td>
+<td>Deploys successfully; touches <code>/health</code>, <code>/warmup</code>, Logs, Requests/Queue, Settings, <code>diag/view</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>15.2</td>
+<td>Warmup script</td>
+<td>Run <code>Warmup.ps1</code> post-deploy</td>
+<td>All warmup URLs return 200; EF Core queries pre-compiled</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>15.3</td>
+<td>Build timestamp after deploy</td>
+<td>Check <code>/health</code> and footer</td>
+<td>Both show same/consistent build timestamp</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>15.4</td>
+<td>First request after cold start</td>
+<td>Restart App Service → first page load</td>
+<td>Page loads (may be slow but no errors); warmup queries already cached</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="sign-off">Sign-Off</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Name</th>
+<th>Date</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tester</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Developer</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Reviewer</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Total Test Cases: 235</strong></p>
+
+</body>
+</html>
