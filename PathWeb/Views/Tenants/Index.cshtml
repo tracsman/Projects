@@ -52,6 +52,12 @@
         </tr>
     </thead>
     <tbody>
+        @if (!Model.Tenants.Any())
+        {
+            <tr>
+                <td colspan="6" class="text-center text-body-secondary py-3">No tenants found.</td>
+            </tr>
+        }
         @foreach (var item in Model.Tenants)
         {
             <tr>

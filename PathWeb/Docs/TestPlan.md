@@ -67,19 +67,19 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 4.1 | Request index loads | Click "Request a Lab" in nav | Request list page loads | | |
-| 4.2 | Create new request | Click Create → fill all required fields → Submit | Redirected to Details or Index; new request visible with "Pending" status | | |
-| 4.3 | Create with missing required fields | Leave required fields blank → Submit | Validation errors shown inline; form not submitted | | |
-| 4.4 | View request details | Click a request row | Details page shows all submitted fields | | |
-| 4.5 | Request queue (admin) 🔒8 | Admin → Tenant Requests | Queue page lists pending requests with count matching nav badge | | |
-| 4.6 | Review a request 🔒8 | Click Review on a pending request | Review page loads with approve/reject options | | |
-| 4.7 | Approve a request 🔒8 | Approve a pending request | Status changes; tenant created; admin redirected to tenant Edit page; pending count decreases by 1 | | |
-| 4.8 | Reject a request 🔒8 | Reject a pending request | Status changes to rejected; item no longer in pending queue | | |
-| 4.9 | Approve creates ADO work item 🔒8 | Approve a request when Logic App is configured | ADO work item created; `WorkItemId` shown on tenant; TempData shows success with work item number | | |
+| 4.1 | Request index loads | Click "Request a Lab" in nav | Request list page loads | ✅ | |
+| 4.2 | Create new request | Click Create → fill all required fields → Submit | Redirected to Details or Index; new request visible with "Pending" status | ✅ | |
+| 4.3 | Create with missing required fields | Leave required fields blank → Submit | Validation errors shown inline; form not submitted | ✅ | |
+| 4.4 | View request details | Click a request row | Details page shows all submitted fields | ✅ | |
+| 4.5 | Request queue (admin) 🔒8 | Admin → Tenant Requests | Queue page lists pending requests with count matching nav badge | ✅ | |
+| 4.6 | Review a request 🔒8 | Click Review on a pending request | Review page loads with approve/reject options | ✅ | |
+| 4.7 | Approve a request 🔒8 | Approve a pending request | Status changes; tenant created; admin redirected to tenant Edit page; pending count decreases by 1 | ✅ | |
+| 4.8 | Reject a request 🔒8 | Reject a pending request | Status changes to rejected; item no longer in pending queue | ✅ | |
+| 4.9 | Approve creates ADO work item 🔒8 | Approve a request when Logic App is configured | ADO work item created; `WorkItemId` shown on tenant; TempData shows success with work item number | ✅ | |
 | 4.10 | Approve — ADO failure is non-blocking 🔒8 | Approve a request when ADO Logic App is down/misconfigured | Tenant still created successfully; TempData shows warning (yellow) with ADO error note | | |
 | 4.11 | Approve — already processed request 🔒8 | Use devtools to POST approve on an already-approved request | "Invalid or already processed request" error; no duplicate tenant | | |
-| 4.12 | Approve — server preference parameter 🔒8 | Approve with a specific `serverPreference` value | TenantId assigned in the matching range (e.g., preference=2 → TenantId 2x) | | |
-| 4.13 | Non-admin sees only own requests | Log in as non-admin; create a request; check Index | Only requests where you are the requestor or listed in Contacts are visible | | |
+| 4.12 | Approve — server preference parameter 🔒8 | Approve with a specific `serverPreference` value | TenantId assigned in the matching range (e.g., preference=2 → TenantId 2x) | ✅ | |
+| 4.13 | Non-admin sees only own requests | Log in as non-admin; create a request; check Index | Only requests where you are the requestor or listed in Contacts are visible | ✅ | |
 | 4.14 | Contacts-based visibility | Log in as a user listed in another request's Contacts field (not the requestor) | That request is visible in your list | | |
 | 4.15 | Request pagination | Create >25 requests (or verify in DB) → check Index | Pagination controls appear; page 2 loads correctly | | |
 
@@ -89,24 +89,24 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 5.1 | Tenant index loads | Navigate to Tenants | Paginated table of active tenants | | |
-| 5.2 | Sort by Lab | Click "Lab" column header | Rows sort ascending; click again for descending | | |
-| 5.3 | Sort by Tenant | Click "Tenant" column header | Rows sort by TenantId | | |
-| 5.4 | Sort by Ninja | Click "Ninja" column header | Rows sort by NinjaOwner | | |
-| 5.5 | Sort by Date | Click "Date" column header | Rows sort by date | | |
-| 5.6 | Sort by Usage | Click "Usage" column header | Rows sort by Usage | | |
-| 5.7 | Search filter | Enter a lab name in search box → search | Only matching tenants shown | | |
-| 5.8 | Search — no results | Enter gibberish search string | Empty table with appropriate message | | |
-| 5.9 | Show released tenants | Toggle "Show Released" | Table shows tenants with non-null DeletedDate | | |
+| 5.1 | Tenant index loads | Navigate to Tenants | Paginated table of active tenants | ✅ | |
+| 5.2 | Sort by Lab | Click "Lab" column header | Rows sort ascending; click again for descending | ✅ | |
+| 5.3 | Sort by Tenant | Click "Tenant" column header | Rows sort by TenantId | ✅ | |
+| 5.4 | Sort by Ninja | Click "Ninja" column header | Rows sort by NinjaOwner | ✅ | |
+| 5.5 | Sort by Date | Click "Date" column header | Rows sort by date | ✅ | |
+| 5.6 | Sort by Usage | Click "Usage" column header | Rows sort by Usage | ✅ | |
+| 5.7 | Search filter | Enter a lab name in search box → search | Only matching tenants shown | ✅ | |
+| 5.8 | Search — no results | Enter gibberish search string | Empty table with appropriate message | ❌ | Add "No tenants found." |
+| 5.9 | Show released tenants | Toggle "Show Released" | Table shows tenants with non-null DeletedDate | ✅ | |
 | 5.10 | Pagination (released) | If >50 released tenants, click page 2 | Second page of results loads | | |
-| 5.11 | Create tenant 🔒8 | Click Create New → fill form → Save | Redirected to Details with new tenant; TenantId auto-assigned | | |
-| 5.12 | Create — validation errors | Leave required fields blank → Save | Inline validation errors; no save | | |
-| 5.13 | View tenant Details | Click a tenant row | Details page shows all fields | | |
-| 5.14 | Edit tenant 🔒8 | Details → Edit → change a field → Save | Updated value persists; returned to Details | | |
-| 5.15 | Release tenant 🔒8 | Details → Release → Confirm | Tenant gets DeletedDate; disappears from active list; appears in released list | | |
-| 5.16 | Clone released tenant 🔒8 | Switch to released → open a released tenant → Clone | Confirmation step shown; new active tenant created with fresh GUID/TenantID; post-deploy fields reset; redirected to new tenant Details | | |
-| 5.17 | Clone — fields reset correctly 🔒8 | After cloning, check new tenant Details | `Msftp2p`, `Msftadv`, `Msfttags`, `Skey`, `VpnendPoint` are blank; `WorkItemId`=0; `ConfigVersion`=0; `DeletedDate`=null; design options (Ersku, VMs, etc.) carried over from source | | |
-| 5.18 | Released tenant — no Edit button | Open a released tenant's Details | Edit, Release, Create Config buttons are hidden | | |
+| 5.11 | Create tenant 🔒8 | Click Create New → fill form → Save | Redirected to Details with new tenant; TenantId auto-assigned | ❌ | Record created but ADO work item not created |
+| 5.12 | Create — validation errors | Leave required fields blank → Save | Inline validation errors; no save | ✅ | |
+| 5.13 | View tenant Details | Click a tenant row | Details page shows all fields | ✅ | |
+| 5.14 | Edit tenant 🔒8 | Details → Edit → change a field → Save | Updated value persists; returned to Details | ✅ | |
+| 5.15 | Release tenant 🔒8 | Details → Release → Confirm | Tenant gets DeletedDate; disappears from active list; appears in released list | ❌ | Record released but ADO work item not closed with closure information |
+| 5.16 | Clone released tenant 🔒8 | Switch to released → open a released tenant → Clone | Confirmation step shown; new active tenant created with fresh GUID/TenantID; post-deploy fields reset; redirected to new tenant Details | ❌ | Clone worked but new ADO work item not created |
+| 5.17 | Clone — fields reset correctly 🔒8 | After cloning, check new tenant Details | `Msftp2p`, `Msftadv`, `Msfttags`, `Skey`, `VpnendPoint` are blank; `WorkItemId`=0; `ConfigVersion`=0; `DeletedDate`=null; design options (Ersku, VMs, etc.) carried over from source | ✅ | |
+| 5.18 | Released tenant — no Edit button | Open a released tenant's Details | Edit, Release, Create Config buttons are hidden | ✅ | |
 
 ---
 
@@ -486,12 +486,19 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 ---
 
-## Sign-Off
+## Summary
 
-| Role | Name | Date | Result |
-|------|------|------|--------|
-| Tester | | | |
-| Developer | | | |
-| Reviewer | | | |
+**Total Test Cases: 275**
 
-**Total Test Cases: 237**
+### Current Status
+
+| Status | Count | % of Total |
+|--------|------:|-----------:|
+| ✅ Pass | 100 | 36.4% |
+| ❌ Fail | 8 | 2.9% |
+| Not tested | 167 | 60.7% |
+
+- **Tested:** 108 / 275 (39.3%)
+- **Pass rate (of tested):** 100 / 108 (92.6%)
+
+_Last updated: 2026-05-01_
