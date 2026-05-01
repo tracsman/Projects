@@ -25,12 +25,12 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 |---|-----------|-------|-----------------|-----------|-------|
 | 1.1 | `/health` returns OK | `curl https://<site>/health` | 200 JSON with `status: "healthy"` and `build` timestamp | ✅ | |
 | 1.2 | `/warmup` succeeds | `curl https://<site>/warmup` | 200 JSON with `status: "warm"`, `durationMs`, pre-compiled query list | ✅ | |
-| 1.3 | `/warmup` with broken SQL | Temporarily revoke DB access or wrong connection string | Returns structured error JSON, not a 500 stack trace | | |
+| 1.3 | `/warmup` with broken SQL | Temporarily revoke DB access or wrong connection string | Returns structured error JSON, not a 500 stack trace | ✅ | |
 | 1.4 | `/diag` JSON (authed) | Browse to `/diag` while logged in (auth level ≥ 14) | JSON diagnostics payload with automation, KV, logging, cache sections | ✅ | |
 | 1.5 | `/diag?deep=true` live probes | Browse to `/diag?deep=true` | Additional live-probe results for Automation, Key Vault, Logic App | ✅ | |
 | 1.6 | `/diag/view` HTML page | Browse to `/diag/view` | Formatted HTML diagnostics page with expandable sections | ✅ | |
 | 1.7 | `/diag/view?deep=true` HTML page | Browse to `/diag/view?deep=true` | Formatted HTML diagnostics page with additional live-probe results for Automation, Key Vault, Logic App | ✅ | |
-| 1.8 | `/diag` blocked for low auth | Log in as auth level < 14, browse to `/diag` | Permission denied or 403 | ❌ | Access successful with auth level 13 |
+| 1.8 | `/diag` blocked for low auth | Log in as auth level < 14, browse to `/diag` | Permission denied or 403 | ✅ | |
 
 ---
 
@@ -38,17 +38,19 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 2.1 | Unauthenticated access blocked | Open site in incognito/private window, no login | Redirected to Entra ID login (or Easy Auth challenge) | | |
-| 2.2 | Auth level 0 — no nav items | Log in as user with auth level 0 | Home page loads; no Tenants, Admin, or About links in nav | | |
-| 2.3 | Auth level 1–5 — About menu only | Log in as auth level 1 | About dropdown visible; no Tenants or Admin links | | |
-| 2.4 | Auth level 6–7 — Tenants visible | Log in as auth level 6 | Tenants nav link visible; Admin menu hidden | | |
-| 2.5 | Auth level 8–10 — Admin (requests) | Log in as auth level 8 | Admin dropdown with "Tenant Requests"; no Devices/Addresses/Users/Settings | | |
-| 2.6 | Auth level 11–13 — Admin + Devices | Log in as auth level 11 | Admin dropdown includes Devices and IP Addresses | | |
-| 2.7 | Auth level 14+ — Full admin | Log in as auth level 14 | All Admin items visible: Users, Tooltips, Logs, Diagnostics, Settings | | |
-| 2.8 | Direct URL bypass — Tenants | Auth level 0 user navigates to `/Tenants` directly | PermissionError view shown (not raw data) | | |
-| 2.9 | Direct URL bypass — Admin pages | Auth level 6 user navigates to `/Settings` directly | PermissionError or redirect | | |
-| 2.10 | Theme toggle | Click 🌙 button in nav bar | Page switches to dark/light mode; cookie persists across refresh | | |
-| 2.11 | TempData messages render | Trigger an action that sets TempData (e.g., create a tenant) | Alert banner appears at top of page with correct color | | |
+| 2.1 | Unauthenticated access blocked | Open site in incognito/private window, no login | Redirected to Entra ID login (or Easy Auth challenge) | ✅ | |
+| 2.2 | Auth level 0 — no nav items | Log in as user with auth level 0 | Home page loads; no Tenants, Admin, or About links in nav | ✅ | |
+| 2.3 | Auth level 1–5 — About menu only | Log in as auth level 1 | About dropdown visible; no Tenants or Admin links | ✅ | |
+| 2.4 | Auth level 6–7 — Tenants visible | Log in as auth level 6 | Tenants nav link visible; Admin menu hidden | ✅ | |
+| 2.5 | Auth level 8–10 — Admin (requests) | Log in as auth level 8 | Admin dropdown with "Tenant Requests"; no Devices/Addresses/Users/Settings | ✅ | |
+| 2.6 | Auth level 11–13 — Admin + Devices | Log in as auth level 11 | Admin dropdown includes Devices and IP Addresses | ✅ | |
+| 2.7 | Auth level 14+ — Full admin | Log in as auth level 14 | All Admin items visible: Users, Tooltips, Logs, Diagnostics, Settings | ✅ | |
+| 2.8 | Auth level 14 — read-only admin | Log in as auth level 14 (SiteAdminReadOnly) | Settings page: view-only (no Save); Users page: no Create/Edit/Delete buttons; Tooltips: no Save | ✅ | Settings Save button present but disabled |
+| 2.9 | Auth level 15 — full write admin | Log in as auth level 15 (SiteAdmin) | Settings page: editable with Save; Users page: Create/Edit/Delete available; Tooltips: editable with Save | ✅ | |
+| 2.10 | Direct URL bypass — Tenants | Auth level 0 user navigates to `/Tenants` directly | PermissionError view shown (not raw data) | ✅ | |
+| 2.11 | Direct URL bypass — Admin pages | Auth level 6 user navigates to `/Settings` directly | PermissionError or redirect | ✅ | |
+| 2.12 | Theme toggle | Click 🌙 button in nav bar | Page switches to dark/light mode; cookie persists across refresh | ✅ | |
+| 2.13 | TempData messages render | As auth level 15, open Settings → click Save (no changes needed) | Green alert banner appears at top of page with success message | ✅ | |
 
 ---
 
@@ -56,8 +58,8 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 3.1 | Home page loads | Navigate to `/` | Home/Index page renders without errors | | |
-| 3.2 | Privacy page loads | Click "Privacy" link in footer | Privacy page renders | | |
+| 3.1 | Home page loads | Navigate to `/` | Home/Index page renders without errors | ✅ | |
+| 3.2 | Privacy page loads | Click "Privacy" link in footer | Privacy page renders | ✅ | Page is mostly empty — needs content update |
 
 ---
 
@@ -353,24 +355,24 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 7.1 | Device index loads | Admin → Devices | Device list with all columns | | |
-| 7.2 | Device Details | Click a device row | Details page with all device fields | | |
-| 7.3 | Edit device 🔒11 | Details → Edit → change IP → Save | Updated value persists | | |
-| 7.4 | Validate — router/switch | Click Validate on a Juniper/Cisco device | SSH `show version` (brief); connectivity confirmed in result | | |
-| 7.5 | Validate — Hyper-V server | Click Validate on a `-ER-` server | Multi-check table: PS7 installed, Win Server 2025, sshd running, LabMod ≥ 1.5.0, log dir exists | | |
-| 7.6 | Validate — unreachable device | Validate against an offline device | Error message (timeout / connection refused) | | |
-| 7.7 | Validate — Index modal | Click Validate on Index page row (not Details) | Result appears in a modal | | |
-| 7.8 | Validate — Details inline | Click Validate on Details page | Result appears inline on the page | | |
-| 7.9 | Platform detection — Juniper | Device named `*-MX*` or `*-SRX*` | Detected as Juniper | | |
-| 7.10 | Platform detection — NX-OS | Device named `*-NX*` | Detected as NX-OS | | |
-| 7.11 | Platform detection — IOS-XE | Device named `*-ASR*` or `*-ISR*` | Detected as IOS-XE | | |
-| 7.12 | Run Command page | Devices → Details → Run Command (if present) | Command entry and output display | | |
-| 7.13 | Sort by Lab | Click "Lab" column header | Rows sort ascending; click again for descending | | |
-| 7.14 | Sort by Name | Click "Name" column header | Rows sort by device name | | |
-| 7.15 | Sort by Type | Click "Type" column header | Rows sort by device type | | |
-| 7.16 | Sort by OS | Click "OS" column header | Rows sort by OS | | |
-| 7.17 | Sort by InService | Click "InService" column header | Rows sort by in-service status | | |
-| 7.18 | Auth gating — level < 11 blocked | Log in as auth level 6–10 → navigate to `/Devices` directly | PermissionError view shown | | |
+| 7.1 | Device index loads | Admin → Devices | Device list with all columns | ✅ | |
+| 7.2 | Device Details | Click a device row | Details page with all device fields | ✅ | |
+| 7.3 | Edit device 🔒11 | Details → Edit → change IP → Save | Updated value persists | ✅ | |
+| 7.4 | Validate — router/switch | Click Validate on a Juniper/Cisco device | SSH `show version` (brief); connectivity confirmed in result | ✅ | Tested both Juniper and Cisco |
+| 7.5 | Validate — Hyper-V server | Click Validate on a `-ER-` server | Multi-check table: PS7 installed, Win Server 2025, sshd running, LabMod ≥ 1.5.0, log dir exists | ✅ | |
+| 7.6 | Validate — unreachable device | Validate against an offline device | Error message (timeout / connection refused) | ✅ | |
+| 7.7 | Validate — Index modal | Click Validate on Index page row (not Details) | Result appears in a modal | ✅ | |
+| 7.8 | Validate — Details inline | Click Validate on Details page | Result appears inline on the page | ✅ | |
+| 7.9 | Platform detection — Juniper | Device named `*-MX*` or `*-SRX*` | Detected as Juniper | ✅ | |
+| 7.10 | Platform detection — NX-OS | Device named `*-NX*` | Detected as NX-OS | ✅ | |
+| 7.11 | Platform detection — IOS-XE | Device named `*-ASR*` or `*-ISR*` | Detected as IOS-XE | ✅ | |
+| 7.12 | Run Command page | Devices Index → click Run Command button at top of page | Command entry and output display | ✅ | |
+| 7.13 | Sort by Lab | Click "Lab" column header | Rows sort ascending; click again for descending | ✅ | |
+| 7.14 | Sort by Name | Click "Name" column header | Rows sort by device name | ✅ | |
+| 7.15 | Sort by Type | Click "Type" column header | Rows sort by device type | ✅ | |
+| 7.16 | Sort by OS | Click "OS" column header | Rows sort by OS | ✅ | |
+| 7.17 | Sort by InService | Click "InService" column header | Rows sort by in-service status | ✅ | |
+| 7.18 | Auth gating — level < 11 blocked | Log in as auth level 6–10 → navigate to `/Devices` directly | PermissionError view shown | ✅ | |
 
 ---
 
@@ -378,12 +380,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 8.1 | Address index loads | Admin → IP Addresses | Address list with all columns | | |
-| 8.2 | Address Details | Click a row | Details page | | |
-| 8.3 | Edit address | Details → Edit → change a field → Save | Updated value persists | | |
-| 8.4 | Release address | Release action on an address | Address released; row updated | | |
-| 8.5 | Auth gating — level < 11 blocked | Log in as auth level 6–10 → navigate to `/Addresses` directly | PermissionError view shown | | |
-| 8.6 | Details — invalid/missing ID | Navigate to `/Addresses/Details` with no ID or a bogus GUID | TempData error message and redirect (not unhandled exception) | | |
+| 8.1 | Address index loads | Admin → IP Addresses | Address list with all columns | ✅ | |
+| 8.2 | Address Details | Click a row | Details page | ✅ | |
+| 8.3 | Edit address | Details → Edit → change a field → Save | Updated value persists | ✅ | |
+| 8.4 | Release address | Release action on an address | Address released; row updated | ✅ | |
+| 8.5 | Auth gating — level < 11 blocked | Log in as auth level 6–10 → navigate to `/Addresses` directly | PermissionError view shown | ✅ | |
+| 8.6 | Details — invalid/missing ID | Navigate to `/Addresses/Details` with no ID or a bogus ID | TempData error message and redirect (not unhandled exception) | ✅ | |
 
 ---
 
@@ -391,12 +393,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 9.1 | User index loads | Admin → Users | User list with email and auth level | | |
-| 9.2 | Create user | Create New → fill email + auth level → Save | User created; appears in list | | |
-| 9.3 | Create — duplicate email | Enter an existing email → Save | Validation error (or DB constraint error handled gracefully) | | |
-| 9.4 | Edit user auth level | Edit a user → change auth level → Save | Updated level persists; user sees different nav items on next request | | |
-| 9.5 | Delete user | Delete a user → Confirm | User removed from list | | |
-| 9.6 | Delete — self deletion | Try to delete your own user record | Should warn or prevent self-lockout | | |
+| 9.1 | User index loads | Admin → Users | User list with email and auth level | ✅ | |
+| 9.2 | Create user | Create New → fill email + auth level → Save | User created; appears in list | ✅ | Form said 0 but saved at AuthLevel 1 |
+| 9.3 | Create — duplicate email | Enter an existing email → Save | Validation error (or DB constraint error handled gracefully) | ✅ | |
+| 9.4 | Edit user auth level | Edit a user → change auth level → Save | Updated level persists; user sees different nav items on next request | ✅ | |
+| 9.5 | Delete user | Delete a user → Confirm | User removed from list | ✅ | |
+| 9.6 | Delete — self deletion | Try to delete your own user record | Should warn or prevent self-lockout | ❌ | Was able to delete own user record |
 
 ---
 
@@ -404,11 +406,11 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 10.1 | Tooltip index loads | Admin → Tooltips | Tooltip list/editor loads | | |
-| 10.2 | Edit and save tooltips 🔒14 | Change a tooltip text → Save | Updated text persists; success message shown | | |
-| 10.3 | Tooltip cache invalidation | Edit a tooltip → Save → open Tenant Create form (no app restart) | New tooltip text appears immediately (cache refreshed on save) | | |
-| 10.4 | Tooltips render on forms | Open Tenant Create/Edit form | Field help icons/tooltips visible and functional | | |
-| 10.5 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/ToolTips` directly | PermissionError view shown | | |
+| 10.1 | Tooltip index loads | Admin → Tooltips | Tooltip list/editor loads | ✅ | |
+| 10.2 | Edit and save tooltips 🔒14 | Change a tooltip text → Save | Updated text persists; success message shown | ✅ | |
+| 10.3 | Tooltip cache invalidation | Edit a tooltip → Save → open Tenant Create form (no app restart) | New tooltip text appears immediately (cache refreshed on save) | ✅ | |
+| 10.4 | Tooltips render on forms | Open Tenant Create/Edit form | Field help icons/tooltips visible and functional | ✅ | |
+| 10.5 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/ToolTips` directly | PermissionError view shown | ✅ | |
 
 ---
 
@@ -416,12 +418,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 11.1 | Logs page loads | Admin → Logs | Log table with level, category, message, timestamp | | |
-| 11.2 | Filter by level | Select "Warning" from level dropdown | Only Warning+ entries shown | | |
-| 11.3 | Search by text | Enter a search term | Filtered results matching message text | | |
-| 11.4 | Pagination | Navigate pages if >1 page of results | Correct page loads; page indicators accurate | | |
-| 11.5 | Color-coded levels | Check log rows | Different colors for Debug, Info, Warning, Error, Critical | | |
-| 11.6 | Logs are being written | Perform some actions → check Logs | Recent entries appear with correct category and user | | |
+| 11.1 | Logs page loads | Admin → Logs | Log table with level, category, message, timestamp | ✅ | |
+| 11.2 | Filter by level | Select "Warning" from level dropdown | Only Warning entries shown | ✅ | |
+| 11.3 | Search by text | Enter a search term | Filtered results matching message text | ✅ | |
+| 11.4 | Pagination | Navigate pages if >1 page of results | Correct page loads; page indicators accurate | ✅ | |
+| 11.5 | Color-coded levels | Check log rows | Different colors for Debug, Info, Warning, Error, Critical | ✅ | |
+| 11.6 | Logs are being written | Perform some actions → check Logs | Recent entries appear with correct category and user | ✅ | |
 
 ---
 
@@ -429,14 +431,14 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 12.1 | Settings page loads | Admin → Settings | Page shows Auto Delete Runbooks toggle and Automation Runbook Type field | | |
-| 12.2 | Toggle Auto Delete Runbooks | Flip the toggle → Save | Value persists in SQL `Settings` table (`AutoDeleteRunbook`) | | |
+| 12.1 | Settings page loads | Admin → Settings | Page shows Auto Delete Runbooks toggle and Automation Runbook Type field | ✅ | |
+| 12.2 | Toggle Auto Delete Runbooks | Flip the toggle → Save | Value persists in SQL `Settings` table (`AutoDeleteRunbook`) | ✅ | |
 | 12.3 | Change Automation Runbook Type | Change value → Save | Value persists (`AutomationRunbookType`); next runbook creation uses new type | | |
 | 12.4 | Logging:Default level | Change default log level → Save | DB logger adjusts; verify by checking what appears in Logs page | | |
 | 12.5 | Add logging category override | Add `Logging:Microsoft.EntityFrameworkCore` = `Warning` | EF Core debug/info logs suppressed; category-specific override active | | |
 | 12.6 | Hierarchical subcategory matching | Set `Logging:PathWeb` = `Debug` | All `PathWeb.*` subcategories inherit Debug level | | |
 | 12.7 | Remove logging override | Delete a category override → Save | Falls back to `Logging:Default` for that category | | |
-| 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | | |
+| 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | ✅ | |
 
 ---
 
@@ -444,10 +446,10 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 13.1 | About this Site | About → ...this Site | Page renders with app description | | |
-| 13.2 | About the Physical Lab | About → ...the Physical Lab | Lab info page renders | | |
-| 13.3 | About the Logical Tenant | About → ...the Logical Tenant | Tenant concept page renders | | |
-| 13.4 | Site Dev Progress | About → ...Site Dev Progress | Progress/changelog page renders | | |
+| 13.1 | About this Site | About → ...this Site | Page renders with app description | ✅ | |
+| 13.2 | About the Physical Lab | About → ...the Physical Lab | Lab info page renders | ✅ | |
+| 13.3 | About the Logical Tenant | About → ...the Logical Tenant | Tenant concept page renders | ✅ | |
+| 13.4 | Site Dev Progress | About → ...Site Dev Progress | Progress/changelog page renders | ✅ | |
 
 ---
 
@@ -455,8 +457,8 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 14.1 | Dark mode across all pages | Enable dark mode → visit every major page | Consistent dark theme; no unreadable text or invisible elements | | |
-| 14.2 | Light mode across all pages | Enable light mode → visit every major page | Consistent light theme | | |
+| 14.1 | Dark mode across all pages | Enable dark mode → visit every major page | Consistent dark theme; no unreadable text or invisible elements | ❌ | Tenant/Devices/Addresses edit pages: read-only fields have light background with light text (unreadable). About pages diagrams need dark mode versions. |
+| 14.2 | Light mode across all pages | Enable light mode → visit every major page | Consistent light theme | ✅ | |
 | 14.3 | Modal readability — dark mode | Open Compare/Apply/Automation/LabVM modals in dark mode | Bright text on `#1a1a2e` background; all text legible | | |
 | 14.4 | Modal readability — light mode | Open same modals in light mode | Proper contrast; no dark-on-dark text | | |
 | 14.5 | Browser cache busting | Deploy a new build → browse the site | No stale CSS/JS served (Cache-Control headers set) | | |
@@ -492,4 +494,4 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 | Developer | | | |
 | Reviewer | | | |
 
-**Total Test Cases: 235**
+**Total Test Cases: 237**

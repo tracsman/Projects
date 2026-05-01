@@ -66,6 +66,8 @@
   - **Backout script improvement:** `CreateAzurePowerShell-out` now includes a `Write-Status` helper function that detects runbook context via `$PSPrivateMetadata.JobId` and emits `Write-Output` for Automation capture alongside `Write-Host` for console color
 - [x] **Architecture diagrams** — Created `Docs/Architecture.md` with 8 Mermaid diagrams (system overview, controller/service deps, data model, config card actions, SSH ops, Lab VM pattern, auth flow, Automation lifecycle)
 - [x] **Manual test plan** — Created `Docs/TestPlan.md` with 235 test cases across 15 sections; iteratively expanded with config integration depth, tenant option→config variation matrix, and gap analysis pass
+- [x] **Remove hardcoded Logic App trigger URL from `deploy-to-azure.ps1`** — Corporate security flagged exposed SAS `sig=` in the hardcoded trigger URL; refactored to an optional `-LogicAppTriggerUrl` parameter (no default); existing App Service setting is preserved unless explicitly overridden
+- [x] **Rotate Logic App access key & scrub git history** — Old `sig=` scrubbed from all 155 commits via `git filter-branch` + force-push; Logic App key regenerated; new trigger URL set on App Service via `Set-AzWebApp`
 
 ---
 
@@ -73,7 +75,7 @@
 
 - [ ] **Comprehensive testing phase** — End-to-end validation of all config card actions, removal flows, and modal behaviors before marking the feature set as production-ready
 - [ ] **Restore auth cache TTL to 5 minutes** — `AuthLevelService.cs` line 53 was reduced from 5→1 minute to speed up manual auth-level testing; restore to `TimeSpan.FromMinutes(5)` when testing is complete
-- [x] **Remove hardcoded Logic App trigger URL from `deploy-to-azure.ps1`** — Corporate security flagged exposed SAS `sig=` in the hardcoded trigger URL; refactored to an optional `-LogicAppTriggerUrl` parameter (no default); existing App Service setting is preserved unless explicitly overridden; **key rotation still required**
+- [ ] **Add content to Privacy page** — Privacy page is mostly empty; needs actual content (test plan 3.2)
 
 ---
 
