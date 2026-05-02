@@ -116,44 +116,49 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 6A.1 | Config page loads | Tenant Details → View Config | Config page renders with config cards | | |
-| 6A.2 | Create/Regenerate Config 🔒8 | Click Create Config (or Regenerate) | Configs generated; cards appear for all expected ConfigTypes | | |
-| 6A.3 | Regenerate overwrites previous | Generate config → edit tenant field → Regenerate | New config reflects updated tenant data; old config replaced | | |
-| 6A.4 | Copy to clipboard | Click copy icon on any config card | Config text copied to clipboard; toast/feedback shown | | |
-| 6A.5 | Copy large config | Copy a multi-KB config (e.g., CreateAzurePowerShell) | Full content copied without truncation | | |
-| 6A.6 | Per-device `-out` cards hidden | After config generation | Individual `{DeviceName}-out` cards do NOT appear; only combined BackoutConfig (if any) | | |
-| 6A.7 | Inactive tenant — read-only | Open Config page for a released tenant | No Create/Regenerate button; no action dropdowns; copy still works | | |
+| 6A.1 | Config page loads | Tenant Details → View Config | Config page renders with config cards | ✅ | |
+| 6A.2 | Create/Regenerate Config 🔒8 | Click Create Config (or Regenerate) | Configs generated; cards appear for all expected ConfigTypes | ❌ | Generation works, but should have a confirmation prompt, especially if existing config will be over-written |
+| 6A.3 | Regenerate overwrites previous | Generate config → edit tenant field → Regenerate | New config reflects updated tenant data; old config replaced | ❌ | Needs overwrite caution prompt (but regen worked with new changes included) |
+| 6A.4 | Copy to clipboard | Click copy icon on any config card | Config text copied to clipboard; toast/feedback shown | ✅ | |
+| 6A.5 | Copy large config | Copy a multi-KB config (e.g., CreateAzurePowerShell) | Full content copied without truncation | ✅ | |
+| 6A.6 | Per-device `-out` cards hidden | After config generation | Individual `{DeviceName}-out` cards do NOT appear; only combined BackoutConfig (if any) | ✅ | |
+| 6A.7 | Inactive tenant — read-only | Open Config page for a released tenant | No Create/Regenerate button; no action dropdowns; copy still works | ✅ | |
 | 6A.8 | Inactive tenant — direct POST blocked | Use browser devtools to POST a config action on a released tenant | Server rejects the action (not just UI hiding) | | |
-| 6A.9 | Server Preference (ConfigVersion 0) | Create tenant with ConfigVersion=0 | UI label shows "Server Preference" (not "0" or "ConfigVersion 0") | | |
-| 6A.10 | Config page with no configs yet | Open Config page before ever generating | No config cards; "Create Config" button visible (for admin); no JS errors | | |
-| 6A.11 | Config card ordering | Check card layout after generation | Cards appear in a consistent, logical order across tenants | | |
+| 6A.9 | Server Preference (ConfigVersion 0) | Create tenant with ConfigVersion=0 | UI label shows "Server Preference" (not "0" or "ConfigVersion 0") | ⏭️ | Test doesn't seem valid |
+| 6A.10 | Config page with no configs yet | Open Config page before ever generating | No config cards; "Create Config" button visible (for admin); no JS errors | ✅ | |
+| 6A.11 | Config card ordering | Check card layout after generation | Cards appear in a consistent, logical order across tenants | ✅ | |
 
 ### 6B. Network Device Actions (Apply / Compare / Patch / Remove / Verify)
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 6B.1 | Compare to Device | Select "Compare to Device" → Run on a device card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | | |
-| 6B.2 | Compare — device unreachable | Run Compare against an offline device | Error message in modal (timeout or connection refused); no hung spinner | | |
-| 6B.3 | Compare — device in sync | Run Compare when device already matches config | "No differences" or empty diff message; no false positives | | |
-| 6B.4 | Compare — ignores line ordering | Reorder lines on device (manually or via different commit) → Compare | Still shows "no differences" if same set of lines | | |
-| 6B.5 | Apply to Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm | Delta pushed via SSH; success message; status badge updates on card | | |
-| 6B.6 | Apply — nothing to apply | Run Apply when device already matches config | "No changes needed" message; no SSH write commands sent | | |
-| 6B.7 | Apply — Juniper commit check flow | Apply config to a `-MX` or `-SRX` device | Preview shows `commit check` / `show compare` output; confirm pushes `commit` | | |
-| 6B.8 | Apply — Juniper commit failure | Apply invalid config to Juniper device | `commit check` fails; error shown in modal; no partial commit left | | |
-| 6B.9 | Apply — Cisco write flow | Apply config to a `-NX` or `-ASR`/`-ISR` device | Uses `wr` (write memory) after config push | | |
-| 6B.10 | Apply — SSH session drops mid-push | Kill SSH connectivity during apply (e.g., brief network blip) | Error reported; no partial config orphaned on device (Juniper rollback) | | |
-| 6B.11 | Patch Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | | |
-| 6B.12 | Patch — additions only | Patch when device has missing lines but nothing extra | Only additions shown; no removal section | | |
-| 6B.13 | Patch — removals only | Patch when device has extra lines but nothing missing | Only removals shown; no addition section | | |
-| 6B.14 | Remove from Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm | Per-device `-out` backout config pushed via SSH; success badge | | |
-| 6B.15 | Remove — no backout config | Run Remove when no `-out` record exists in SQL | Appropriate error message ("no backout config found"); no crash | | |
-| 6B.16 | Verify Off Device 🔒8 | Select "Verify Off Device" → Run | SSH grep for `Cust{TenantId}` references; results shown in modal | | |
-| 6B.17 | Verify — clean device | Run Verify on device with no tenant references | "No references found" or equivalent clean result | | |
-| 6B.18 | Device status badge — clickable | Click a device status badge (✅/❌) | Reopens the last apply result in modal | | |
-| 6B.19 | Device status badge — shows timestamp | Check badge after apply | Timestamp of last apply attempt visible | | |
-| 6B.20 | Multiple devices — independent badges | Apply to device A (success), Apply to device B (fail) | Device A shows ✅, Device B shows ❌; each is independent | | |
-| 6B.21 | Dropdown — switch action without running | Select "Compare" → switch to "Apply" without clicking Run | Dropdown changes; no request sent; no stale state | | |
-| 6B.22 | Dropdown — rapid double-click Run | Double-click Run quickly on a device action | Only one request sent; no duplicate SSH sessions | | |
+| 6B.1 | Compare to Juniper Device | Select "Compare to Device" → Run on a Juniper (`-MX`/`-SRX`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
+| 6B.2 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | | |
+| 6B.3 | Compare Juniper — device in sync | Run Compare when Juniper device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
+| 6B.4 | Apply to Juniper Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Juniper | Delta pushed via SSH; `commit check` / `show compare` preview; confirm pushes `commit`; success badge | ✅ | |
+| 6B.5 | Apply Juniper — nothing to apply | Run Apply when Juniper device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
+| 6B.6 | Apply Juniper — commit check flow | Apply config to a `-MX` or `-SRX` device | Preview shows `commit check` / `show compare` output; confirm pushes `commit` | ✅ | |
+| 6B.7 | Apply Juniper — commit failure | Apply invalid config to Juniper device | `commit check` fails; error shown in modal; no partial commit left | ✅ | |
+| 6B.8 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | | |
+| 6B.9 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
+| 6B.10 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | | |
+| 6B.11 | Compare Cisco — device in sync | Run Compare when Cisco device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
+| 6B.12 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge | ✅ | |
+| 6B.13 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
+| 6B.14 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ✅ | |
+| 6B.15 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | | |
+| 6B.16 | Patch Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
+| 6B.17 | Patch — additions only | Patch when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
+| 6B.18 | Patch — removals only | Patch when device has extra lines but nothing missing | Only removals shown; no addition section | | |
+| 6B.19 | Remove from Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm | Per-device `-out` backout config pushed via SSH; success badge | | |
+| 6B.20 | Remove — no backout config | Run Remove when no `-out` record exists in SQL | Appropriate error message ("no backout config found"); no crash | | |
+| 6B.21 | Verify Off Device 🔒8 | Select "Verify Off Device" → Run | SSH grep for `Cust{TenantId}` references; results shown in modal | | |
+| 6B.22 | Verify — clean device | Run Verify on device with no tenant references | "No references found" or equivalent clean result | | |
+| 6B.23 | Device status badge — clickable | Click a device status badge (✅/❌) | Reopens the last apply result in modal | | |
+| 6B.24 | Device status badge — shows timestamp | Check badge after apply | Timestamp of last apply attempt visible | | |
+| 6B.25 | Multiple devices — independent badges | Apply to device A (success), Apply to device B (fail) | Device A shows ✅, Device B shows ❌; each is independent | | |
+| 6B.26 | Dropdown — switch action without running | Select "Compare" → switch to "Apply" without clicking Run | Dropdown changes; no request sent; no stale state | | |
+| 6B.27 | Dropdown — rapid double-click Run | Double-click Run quickly on a device action | Only one request sent; no duplicate SSH sessions | | |
 
 ### 6C. PowerShell / Azure Automation Actions
 
@@ -438,7 +443,9 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 | 12.5 | Add logging category override | Add `Logging:Microsoft.EntityFrameworkCore` = `Warning` | EF Core debug/info logs suppressed; category-specific override active | | |
 | 12.6 | Hierarchical subcategory matching | Set `Logging:PathWeb` = `Debug` | All `PathWeb.*` subcategories inherit Debug level | | |
 | 12.7 | Remove logging override | Delete a category override → Save | Falls back to `Logging:Default` for that category | | |
-| 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | ✅ | |
+| 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | | |
+| 12.9 | Validate Runbook Type — valid name | Settings → enter a known-good runtime environment name in `Automation Runbook Type` (e.g., the current `PowerShell72` or an existing custom runtime environment) → click `Validate` | Inline ✅ result: `<name> is a valid runtime environment in this Automation Account` | ✅ | |
+| 12.10 | Validate Runbook Type — invalid name | Settings → enter a bogus value (e.g., `NotARealRuntimeEnv`) in `Automation Runbook Type` → click `Validate` | Inline ❌ result: `<name> was not found...`, followed by a bulleted list of available runtime environments returned from the configured Automation Account | ✅ | |
 
 ---
 
@@ -488,17 +495,18 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 ## Summary
 
-**Total Test Cases: 275**
+**Total Test Cases: 282**
 
 ### Current Status
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 100 | 36.4% |
-| ❌ Fail | 8 | 2.9% |
-| Not tested | 167 | 60.7% |
+| ✅ Pass | 117 | 41.5% |
+| ❌ Fail | 9 | 3.2% |
+| ⏭️ Skipped | 3 | 1.1% |
+| Not tested | 153 | 54.3% |
 
-- **Tested:** 108 / 275 (39.3%)
-- **Pass rate (of tested):** 100 / 108 (92.6%)
+- **Tested:** 126 / 282 (44.7%)
+- **Pass rate (of tested):** 117 / 126 (92.9%)
 
 _Last updated: 2026-05-01_

@@ -219,9 +219,12 @@ public class SshService
                     return (false, $"Commit check failed:\n{transcript}", "");
                 }
 
-                // Show | compare — capture Junos's own diff
+                // Show | compare — capture Junos's own diff.
+                // The `| no-more` pipe disables the CLI pager so that when the diff is larger
+                // than one screen, the SRX dumps the whole thing instead of dropping into a
+                // `---(more)---` prompt that would swallow the subsequent `commit and-quit`.
                 var preCompareLength = transcript.Length;
-                await SendLineAsync(shell, "show | compare", transcript, TimeSpan.FromSeconds(10));
+                await SendLineAsync(shell, "show | compare | no-more", transcript, TimeSpan.FromSeconds(10));
                 compareOutput = transcript.ToString()[preCompareLength..].Trim();
 
                 // Commit and quit

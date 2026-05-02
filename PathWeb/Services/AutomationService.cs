@@ -36,11 +36,21 @@ public sealed class AutomationProbeResult
     public string Location { get; set; } = string.Empty;
 }
 
+public sealed class RuntimeEnvironmentValidationResult
+{
+    public bool Success { get; set; }
+    public bool Found { get; set; }
+    public string? Error { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public List<string> AvailableNames { get; set; } = new();
+}
+
 public class AutomationService
 {
     private static readonly string[] TerminalStatuses = ["Completed", "Failed", "Stopped", "Suspended"];
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private const string RunbookApiVersion = "2024-10-23";
+    private const string RuntimeEnvironmentApiVersion = "2023-05-15-preview";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AutomationService> _logger;
@@ -234,6 +244,52 @@ public class AutomationService
                 AccountName = _options.AccountName,
                 Location = _options.Location
             };
+        }
+    }
+
+    public async Task<RuntimeEnvironmentValidationResult> ValidateRuntimeEnvironmentAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var result = new RuntimeEnvironmentValidationResult { Name = name ?? string.Empty };
+
+        if (!IsConfigured)
+        {
+            result.Success = false;
+            result.Error = GetConfigurationError();
+            return result;
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            result.Success = false;
+            result.Error = "Runtime environment name is required.";
+            return result;
+        }
+
+        try
+        {
+            var listing = await SendAndReadJsonAsync<RuntimeEnvironmentListResponse>(
+                HttpMethod.Get,
+                BuildAccountUrl("runtimeEnvironments", RuntimeEnvironmentApiVersion),
+                cancellationToken: cancellationToken);
+
+            var available = listing?.Value?
+                .Select(v => v?.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? new List<string>();
+
+            result.AvailableNames = available;
+            result.Success = true;
+            result.Found = available.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to list runtime environments for automation account {AccountName}", _options.AccountName);
+            result.Success = false;
+            result.Error = ex.Message;
+            return result;
         }
     }
 
@@ -482,5 +538,15 @@ public class AutomationService
     {
         public string? Status { get; set; }
         public string? Exception { get; set; }
+    }
+
+    private sealed class RuntimeEnvironmentListResponse
+    {
+        public List<RuntimeEnvironmentItem>? Value { get; set; }
+    }
+
+    private sealed class RuntimeEnvironmentItem
+    {
+        public string? Name { get; set; }
     }
 }

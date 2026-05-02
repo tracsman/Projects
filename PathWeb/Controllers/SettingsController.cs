@@ -7,11 +7,13 @@ namespace PathWeb.Controllers;
 public class SettingsController : BaseController
 {
     private readonly SettingsService _settingsService;
+    private readonly AutomationService _automationService;
     private readonly ILogger<SettingsController> _logger;
 
-    public SettingsController(SettingsService settingsService, ILogger<SettingsController> logger)
+    public SettingsController(SettingsService settingsService, AutomationService automationService, ILogger<SettingsController> logger)
     {
         _settingsService = settingsService;
+        _automationService = automationService;
         _logger = logger;
     }
 
@@ -84,5 +86,30 @@ public class SettingsController : BaseController
         TempData["Message"] = "Settings were successfully updated!";
         TempData["MessageLevel"] = "success";
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ValidateRunbookType([FromForm] string name, CancellationToken cancellationToken)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.SiteAdminReadOnly)
+        {
+            _logger.LogWarning("Permission denied for Settings.ValidateRunbookType, user: {User}", GetUserEmail());
+            return Json(new { success = false, error = "Permission denied." });
+        }
+
+        var result = await _automationService.ValidateRuntimeEnvironmentAsync(name ?? string.Empty, cancellationToken);
+
+        _logger.LogInformation("Settings.ValidateRunbookType requested by {User} for {Name}: success={Success}, found={Found}",
+            GetUserEmail(), name, result.Success, result.Found);
+
+        return Json(new
+        {
+            success = result.Success,
+            found = result.Found,
+            error = result.Error,
+            name = result.Name,
+            available = result.AvailableNames
+        });
     }
 }

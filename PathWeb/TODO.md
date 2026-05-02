@@ -8,6 +8,7 @@
 
 ## ✅ Completed
 
+- [x] **Validate Runtime Environment from Settings** — Added a `Validate` button next to the `Automation Runbook Type` field on Admin → Settings; clicking it calls a new `SettingsController.ValidateRunbookType` AJAX action that uses `AutomationService.ValidateRuntimeEnvironmentAsync` to query the Azure Automation REST API (`runtimeEnvironments?api-version=2023-05-15-preview`) under the configured subscription/RG/account and reports ✅ if the typed name matches an existing runtime environment, or ❌ with the list of available names if it does not
 - [x] **Compare to Device** — Set-based config comparison via SSH (controller + JS + modal UI)
 - [x] **Verify Off Device** — SSH grep for tenant references on network devices
 - [x] **Fix deploy warmup timestamp mismatch** — Server now reads `build.json` instead of DLL `LastWriteTime`
