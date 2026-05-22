@@ -320,7 +320,7 @@ public class ConfigGenerator
 
             // Get New SKey and copy to clipboard
                 strDB += "# End Nicely\r\n" +
-                         "Write-Output\r\n\r\n";
+                         "Write-Output \"ExpressRoute provisioning complete for $RGName.\"\r\n\r\n";
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateERConfig", "PowerShell strings created");
             }
             else
@@ -1221,8 +1221,7 @@ public class ConfigGenerator
                     strDB += $"set security nat source pool Cust{tenant.TenantId}_ToMSFT address {strERNATIP}\r\n" +
                              $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT match destination-address 0.0.0.0/0\r\n" +
                              $"set security nat source rule-set Cust{tenant.TenantId}_ER rule Cust{tenant.TenantId}_NAT then source-nat pool Cust{tenant.TenantId}_ToMSFT\r\n";
-                   strBackout += $"delete security nat source pool Cust{tenant.TenantId}_ToMSFT\r\n" +
-                                 $"delete security nat source rule-set Cust{tenant.TenantId}_ER\r\n";
+                   strBackout += $"delete security nat source pool Cust{tenant.TenantId}_ToMSFT\r\n";
                 }
                 strDB += "\r\n";
 

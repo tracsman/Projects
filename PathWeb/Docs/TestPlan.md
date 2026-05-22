@@ -132,33 +132,42 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
+| **Juniper Device Actions** | | | | | |
 | 6B.1 | Compare to Juniper Device | Select "Compare to Device" → Run on a Juniper (`-MX`/`-SRX`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
-| 6B.2 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | | |
-| 6B.3 | Compare Juniper — device in sync | Run Compare when Juniper device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
-| 6B.4 | Apply to Juniper Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Juniper | Delta pushed via SSH; `commit check` / `show compare` preview; confirm pushes `commit`; success badge | ✅ | |
+| 6B.2 | Apply to Juniper Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Juniper | Delta pushed via SSH; `commit check` / `show compare` preview; confirm pushes `commit`; success badge | ✅ | |
+| 6B.3 | Apply Juniper — commit check flow | Apply config to a `-MX` or `-SRX` device | Preview shows `commit check` / `show compare` output; confirm pushes `commit` | ✅ | |
+| 6B.4 | Compare Juniper — device in sync | Run Compare when Juniper device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
 | 6B.5 | Apply Juniper — nothing to apply | Run Apply when Juniper device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
-| 6B.6 | Apply Juniper — commit check flow | Apply config to a `-MX` or `-SRX` device | Preview shows `commit check` / `show compare` output; confirm pushes `commit` | ✅ | |
-| 6B.7 | Apply Juniper — commit failure | Apply invalid config to Juniper device | `commit check` fails; error shown in modal; no partial commit left | ✅ | |
-| 6B.8 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | | |
-| 6B.9 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
-| 6B.10 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | | |
-| 6B.11 | Compare Cisco — device in sync | Run Compare when Cisco device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
-| 6B.12 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge | ✅ | |
-| 6B.13 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
-| 6B.14 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ✅ | |
-| 6B.15 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | | |
-| 6B.16 | Patch Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
-| 6B.17 | Patch — additions only | Patch when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
-| 6B.18 | Patch — removals only | Patch when device has extra lines but nothing missing | Only removals shown; no addition section | | |
-| 6B.19 | Remove from Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm | Per-device `-out` backout config pushed via SSH; success badge | | |
-| 6B.20 | Remove — no backout config | Run Remove when no `-out` record exists in SQL | Appropriate error message ("no backout config found"); no crash | | |
-| 6B.21 | Verify Off Device 🔒8 | Select "Verify Off Device" → Run | SSH grep for `Cust{TenantId}` references; results shown in modal | | |
-| 6B.22 | Verify — clean device | Run Verify on device with no tenant references | "No references found" or equivalent clean result | | |
-| 6B.23 | Device status badge — clickable | Click a device status badge (✅/❌) | Reopens the last apply result in modal | | |
-| 6B.24 | Device status badge — shows timestamp | Check badge after apply | Timestamp of last apply attempt visible | | |
-| 6B.25 | Multiple devices — independent badges | Apply to device A (success), Apply to device B (fail) | Device A shows ✅, Device B shows ❌; each is independent | | |
-| 6B.26 | Dropdown — switch action without running | Select "Compare" → switch to "Apply" without clicking Run | Dropdown changes; no request sent; no stale state | | |
-| 6B.27 | Dropdown — rapid double-click Run | Double-click Run quickly on a device action | Only one request sent; no duplicate SSH sessions | | |
+| 6B.6 | Patch Juniper Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Juniper | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
+| 6B.7 | Patch Juniper — additions only | Patch Juniper when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
+| 6B.8 | Patch Juniper — removals only | Patch Juniper when device has extra lines but nothing missing | Only removals shown; no addition section | | |
+| 6B.9 | Remove from Juniper Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Juniper (`-MX`/`-SRX`) | Per-device `-out` backout config pushed via SSH; `commit` applied; success badge | ✅ | |
+| 6B.10 | Verify Off Juniper Device 🔒8 | Select "Verify Off Device" → Run on Juniper (`-MX`/`-SRX`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
+| 6B.11 | Verify — clean Juniper device | Run Verify on Juniper device with no tenant references | "No references found" or equivalent clean result | ✅ | |
+| 6B.12 | Apply Juniper — commit failure | Apply invalid config to Juniper device | `commit check` fails; error shown in modal; no partial commit left | ✅ | |
+| 6B.13 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | | |
+| 6B.14 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | | |
+| **Cisco Device Actions** | | | | | |
+| 6B.15 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
+| 6B.16 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge | ✅ | |
+| 6B.17 | Compare Cisco — device in sync | Run Compare when Cisco device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
+| 6B.18 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
+| 6B.19 | Patch Cisco Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Cisco | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
+| 6B.20 | Patch Cisco — additions only | Patch Cisco when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
+| 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section | | |
+| 6B.22 | Remove from Cisco Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Cisco (`-NX`/`-ASR`/`-ISR`) | Per-device `-out` backout config pushed via SSH; `wr` applied; success badge | ✅ | |
+| 6B.23 | Verify Off Cisco Device 🔒8 | Select "Verify Off Device" → Run on Cisco (`-NX`/`-ASR`/`-ISR`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
+| 6B.24 | Verify — clean Cisco device | Run Verify on Cisco device with no tenant references | "No references found" or equivalent clean result | ✅ | |
+| 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ✅ | |
+| 6B.26 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | | |
+| 6B.27 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | | |
+| **UI Behavior & General** | | | | | |
+| 6B.28 | Remove — no backout config | Run Remove when no `-out` record exists in SQL | Appropriate error message ("no backout config found"); no crash | ✅ | |
+| 6B.29 | Device status badge — clickable | Click a device status badge (✅/❌) | Reopens the last apply result in modal | ✅ | |
+| 6B.30 | Device status badge — shows timestamp | Check badge after apply | Timestamp of last apply attempt visible | ✅ | |
+| 6B.31 | Multiple devices — independent badges | Apply to device A (success), Apply to device B (fail) | Device A shows ✅, Device B shows ❌; each is independent | ✅ | |
+| 6B.32 | Dropdown — switch action without running | Select "Compare" → switch to "Apply" without clicking Run | Dropdown changes; no request sent; no stale state | ✅ | |
+| 6B.33 | Dropdown — rapid double-click Run | Double-click Run quickly on a device action | Only one request sent; no duplicate SSH sessions | ✅ | |
 
 ### 6C. PowerShell / Azure Automation Actions
 
@@ -495,18 +504,18 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 ## Summary
 
-**Total Test Cases: 282**
+**Total Test Cases: 288**
 
 ### Current Status
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 117 | 41.5% |
-| ❌ Fail | 9 | 3.2% |
-| ⏭️ Skipped | 3 | 1.1% |
-| Not tested | 153 | 54.3% |
+| ✅ Pass | 130 | 45.1% |
+| ❌ Fail | 9 | 3.1% |
+| ⏭️ Skipped | 4 | 1.4% |
+| Not tested | 145 | 50.3% |
 
-- **Tested:** 126 / 282 (44.7%)
-- **Pass rate (of tested):** 117 / 126 (92.9%)
+- **Tested:** 139 / 288 (48.3%)
+- **Pass rate (of tested):** 130 / 139 (93.5%)
 
-_Last updated: 2026-05-01_
+_Last updated: 2026-05-02_

@@ -133,18 +133,18 @@ public class AutomationService
 
         var runbookName = BuildRunbookName(configType);
         var jobId = Guid.NewGuid().ToString();
-        var runbookType = await _settingsService.GetAutomationRunbookTypeAsync(cancellationToken);
+        var runtimeEnvironment = await _settingsService.GetAutomationRunbookTypeAsync(cancellationToken);
 
         try
         {
-            await CreateOrUpdateRunbookAsync(runbookName, configType, submittedBy, runbookType, cancellationToken);
+            await CreateOrUpdateRunbookAsync(runbookName, configType, submittedBy, runtimeEnvironment, cancellationToken);
             await ReplaceDraftContentAsync(runbookName, preparedScript, cancellationToken);
             await PublishRunbookAsync(runbookName, cancellationToken);
             await WaitForRunbookPublishedAsync(runbookName, cancellationToken);
             await StartJobAsync(runbookName, jobId, cancellationToken);
 
-            _logger.LogInformation("Automation runbook {RunbookName} submitted as job {JobId} for {ConfigType} by {User} using configured runbookType {RunbookType}",
-                runbookName, jobId, configType, submittedBy, runbookType);
+            _logger.LogInformation("Automation runbook {RunbookName} submitted as job {JobId} for {ConfigType} by {User} using runtimeEnvironment {RuntimeEnvironment}",
+                runbookName, jobId, configType, submittedBy, runtimeEnvironment);
 
             return new AutomationSubmitResult
             {
@@ -338,14 +338,24 @@ public class AutomationService
         }
     }
 
-    private async Task CreateOrUpdateRunbookAsync(string runbookName, string configType, string submittedBy, string runbookType, CancellationToken cancellationToken)
+    /// <summary>
+    /// Creates or updates a runbook bound to the configured Azure Automation runtime environment.
+    /// Newer Azure Automation API versions (2023-05-15-preview and later, including 2024-10-23) treat
+    /// version-specific values like `PowerShell72` as <b>runtime environment names</b>, not runbook
+    /// types. The base <c>runbookType</c> must be a generic language family (`PowerShell`,
+    /// `Python3`, etc.) and the named runtime is supplied via the separate <c>runtimeEnvironment</c>
+    /// property. Sending `PowerShell72` directly as <c>runbookType</c> against this API yields
+    /// `400 Bad Request: "runbook.properties.runbookType":["The field runbookType is invalid."]`.
+    /// </summary>
+    private async Task CreateOrUpdateRunbookAsync(string runbookName, string configType, string submittedBy, string runtimeEnvironment, CancellationToken cancellationToken)
     {
         var body = new
         {
             location = _options.Location,
             properties = new
             {
-                runbookType = runbookType,
+                runbookType = "PowerShell",
+                runtimeEnvironment = runtimeEnvironment,
                 logProgress = true,
                 logVerbose = true,
                 description = $"PathWeb submitted runbook for {configType} by {submittedBy} at {DateTime.UtcNow:u}"
@@ -353,7 +363,7 @@ public class AutomationService
         };
 
         await SendAsync(HttpMethod.Put, BuildRunbookUrl($"runbooks/{Uri.EscapeDataString(runbookName)}"), body, cancellationToken);
-        _logger.LogInformation("Automation runbook {RunbookName} created using runbookType {RunbookType}", runbookName, runbookType);
+        _logger.LogInformation("Automation runbook {RunbookName} created using runtimeEnvironment {RuntimeEnvironment}", runbookName, runtimeEnvironment);
     }
 
     private async Task ReplaceDraftContentAsync(string runbookName, string scriptContent, CancellationToken cancellationToken)
