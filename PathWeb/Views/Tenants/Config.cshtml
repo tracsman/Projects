@@ -947,7 +947,11 @@ else
             }
 
             var existingRun = findAutomationRun(configType, jobId);
-            var scriptText = existingRun && existingRun.preparedScript
+            // Only show the prior run's prepared script when the user explicitly opened a specific run
+            // (jobId provided via View/Open/Re-open). For a fresh Deploy/Remove/Deprovision, always
+            // start from the current DB content (or an explicit scriptOverride).
+            var useExistingScript = !!(jobId && existingRun && existingRun.preparedScript);
+            var scriptText = useExistingScript
                 ? existingRun.preparedScript
                 : (scriptOverride || source.value);
             if (isDeprovision && !existingRun) {
@@ -955,7 +959,7 @@ else
             }
             document.getElementById('automationScriptEditor').value = scriptText;
 
-            if (existingRun) {
+            if (useExistingScript) {
                 _automationJobId = existingRun.jobId;
                 renderAutomationRun(existingRun, '');
             } else {
@@ -965,7 +969,7 @@ else
             var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('automationModal'));
             modal.show();
 
-            if (existingRun && !existingRun.isTerminal) {
+            if (useExistingScript && !existingRun.isTerminal) {
                 pollAutomationJob();
             }
         }
