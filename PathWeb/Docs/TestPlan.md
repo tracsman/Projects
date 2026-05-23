@@ -174,11 +174,11 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | **Submit & Execute** | | | | | |
-| 6C.1 | Deploy ER to Azure 🔒8 | `CreateERPowerShell` card → "Deploy to Azure" → Run | Automation modal opens; runbook created via REST API; job submitted; status polls to completion | | |
-| 6C.2 | Deploy Azure PS to Azure 🔒8 | `CreateAzurePowerShell` card → "Deploy to Azure" → Run | Same automation flow; runbook type matches `Settings.AutomationRunbookType` (`PowerShell72`) | | |
-| 6C.3 | Script preparation — Managed Identity | Open automation modal → check "Prepared Script" tab/section | Interactive `Connect-AzAccount` stripped; replaced with Managed Identity auth | | |
-| 6C.4 | Script preparation — no double-encoding | Check prepared script for encoding artifacts | No double-escaped characters or corrupted strings | | |
-| 6C.5 | Runbook type from Settings | Change `AutomationRunbookType` in Settings to a different value → Deploy | Runbook created with the new type (verify via Azure portal or `/diag`) | | |
+| 6C.1 | Deploy ER to Azure 🔒8 | `CreateERPowerShell` card → "Deploy to Azure" → Run | Automation modal opens; runbook created via REST API; job submitted; status polls to completion | ✅ Pass | |
+| 6C.2 | Deploy Azure PS to Azure 🔒8 | `CreateAzurePowerShell` card → "Deploy to Azure" → Run | Same automation flow; runbook type matches `Settings.AutomationRunbookType` (`PowerShell72`) | ✅ Pass | |
+| 6C.3 | Script preparation — Managed Identity | Open automation modal → check "Prepared Script" tab/section | Interactive `Connect-AzAccount` stripped; replaced with Managed Identity auth | ✅ Pass | |
+| 6C.4 | Script preparation — no double-encoding | Check prepared script for encoding artifacts | No double-escaped characters or corrupted strings | ✅ Pass | |
+| 6C.5 | Runbook type from Settings | Change `AutomationRunbookType` in Settings to a different value → Deploy | Runbook created with the new type (verify via Azure portal or `/diag`) | ✅ Pass | |
 | **Remove from Azure** | | | | | |
 | 6C.6 | Remove from Azure 🔒8 | `CreateAzurePowerShell` card → "Remove from Azure" → Run | Fetches `-out` backout script from SQL; opens in automation modal | | |
 | 6C.7 | Remove — `Write-Status` dual output | Check automation modal output during backout run | Both colored console output AND captured runbook output visible | | |

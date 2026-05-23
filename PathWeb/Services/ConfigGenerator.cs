@@ -43,6 +43,92 @@ public class ConfigGenerator
         return tenant.Vpnconfig == "Active-Active" ? "TBD,TBD" : "TBD,N/A";
     }
 
+    /// <summary>
+    /// PowerShell output helpers emitted at the top of every generated script.
+    /// Defines Write-Status (dual-writes to Host + Success stream when in a runbook)
+    /// plus Write-Step, Write-Detail, Write-OK, Write-Skip, Write-Fail wrappers
+    /// so generated scripts are readable both in an interactive console and in
+    /// Azure Automation (where the Success stream is what PathWeb's modal sees).
+    /// </summary>
+    private static string BuildPsHelpersPreamble() =>
+        "# PathWeb output helpers (interactive console + runbook capture)\r\n" +
+        "$Script:IsRunbook = $null -ne $PSPrivateMetadata -and $null -ne $PSPrivateMetadata.JobId\r\n" +
+        "function Write-Status {\r\n" +
+        "    param([string]$Message, [string]$ForegroundColor, [switch]$NoNewline)\r\n" +
+        "    $hostArgs = @{ Object = $Message }\r\n" +
+        "    if ($ForegroundColor) { $hostArgs['ForegroundColor'] = $ForegroundColor }\r\n" +
+        "    if ($NoNewline) { $hostArgs['NoNewline'] = $true }\r\n" +
+        "    Write-Host @hostArgs\r\n" +
+        "    if ($Script:IsRunbook -and -not $NoNewline) { Write-Output $Message }\r\n" +
+        "}\r\n" +
+        "function Write-Step   { param([string]$Message) Write-Status (\"{0} ==> {1}\" -f (Get-Date -Format 'HH:mm:ss'), $Message) -ForegroundColor Cyan }\r\n" +
+        "function Write-Detail { param([string]$Message) Write-Status (\"    {0}\" -f $Message) }\r\n" +
+        "function Write-OK     { param([string]$Message) Write-Status (\"[ OK ] {0}\" -f $Message) -ForegroundColor Green }\r\n" +
+        "function Write-Skip   { param([string]$Message) Write-Status (\"[SKIP] {0}\" -f $Message) -ForegroundColor DarkGray; Write-Verbose $Message }\r\n" +
+        "function Write-Fail   { param([string]$Message) Write-Status (\"[FAIL] {0}\" -f $Message) -ForegroundColor Red; Write-Warning $Message }\r\n\r\n";
+
+    /// <summary>
+    /// Emits a header banner naming the script and capturing $StartTime for the
+    /// final summary record. Expects $RGName and $UserName to already be set.
+    /// </summary>
+    private static string BuildPsHeader(string title) =>
+        "# Header\r\n" +
+        "$StartTime = Get-Date\r\n" +
+        "Write-Status (\"=\" * 70) -ForegroundColor DarkCyan\r\n" +
+        $"Write-Status \" PathWeb: {title}\" -ForegroundColor DarkCyan\r\n" +
+        "Write-Status \" Tenant : $RGName\"\r\n" +
+        "Write-Status \" User   : $UserName\"\r\n" +
+        "Write-Status \" Started: $($StartTime.ToString('u'))\"\r\n" +
+        "Write-Status (\"=\" * 70) -ForegroundColor DarkCyan\r\n\r\n";
+
+    /// <summary>
+    /// Standard Az login check block. In Azure Automation the managed-identity
+    /// login is injected by AutomationService.PrepareScriptForAutomation, which
+    /// regex-strips this block before submission so it only runs interactively.
+    /// The shape (Try { Get-AzContext... } Catch { ... Connect-AzAccount ... })
+    /// must match the strip regex in PrepareScriptForAutomation.
+    /// </summary>
+    private static string BuildPsLoginCheck() =>
+        "# Login Check (stripped by AutomationService.PrepareScriptForAutomation for runbook runs)\r\n" +
+        "Try {\r\n" +
+        "    Get-AzContext -ErrorAction Stop | ForEach-Object { Write-Detail \"Using Subscription: $($_.Name)\" }\r\n" +
+        "}\r\n" +
+        "Catch {\r\n" +
+        "    Write-Fail 'You are not logged in. Run Connect-AzAccount and try again.'\r\n" +
+        "    Return\r\n" +
+        "}\r\n\r\n";
+
+    /// <summary>
+    /// Final summary record. Emits a banner + a structured [pscustomobject] piped
+    /// to Write-Output so both the Azure Automation Output tab and PathWeb's modal
+    /// receive a single tidy completion record (and a human reading the console
+    /// gets a formatted list).
+    /// </summary>
+    private static string BuildPsSummary(string scriptName, params (string Key, string ValueExpression)[] extras)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("# End nicely\r\n");
+        sb.Append("$EndTime = Get-Date\r\n");
+        sb.Append("$Duration = New-TimeSpan -Start $StartTime -End $EndTime\r\n");
+        sb.Append("$DurationText = '{0:00}:{1:00}' -f $Duration.Minutes, $Duration.Seconds\r\n");
+        sb.Append("Write-Status (\"=\" * 70) -ForegroundColor DarkCyan\r\n");
+        sb.Append("Write-Status \" Completed in $DurationText (M:S)\" -ForegroundColor Green\r\n");
+        sb.Append("Write-Status (\"=\" * 70) -ForegroundColor DarkCyan\r\n");
+        sb.Append("$Summary = [ordered]@{\r\n");
+        sb.Append($"    Script   = '{scriptName}'\r\n");
+        sb.Append("    Tenant   = $RGName\r\n");
+        sb.Append("    User     = $UserName\r\n");
+        sb.Append("    Started  = $StartTime.ToString('u')\r\n");
+        sb.Append("    Finished = $EndTime.ToString('u')\r\n");
+        sb.Append("    Duration = $DurationText\r\n");
+        sb.Append("    Result   = 'Success'\r\n");
+        foreach (var (key, expr) in extras)
+            sb.Append($"    {key} = {expr}\r\n");
+        sb.Append("}\r\n");
+        sb.Append("[pscustomobject]$Summary | Format-List | Out-String | Write-Output\r\n\r\n");
+        return sb.ToString();
+    }
+
         public async Task<List<string>> GenerateConfigAsync(Guid id, string userEmail)
         {
             // 1. Initialize variables
@@ -232,10 +318,15 @@ public class ConfigGenerator
                 string strLocation = (tenant.Lab == "ASH") ? "Washington DC" : "Seattle";
                 string strCircuitRegion = (tenant.Lab == "ASH") ? "East US" : "West US 2";
                 string strProvider = (tenant.EruplinkPort == "ECX") ? "Equinix" : "";
+                string strUserName = _userEmail.Split('@')[0];
+
+                // Output helpers + header
+                strDB = BuildPsHelpersPreamble();
 
                 // Set Variables
-                strDB = "# Initialize\r\n" +
+                strDB += "# Initialize\r\n" +
                          $"$RGName = '{strRGName}'\r\n" +
+                         $"$UserName = '{strUserName}'\r\n" +
                          $"$Region = '{tenant.AzureRegion}'\r\n" +
                          (!IsERDirect ? $"$ERProvider = '{strProvider}'\r\n" : "") +
                          $"$ERLocation = '{strLocation}'\r\n" +
@@ -247,28 +338,20 @@ public class ConfigGenerator
                          $"$RGTagNinja = '{tenant.NinjaOwner}'\r\n" +
                          $"$RGTagUsage = '{tenant.Usage.Substring(0, Math.Min(tenant.Usage.Length, 253))}'\r\n\r\n";
 
-                // Login Check
-                strDB += "# Login Check\r\n" +
-                         "Try {Write-Host 'Using Subscription: ' -NoNewline\r\n" +
-                         "     Write-Host $((Get-AzContext).Name) -ForegroundColor Green}\r\n" +
-                         "Catch {\r\n" +
-                         "    Write-Warning 'You are not logged in dummy. Login and try again!'\r\n" +
-                         "    Return}\r\n\r\n";
+                strDB += BuildPsHeader("Create ExpressRoute");
+                strDB += BuildPsLoginCheck();
 
                 // Check/Create Resource Group
-                strDB += "# Create Resource Group\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Resource Group' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'Resource Group'\r\n" +
                          "Try {$rg = Get-AzResourceGroup -Name $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host 'Resource exists, skipping'}\r\n" +
-                         "Catch {$rg = New-AzResourceGroup -Name $RGName -Location \"$Region\"}\r\n\r\n" +
-                         "# Add Tag Values to the Resource Group\r\n" +
-                         "Set-AzResourceGroup -Name $RGName -Tag @{Expires=$RGTagExpireDate; Contacts=$RGTagContact; Pathfinder=$RGTagNinja; Usage=$RGTagUsage} | Out-Null\r\n\r\n";
+                         "     Write-Skip \"$RGName already exists\"}\r\n" +
+                         "Catch {$rg = New-AzResourceGroup -Name $RGName -Location \"$Region\"\r\n" +
+                         "       Write-OK \"Created $RGName in $Region\"}\r\n" +
+                         "Set-AzResourceGroup -Name $RGName -Tag @{Expires=$RGTagExpireDate; Contacts=$RGTagContact; Pathfinder=$RGTagNinja; Usage=$RGTagUsage} | Out-Null\r\n" +
+                         "Write-Detail 'Tags applied'\r\n\r\n";
 
                 // Create ER Circuit
-                strDB += "# Create ExpressRoute Circuit\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating ExpressRoute Circuit' -ForegroundColor Cyan\r\n";
+                strDB += "Write-Step 'ExpressRoute Circuit'\r\n";
 
                 // If Direct, load Direct Port
                 if (IsERDirect && tenant.Lab == "SEA")
@@ -296,7 +379,6 @@ public class ConfigGenerator
                     {
                         strDB += "$ERDirect = \"\"\r\n";
                     }
-                    
                 }
                 else if (IsERDirect)
                 {
@@ -304,23 +386,27 @@ public class ConfigGenerator
                 }
 
                 strDB += "Try {$er = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName-ER -ErrorAction Stop\r\n" +
-                         "     Write-Host 'Resource exists, skipping'}\r\n";
+                         "     Write-Skip \"$RGName-ER already exists\"}\r\n";
                 if (IsERDirect)
                 {
                     strDB += "Catch {$er = New-AzExpressRouteCircuit -BandwidthinGbps $ERBandwidth -Location $ERDirect.Location " +
                              "-Name $RGName-ER -ResourceGroupName $RGName -ExpressRoutePort $ERDirect " +
-                             "-SkuFamily MeteredData -SkuTier $ERSku -ErrorAction Stop}\r\n\r\n";
+                             "-SkuFamily MeteredData -SkuTier $ERSku -ErrorAction Stop\r\n" +
+                             "       Write-OK \"Created $RGName-ER (Direct, $ERBandwidth Gbps)\"}\r\n\r\n";
                 }
                 else
                 {
                     strDB += "Catch {$er = New-AzExpressRouteCircuit -BandwidthInMbps $ERBandwidth -Location $ERRegion " +
                              "-Name $RGName-ER -ResourceGroupName $RGName -ServiceProviderName $ERProvider " +
-                             "-PeeringLocation $ERLocation -SkuFamily MeteredData -SkuTier $ERSku -ErrorAction Stop}\r\n\r\n";
+                             "-PeeringLocation $ERLocation -SkuFamily MeteredData -SkuTier $ERSku -ErrorAction Stop\r\n" +
+                             "       Write-OK \"Created $RGName-ER ($ERProvider @ $ERLocation, $ERBandwidth Mbps)\"}\r\n\r\n";
                 }
 
-            // Get New SKey and copy to clipboard
-                strDB += "# End Nicely\r\n" +
-                         "Write-Output \"ExpressRoute provisioning complete for $RGName.\"\r\n\r\n";
+                // Summary
+                strDB += BuildPsSummary("CreateERPowerShell",
+                    ("ServiceKey", "$er.ServiceKey"),
+                    ("ProvisioningState", "$er.ServiceProviderProvisioningState"),
+                    ("CircuitState", "$er.CircuitProvisioningState"));
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateERConfig", "PowerShell strings created");
             }
             else
@@ -386,11 +472,13 @@ public class ConfigGenerator
 
             // 2. Generate PowerShell script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Creating Azure PowerShell");
-            // Set Variables
-            strDB = "# Initialize\r\n" +
-                    "$StartTime = Get-Date\r\n" +
+            string strUserName = _userEmail.Split('@')[0];
+            // Output helpers + variables (StartTime set inside BuildPsHeader)
+            strDB = BuildPsHelpersPreamble();
+            strDB += "# Initialize\r\n" +
                     $"$TenantID = '{tenant.TenantId}'\r\n" +
                     $"$RGName = '{strRGName}'\r\n" +
+                    $"$UserName = '{strUserName}'\r\n" +
                     $"$Region = '{tenant.AzureRegion}'\r\n" +
                     $"$RGTagExpireDate = '{tenant.ReturnDate.ToString("MM/dd/yy")}'\r\n" +
                     $"$RGTagContact = '{tenant.Contacts}'\r\n" +
@@ -455,77 +543,68 @@ public class ConfigGenerator
                      "$securePassword = ConvertTo-SecureString $password -AsPlainText -Force\r\n" +
                      "$KeyVaultAccessList = " + String.Join(",", lstContacts) + "\r\n\r\n";
 
-            // Login Check
-            _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script for Login Check");
-            strDB += "# Login Check\r\n" +
-                     "Try {Write-Host 'Using Subscription: ' -NoNewline\r\n" +
-                     "     Write-Host $((Get-AzContext).Name) -ForegroundColor Green}\r\n" +
-                     "Catch {\r\n" +
-                     "    Write-Warning 'You are not logged in dummy. Login and try again!'\r\n" +
-                     "    Return}\r\n\r\n";
+            // Header + Login Check
+            _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script for Header and Login Check");
+            strDB += BuildPsHeader("Create Azure Resources");
+            strDB += BuildPsLoginCheck();
 
             // Check/Create Resource Group
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create Resource Group");
-            strDB += $"# Create Resource Group {strRGName}\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host \"Creating Resource Group $RGName\" -ForegroundColor Cyan\r\n" +
+            strDB += "Write-Step \"Resource Group: $RGName\"\r\n" +
                      "Try {$rg = Get-AzResourceGroup -Name $RGName -ErrorAction Stop\r\n" +
-                     "     Write-Host '  resource exists, skipping'}\r\n" +
-                     "Catch {$rg = New-AzResourceGroup -Name $RGName -Location \"$Region\"}\r\n\r\n" +
-                     "# Add Tag Values to the Resource Group\r\n" +
-                     "Set-AzResourceGroup -Name $RGName -Tag @{Expires=$RGTagExpireDate; Contacts=$RGTagContact; Pathfinder=$RGTagNinja; Usage=$RGTagUsage} | Out-Null\r\n\r\n";
+                     "     Write-Skip \"$RGName already exists\"}\r\n" +
+                     "Catch {$rg = New-AzResourceGroup -Name $RGName -Location \"$Region\"\r\n" +
+                     "       Write-OK \"Created $RGName in $Region\"}\r\n" +
+                     "Set-AzResourceGroup -Name $RGName -Tag @{Expires=$RGTagExpireDate; Contacts=$RGTagContact; Pathfinder=$RGTagNinja; Usage=$RGTagUsage} | Out-Null\r\n" +
+                     "Write-Detail 'Tags applied'\r\n\r\n";
 
             // Create KeyVault
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create Key Vault");
-            strDB += "# Create KeyVault and Password\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host 'Creating KeyVault' -ForegroundColor Cyan\r\n" +
+            strDB += "Write-Step 'Key Vault'\r\n" +
                      "$kvName = $RGName + '-kv'\r\n" +
                      "$kv = Get-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName\r\n" +
                      "If ($kv -eq $null) {\r\n" +
-                     "      Write-Host '  clearing soft-deleted vault if present'\r\n" +
+                     "      Write-Detail 'Clearing soft-deleted vault if present'\r\n" +
                      "      Remove-AzKeyVault -VaultName $kvName -InRemovedState -Force -Location $Region -ErrorAction SilentlyContinue\r\n" +
-                     "      Write-Host '  creating new Key Vault (RBAC enabled by default)'\r\n" +
-                     "      $kv = New-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName -Location $Region}\r\n" +
-                     "Else {Write-Host '  resource Exists, Skipping'}\r\n" +
+                     "      $kv = New-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName -Location $Region\r\n" +
+                     "      Write-OK \"Created Key Vault $kvName\"}\r\n" +
+                     "Else {Write-Skip \"$kvName already exists\"}\r\n" +
                      "$kvScope = (Get-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName).ResourceId\r\n\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host 'Setting KeyVault RBAC' -ForegroundColor Cyan\r\n" +
+                     "Write-Step 'Key Vault RBAC'\r\n" +
                      "ForEach ($User in $KeyVaultAccessList.Split(';')) {\r\n" +
                      "    $User = $User.Trim()\r\n" +
-                     "    Write-Host \"  Adding $User\"\r\n" +
+                     "    Write-Detail \"Adding $User\"\r\n" +
                      "    $userId = (Get-AzADUser -UserPrincipalName $User).Id\r\n" +
                      "    New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue | Out-Null\r\n" +
                      "    If ((Get-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName -ErrorAction Stop).Count -gt 0) {\r\n" +
-                     "        Write-Host '    account already assigned, skipping'}\r\n" +
-                     "    Else {New-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName | Out-Null }\r\n" +
+                     "        Write-Skip \"$User already has Contributor on $RGName\"}\r\n" +
+                     "    Else {New-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName | Out-Null\r\n" +
+                     "          Write-OK \"Granted Contributor to $User on $RGName\"}\r\n" +
                      "}\r\n\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host 'Creating KeyVault Secret' -ForegroundColor Cyan\r\n" +
+                     "Write-Step 'Key Vault Secret'\r\n" +
                      "$kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $username -ErrorAction SilentlyContinue\r\n" +
-                     "If ($kvs -eq $null) {Try {Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null}\r\n" +
-                     "                     Catch {Write-Host '  RBAC propagating, waiting 15 seconds and trying again.'\r\n" +
+                     "If ($kvs -eq $null) {Try {Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null\r\n" +
+                     "                          Write-OK \"Stored secret $username in $kvName\"}\r\n" +
+                     "                     Catch {Write-Detail 'RBAC propagating, waiting 15 seconds and trying again'\r\n" +
                      "                            Sleep -Seconds 15\r\n" +
-                     "                            Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null}}\r\n" +
-                     "Else {Write-Host '  resource Exists, Skipping'}\r\n" +
+                     "                            Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null\r\n" +
+                     "                            Write-OK \"Stored secret $username in $kvName\"}}\r\n" +
+                     "Else {Write-Skip \"Secret $username already exists in $kvName\"}\r\n" +
                      "$cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)\r\n\r\n";
 
             // Check/Create Virtual Network
             if (HasPrivate || HasAzureVM || HasVPNGateway)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create Virtual Network");
-                strDB += "# Create Virtual Network\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Virtual Network' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'Virtual Network'\r\n" +
                          "Try {$VNet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip \"$VNetName already exists\"}\r\n" +
                          "Catch {$VNet = New-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName -AddressPrefix $VNetAddress" + (HasIPv6 ? ",$VNet6Address" : "") + " -Location $Region\r\n" +
-                         "       # Add Subnets\r\n" +
-                         "       Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "       Write-Host 'Adding subnets' -ForegroundColor Cyan\r\n" +
+                         "       Write-Detail 'Adding subnets'\r\n" +
                          "       Add-AzVirtualNetworkSubnetConfig -Name 'Tenant' -VirtualNetwork $VNet -AddressPrefix $VNetTenant" + (HasIPv6 ? ",$VNet6Tenant" : "") + " | Out-Null\r\n" +
                          "       Add-AzVirtualNetworkSubnetConfig -Name 'GatewaySubnet' -VirtualNetwork $VNet -AddressPrefix $VNetGateway" + (HasIPv6 ? ",$VNet6Gateway" : "") + " | Out-Null\r\n" +
                          "       Set-AzVirtualNetwork -VirtualNetwork $VNet | Out-Null\r\n" +
+                         "       Write-OK \"Created $VNetName with Tenant and GatewaySubnet\"\r\n" +
                          "       } # End Try\r\n\r\n";
             }
 
@@ -533,11 +612,9 @@ public class ConfigGenerator
             if (HasERGateway)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create ER Gateway");
-                strDB += "# Create ER Gateway\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Submitting ER Gateway creation job' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'ExpressRoute Gateway (submitting as background job)'\r\n" +
                          "Try {$gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-er -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip \"$VNetName-gw-er already exists\"}\r\n" +
                          "Catch {\r\n" +
                          "    $VNet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName\r\n" +
                          "    $subnet = Get-AzVirtualNetworkSubnetConfig -Name GatewaySubnet -VirtualNetwork $VNet\r\n" +
@@ -552,11 +629,9 @@ public class ConfigGenerator
             if (HasVPNGateway)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create VPN and Local Gateway");
-                strDB += "# Create VPN Gateway\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Submitting VPN Gateway creation job' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'VPN Gateway (submitting as background job)'\r\n" +
                          "Try {$gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip \"$VNetName-gw-vpn already exists\"}\r\n" +
                          "Catch {\r\n" +
                          "    $VNet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName\r\n" +
                          "    $subnet = Get-AzVirtualNetworkSubnetConfig -Name GatewaySubnet -VirtualNetwork $VNet\r\n" +
@@ -569,12 +644,11 @@ public class ConfigGenerator
                          "    New-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName -Location $Region -IpConfigurations $ipconf1" + (HasVPNAA ? ",$ipconf2" : "") + " -GatewayType Vpn -VpnType RouteBased -VpnGatewayGeneration Generation2 -GatewaySku " + tenant.Vpngateway + (HasVPNAA ? " -EnableActiveActiveFeature" : "") + " -AsJob | Out-Null\r\n" +
                          "    } # End Try\r\n\r\n";
 
-                strDB += "# Create Local Gateway\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Local Gateway Object' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'Local Gateway'\r\n" +
                          "Try {$lgw = Get-AzLocalNetworkGateway -Name $RGName-OnPrem-gw -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
-                         "Catch {$lgw = New-AzLocalNetworkGateway -Name $RGName-OnPrem-gw -ResourceGroupName $RGName -Location $Region -GatewayIpAddress $LabPIP -Asn $PvtASN -BgpPeeringAddress $LabBGPIP}\r\n\r\n";
+                         "     Write-Skip \"$RGName-OnPrem-gw already exists\"}\r\n" +
+                         "Catch {$lgw = New-AzLocalNetworkGateway -Name $RGName-OnPrem-gw -ResourceGroupName $RGName -Location $Region -GatewayIpAddress $LabPIP -Asn $PvtASN -BgpPeeringAddress $LabBGPIP\r\n" +
+                         "       Write-OK \"Created $RGName-OnPrem-gw (PIP $LabPIP, ASN $PvtASN)\"}\r\n\r\n";
             }
 
             // Check/Create Azure VMs
@@ -590,11 +664,9 @@ public class ConfigGenerator
                          "        Return}\r\n\r\n";
 
                 // Check/Create NSG
-                strDB += "    # Create an inbound network security group rule for the admin port\r\n" +
-                         "    Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "    Write-Host 'Creating NSG and Admin rule' -ForegroundColor Cyan\r\n" +
+                strDB += "    Write-Step \"NSG + admin rule for $VMName\"\r\n" +
                          "    Try {$nsg = Get-AzNetworkSecurityGroup -Name $VMName'-nic-nsg' -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "         Write-Host '  resource exists, skipping'}\r\n" +
+                         "         Write-Skip \"$VMName-nic-nsg already exists\"}\r\n" +
                          "    Catch {\r\n" +
                          "           Switch ($VMOS[$i-1])\r\n" +
                          "           {'Windows' {$nsgRule = New-AzNetworkSecurityRuleConfig -Name myRDPRule -Protocol Tcp -Direction Inbound -Priority 1000 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Access Allow}\r\n" +
@@ -604,28 +676,24 @@ public class ConfigGenerator
                          "          } # End Try\r\n\r\n";
 
                 // Check/Create PIP
-                strDB += "    # Create a public IPv4 address\r\n" +
-                         "    Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "    Write-Host 'Creating Public IPv4 address' -ForegroundColor Cyan\r\n" +
+                strDB += "    Write-Step \"Public IPv4 for $VMName\"\r\n" +
                          "    Try {$pip4 = Get-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip4' -ErrorAction Stop\r\n" +
-                         "         Write-Host '  resource exists, skipping'}\r\n" +
-                         "    Catch {$pip4 = New-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip4' -Location $Region -sku Standard -AllocationMethod Static -IpAddressVersion IPv4}\r\n\r\n";
+                         "         Write-Skip \"$VMName-nic-pip4 already exists\"}\r\n" +
+                         "    Catch {$pip4 = New-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip4' -Location $Region -sku Standard -AllocationMethod Static -IpAddressVersion IPv4\r\n" +
+                         "           Write-OK \"Created $VMName-nic-pip4 ($($pip4.IpAddress))\"}\r\n\r\n";
                 if (HasIPv6)
                 {
-                    strDB += "    # Create a public IPv6 address\r\n" +
-                             "    Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                             "    Write-Host 'Creating Public IPv6 address' -ForegroundColor Cyan\r\n" +
+                    strDB += "    Write-Step \"Public IPv6 for $VMName\"\r\n" +
                              "    Try {$pip6 = Get-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip6' -ErrorAction Stop\r\n" +
-                             "         Write-Host '  resource exists, skipping'}\r\n" +
-                             "    Catch {$pip6 = New-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip6' -Location $Region -sku Standard -AllocationMethod Static -IpAddressVersion IPv6}\r\n\r\n";
+                             "         Write-Skip \"$VMName-nic-pip6 already exists\"}\r\n" +
+                             "    Catch {$pip6 = New-AzPublicIpAddress -ResourceGroupName $RGName -Name $VMName'-nic-pip6' -Location $Region -sku Standard -AllocationMethod Static -IpAddressVersion IPv6\r\n" +
+                             "           Write-OK \"Created $VMName-nic-pip6 ($($pip6.IpAddress))\"}\r\n\r\n";
                 }
 
                 // Check/Create NIC
-                strDB += "    # Create a virtual network card and associate with public IP address and NSG\r\n" +
-                          "    Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                          "    Write-Host 'Creating NIC' -ForegroundColor Cyan\r\n" +
+                strDB += "    Write-Step \"NIC for $VMName\"\r\n" +
                           "    Try {$nic = Get-AzNetworkInterface -Name $VMName'-nic' -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                          "         Write-Host '  resource exists, skipping'}\r\n" +
+                          "         Write-Skip \"$VMName-nic already exists\"}\r\n" +
                           "    Catch {$vnet = Get-AzVirtualNetwork -ResourceGroupName $RGName -Name $VNetName\r\n" +
                           "           $subnet = Get-AzVirtualNetworkSubnetConfig -Name Tenant -VirtualNetwork $vnet\r\n" +
                           "           $ipconfig1 = New-AzNetworkInterfaceIpConfig -Name ipconfig1 -Subnet $Subnet -PrivateIpAddressVersion IPv4 -PublicIpAddress $pip4 -Primary\r\n" +
@@ -633,9 +701,7 @@ public class ConfigGenerator
                           "           $nic = New-AzNetworkInterface -Name $VMName'-nic' -ResourceGroupName $RGName -Location $Region -IpConfiguration $ipconfig1" + (HasIPv6 ? ",$ipconfig2" : "") + " -NetworkSecurityGroupId $nsg.Id -ErrorAction Stop}\r\n\r\n";
 
                 // Check/Create VM Config
-                strDB += "    # Create a virtual machine configuration\r\n" +
-                         "    Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "    Write-Host 'Creating VM' -ForegroundColor Cyan\r\n" +
+                strDB += "    Write-Step \"VM $VMName ($($VMOS[$i-1]))\"\r\n" +
                          "    Switch ($VMOS[$i-1]) {\r\n" +
                          "    'Windows' {$vmConfig = New-AzVMConfig -VMName $VMName -VMSize $VMSize | `\r\n" +
                          "               Set-AzVMOperatingSystem -Windows -ComputerName $VMName -Credential $cred -EnableAutoUpdate -ProvisionVMAgent | `\r\n" +
@@ -648,17 +714,16 @@ public class ConfigGenerator
                          "           } # End Switch\r\n\r\n";
 
                 // Check/Create VM (AsJob)
-                strDB += "    # Create the VM\r\n" +
-                         "    Try {Get-AzVM -ResourceGroupName $RGName -Name $VMName -ErrorAction Stop | Out-Null\r\n" +
-                         "         Write-Host '  resource exists, skipping'}\r\n" +
-                         "    Catch {New-AzVM -ResourceGroupName $RGName -Location $Region -VM $vmConfig -AsJob -ErrorAction Stop | Out-Null}\r\n" +
+                strDB += "    Try {Get-AzVM -ResourceGroupName $RGName -Name $VMName -ErrorAction Stop | Out-Null\r\n" +
+                         "         Write-Skip \"$VMName already exists\"}\r\n" +
+                         "    Catch {New-AzVM -ResourceGroupName $RGName -Location $Region -VM $vmConfig -AsJob -ErrorAction Stop | Out-Null\r\n" +
+                         "           Write-Detail \"Submitted New-AzVM for $VMName as a background job\"}\r\n" +
                          "}\r\n\r\n";
 
                 // Wait Job for VMs
-                strDB += "# Wait for jobs to finish\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Waiting for VM Jobs to finish, script will continue after 10 minutes or when VMs complete, whichever is first.' -ForegroundColor Cyan\r\n" +
-                         "Get-Job -Command 'New-AzVM' | wait-job -Timeout 600 | Out-Null\r\n\r\n";
+                strDB += "Write-Step 'Waiting for VM jobs to finish (timeout 10 minutes)'\r\n" +
+                         "Get-Job -Command 'New-AzVM' | wait-job -Timeout 600 | Out-Null\r\n" +
+                         "Write-OK 'VM jobs completed (or timed out)'\r\n\r\n";
 
                 // Kick-off post VM deploy scripts
                 strDB += "# Push extension to open ICMPv4 to Windows VMs\r\n" +
@@ -667,8 +732,7 @@ public class ConfigGenerator
                          "    $timestamp = (Get-Date).Ticks\r\n" +
                          "    $VMName = $VMPrefix + $i.ToString(\"00\")\r\n" +
                          "    If ($VMOS[$i-1] -eq 'Windows') {\r\n" +
-                         "        Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "        Write-Host 'Submitting post-deploy VM extension job' -ForegroundColor Cyan\r\n" +
+                         "        Write-Step \"Post-deploy extension for $VMName\"\r\n" +
                          "        Switch ($VMPostDeploy) {\r\n" +
                          "        'ICMPv4' {$ScriptName = 'AllowICMPv4.ps1'\r\n" +
                          "                  $ExtensionName = 'AllowICMPv4'}\r\n" +
@@ -688,36 +752,27 @@ public class ConfigGenerator
             if (HasVPNGateway)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create VPN Connection");
-                strDB += "# Create the VPN Connection(s)\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Connecting VPN Gateway to Lab SRX' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'VPN Gateway connection to Lab SRX'\r\n" +
                          "Try {$connection = Get-AzVirtualNetworkGatewayConnection -Name $VNetName-gw-vpn-conn -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip \"$VNetName-gw-vpn-conn already exists\"}\r\n" +
                          "Catch {\r\n" +
                          "    $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName\r\n" +
                          "    $i=0\r\n" +
-                         "    If ($gw.ProvisioningState -eq 'Updating') {Write-Host '  waiting for VPN gateway to finish provisioning: ' -NoNewline\r\n" +
-                         "                                               Sleep 10}\r\n" +
+                         "    If ($gw.ProvisioningState -eq 'Updating') { Write-Detail 'Waiting for VPN gateway to finish provisioning...' }\r\n" +
                          "    While ($gw.ProvisioningState -eq 'Updating') {\r\n" +
                          "        $i++\r\n" +
-                         "        If ($i%6) {Write-Host '*' -NoNewline}\r\n" +
-                         "        Else {Write-Host \"$($i/6)\" -NoNewline}\r\n" +
                          "        Sleep 10\r\n" +
+                         "        if (-not ($i % 6)) { Write-Detail \"  ...still waiting ($($i/6) min elapsed)\" }\r\n" +
                          "        $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-vpn -ResourceGroupName $RGName}\r\n\r\n" +
-                         "    If ($i -gt 0) {\r\n" +
-                         "        Write-Host\r\n" +
-                         "        Write-Host '  VPN Gateway deployment complete.'\r\n" +
-                         "        Write-Host '  Building connection'\r\n" +
-                         "    }\r\n\r\n" +
+                         "    If ($i -gt 0) { Write-Detail 'VPN Gateway deployment complete' }\r\n\r\n" +
                          "    If ($gw.ProvisioningState -eq 'Succeeded') {\r\n" +
-                         "        Write-Host '  creating tunnel'\r\n" +
+                         "        Write-Detail 'Creating tunnel'\r\n" +
                          "        $lgw = Get-AzLocalNetworkGateway -Name $RGName-OnPrem-gw -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
                          "        $connection = New-AzVirtualNetworkGatewayConnection -Name $VNetName-gw-vpn-conn -ResourceGroupName $RGName `\r\n" +
                          "                      -Location $Region -VirtualNetworkGateway1 $gw -LocalNetworkGateway2 $lgw -ConnectionType IPsec `\r\n" +
-                         "                      -SharedKey $LabSharedKey -EnableBgp $True}\r\n" +
-                         "    Else {Write-Warning 'An issue occured with VPN gateway provisioning.'\r\n" +
-                         "          Write-Host 'Current Gateway Provisioning State' -NoNewLine\r\n" +
-                         "          Write-Host $gw.ProvisioningState}\r\n" +
+                         "                      -SharedKey $LabSharedKey -EnableBgp $True\r\n" +
+                         "        Write-OK \"Created VPN connection $VNetName-gw-vpn-conn\"}\r\n" +
+                         "    Else { Write-Fail \"VPN gateway provisioning state: $($gw.ProvisioningState)\" }\r\n" +
                          "    }\r\n\r\n";
             }
 
@@ -725,14 +780,15 @@ public class ConfigGenerator
             if (HasER)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Check ExpressRoute Circuit state");
-                strDB += "# Check ExpressRoute Circuit\r\n" +
-                         "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName-ER -ErrorAction Stop}\r\n" +
+                strDB += "Write-Step 'ExpressRoute Circuit check'\r\n" +
+                         "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName-ER -ErrorAction Stop\r\n" +
+                         "     Write-Detail \"Found $RGName-ER (ProvisioningState=$($circuit.ServiceProviderProvisioningState))\"}\r\n" +
                          "Catch {\r\n" +
-                         "    Write-Warning 'An ER Circuit was not found. Run the ERCreate PowerShell first, then provision the circuit before running this script!'\r\n" +
+                         "    Write-Fail 'An ER Circuit was not found. Run the ERCreate PowerShell first, then provision the circuit before running this script!'\r\n" +
                          "    Return}\r\n\r\n";
 
                 strDB += "If ($circuit.ServiceProviderProvisioningState -ne 'Provisioned') {\r\n" +
-                         "    Write-Warning 'The ER Circuit has not been provisioned by the Service Provider, provision the circuit before running this script!'\r\n" +
+                         "    Write-Fail 'The ER Circuit has not been provisioned by the Service Provider, provision the circuit before running this script!'\r\n" +
                          "    Return}\r\n\r\n";
             }
 
@@ -740,11 +796,9 @@ public class ConfigGenerator
             if (HasPrivate)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create ER Private Peering");
-                strDB += "# Create Private Peering\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Private Peering' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'ExpressRoute Private Peering'\r\n" +
                          "Try {$peering = Get-AzExpressRouteCircuitPeeringConfig -Name AzurePrivatePeering -ExpressRouteCircuit $circuit -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip 'AzurePrivatePeering already configured'}\r\n" +
                          "Catch {Add-AzExpressRouteCircuitPeeringConfig -Name AzurePrivatePeering -ExpressRouteCircuit $circuit `\r\n" +
                          "          -PrimaryPeerAddressPrefix $PvtP2PA -SecondaryPeerAddressPrefix $PvtP2PB `\r\n" +
                          "          -PeeringType AzurePrivatePeering -PeerASN $PvtASN -VlanId $PvtVLAN -PeerAddressType IPv4 | Out-Null";
@@ -762,19 +816,16 @@ public class ConfigGenerator
             if (HasMicrosoft)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create ER Microsoft Peering");
-                strDB += "# Create a Route Filter for Microsoft Peering\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Route Filter' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'Route Filter for Microsoft Peering'\r\n" +
                          "Try {$RouteFilter = Get-AzRouteFilter -Name $RGName-ER-rf -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
-                         "Catch {$RouteFilter = New-AzRouteFilter -Name $RGName-ER-rf -ResourceGroupName $RGName -Location $circuit.Location}\r\n\r\n";
+                         "     Write-Skip \"$RGName-ER-rf already exists\"}\r\n" +
+                         "Catch {$RouteFilter = New-AzRouteFilter -Name $RGName-ER-rf -ResourceGroupName $RGName -Location $circuit.Location\r\n" +
+                         "       Write-OK \"Created Route Filter $RGName-ER-rf\"}\r\n\r\n";
                 // TODO: Add populating the RouteFilter
 
-                strDB += "# Create Microsoft Peering\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Creating Microsoft Peering' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'ExpressRoute Microsoft Peering'\r\n" +
                          "Try {$peering = Get-AzExpressRouteCircuitPeeringConfig -Name MicrosoftPeering -ExpressRouteCircuit $circuit -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip 'MicrosoftPeering already configured'}\r\n" +
                          "Catch {Add-AzExpressRouteCircuitPeeringConfig -Name MicrosoftPeering -ExpressRouteCircuit $circuit `\r\n" +
                          "       -PrimaryPeerAddressPrefix $MsftP2PA -SecondaryPeerAddressPrefix $MsftP2PB `\r\n" +
                          "       -PeeringType MicrosoftPeering -PeerASN $MsftASN -VlanId $MsftVLAN `\r\n" +
@@ -785,12 +836,11 @@ public class ConfigGenerator
             if (HasPrivate || HasMicrosoft)
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Save ER Circuit peering updates");
-                strDB += "# Save Peering to Circuit\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Saving Peerings to Circuit' -ForegroundColor Cyan\r\n" +
-                         "Try {Set-AzExpressRouteCircuit -ExpressRouteCircuit $circuit -ErrorAction Stop | Out-Null}\r\n" +
+                strDB += "Write-Step 'Saving peerings to ExpressRoute Circuit'\r\n" +
+                         "Try {Set-AzExpressRouteCircuit -ExpressRouteCircuit $circuit -ErrorAction Stop | Out-Null\r\n" +
+                         "     Write-OK 'Peerings saved'}\r\n" +
                          "Catch {\r\n" +
-                         "    Write-Warning 'Some or all of the ER Circuit peerings were NOT saved. Please manually verify and correct.'}\r\n\r\n";
+                         "    Write-Fail 'Some or all of the ER Circuit peerings were NOT saved. Please manually verify and correct.'}\r\n\r\n";
             }
 
             // Create the ER Connection
@@ -798,35 +848,26 @@ public class ConfigGenerator
             {
                 _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to Create ER connection to ER gateway");
                 // Note: due to validation logic, if HasERGateway is true, then HasER and HasPrivate are both true as well
-                strDB += "# Create the Connection\r\n" +
-                         "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                         "Write-Host 'Connecting Gateway to ExpressRoute' -ForegroundColor Cyan\r\n" +
+                strDB += "Write-Step 'Connecting ER Gateway to ExpressRoute Circuit'\r\n" +
                          "Try {$connection = Get-AzVirtualNetworkGatewayConnection -Name $VNetName-gw-er-conn -ResourceGroupName $RGName -ErrorAction Stop\r\n" +
-                         "     Write-Host '  resource exists, skipping'}\r\n" +
+                         "     Write-Skip \"$VNetName-gw-er-conn already exists\"}\r\n" +
                          "Catch {\r\n" +
                          "    $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-er -ResourceGroupName $RGName\r\n" +
                          "    $i=0\r\n" +
-                         "    If ($gw.ProvisioningState -eq 'Updating') {Write-Host '  waiting for ER gateway to finish provisioning: ' -NoNewline\r\n" +
-                         "                                               Sleep 10}\r\n" +
+                         "    If ($gw.ProvisioningState -eq 'Updating') { Write-Detail 'Waiting for ER gateway to finish provisioning...' }\r\n" +
                          "    While ($gw.ProvisioningState -eq 'Updating') {\r\n" +
                          "        $i++\r\n" +
-                         "        If ($i%6) {Write-Host '*' -NoNewline}\r\n" +
-                         "        Else {Write-Host \"$($i/6)\" -NoNewline}\r\n" +
                          "        Sleep 10\r\n" +
+                         "        if (-not ($i % 6)) { Write-Detail \"  ...still waiting ($($i/6) min elapsed)\" }\r\n" +
                          "        $gw = Get-AzVirtualNetworkGateway -Name $VNetName-gw-er -ResourceGroupName $RGName}\r\n\r\n" +
-                         "    If ($i -gt 0) {\r\n" +
-                         "        Write-Host\r\n" +
-                         "        Write-Host '  ER Gateway deployment complete'\r\n" +
-                         "        Write-Host '  building connection'\r\n" +
-                         "    }\r\n\r\n" +
+                         "    If ($i -gt 0) { Write-Detail 'ER Gateway deployment complete' }\r\n\r\n" +
                          "    If ($gw.ProvisioningState -eq 'Succeeded') {\r\n" +
                          "        $circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -Name $RGName-ER -ErrorAction Stop\r\n" +
                          "        $connection = New-AzVirtualNetworkGatewayConnection -Name $VNetName-gw-er-conn -ResourceGroupName $RGName `\r\n" +
                          "                                                            -Location $Region -VirtualNetworkGateway1 $gw -PeerId $circuit.Id `\r\n" +
-                         "                                                            -ConnectionType ExpressRoute" + (HasERFastPath ? " -ExpressRouteGatewayBypass" : "") + "}\r\n" +
-                         "    Else {Write-Warning 'An issue occured with ER gateway provisioning.'\r\n" +
-                         "          Write-Host 'Current Gateway Provisioning State' -NoNewLine\r\n" +
-                         "          Write-Host $gw.ProvisioningState}\r\n" +
+                         "                                                            -ConnectionType ExpressRoute" + (HasERFastPath ? " -ExpressRouteGatewayBypass" : "") + "\r\n" +
+                         "        Write-OK \"Created ER connection $VNetName-gw-er-conn\"}\r\n" +
+                         "    Else { Write-Fail \"ER gateway provisioning state: $($gw.ProvisioningState)\" }\r\n" +
                          "    }\r\n\r\n";
             }
 
@@ -843,37 +884,23 @@ public class ConfigGenerator
 
             // Write a happy ending
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script to End Nicely");
-            strDB += "# End nicely\r\n" +
-                     "$EndTime = Get-Date\r\n" +
-                     "$TimeDiff = New-TimeSpan $StartTime $EndTime\r\n" +
-                     "$Mins = $TimeDiff.Minutes\r\n" +
-                     "$Secs = $TimeDiff.Seconds\r\n" +
-                     "$RunTime = '{0:00}:{1:00} (M:S)' -f $Mins,$Secs\r\n" +
-                     "Write-Host (Get-Date)' - ' -NoNewline\r\n" +
-                     "Write-Host \"Script completed\" -ForegroundColor Green\r\n" +
-                     "Write-Host \"  Time to complete: $RunTime\"\r\n" +
-                     "Write-Host\r\n" +
-                     (HasVPNGateway ? "Write-Host '  VPN Tunnel and IP Information:'\r\n" : "") +
-                     (HasVPNGateway ? "Write-Host \"    Public Tunnel Endpoint 1: $($pip1.IpAddress)\"\r\n" : "") +
-                     (HasVPNGateway && HasVPNAA ? "Write-Host \"    Public Tunnel Endpoint 2: $($pip2.IpAddress)\"\r\n" : "") +
-                     (HasVPNGateway ? "Write-Host \"    BGP Peering IP Address  : $AzureBGPIP\"\r\n" : "") +
-                     (HasVPNGateway ? "Write-Host" : "") + "\r\n";
+            var summaryExtras = new List<(string, string)>();
+            if (HasVPNGateway)
+            {
+                summaryExtras.Add(("VpnPip1", "$pip1.IpAddress"));
+                if (HasVPNAA) summaryExtras.Add(("VpnPip2", "$pip2.IpAddress"));
+                summaryExtras.Add(("AzureBgpIp", "$AzureBGPIP"));
+            }
+            strDB += BuildPsSummary("CreateAzurePowerShell", summaryExtras.ToArray());
 
             // Back out script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding backout script for Azure resources");
-            var strBackout = "# Output helper: Write-Host for console color, Write-Output for runbook capture\r\n" +
-                          "$Script:IsRunbook = $null -ne $PSPrivateMetadata -and $null -ne $PSPrivateMetadata.JobId\r\n" +
-                          "function Write-Status {\r\n" +
-                          "    param([string]$Message, [string]$ForegroundColor, [switch]$NoNewline)\r\n" +
-                          "    $hostArgs = @{ Object = $Message }\r\n" +
-                          "    if ($ForegroundColor) { $hostArgs['ForegroundColor'] = $ForegroundColor }\r\n" +
-                          "    if ($NoNewline) { $hostArgs['NoNewline'] = $true }\r\n" +
-                          "    Write-Host @hostArgs\r\n" +
-                          "    if ($Script:IsRunbook -and -not $NoNewline) { Write-Output $Message }\r\n" +
-                          "}\r\n\r\n" +
+            var strBackout = BuildPsHelpersPreamble() +
                           $"$RGName='{strRGName}'\r\n" +
-                          $"$UserName='{_userEmail.Split('@')[0]}'\r\n" +
+                          $"$UserName='{strUserName}'\r\n" +
                           $"$TenantGUID='{tenant.TenantGuid}'\r\n";
+            strBackout += BuildPsHeader("Remove Azure Resources");
+            strBackout += BuildPsLoginCheck();
             if (HasERDirect)
             {
                 strBackout += "$OkToDelete = $true\r\n\r\n";
@@ -881,41 +908,41 @@ public class ConfigGenerator
             else
             {
                 strBackout += "$OkToDelete = $false\r\n\r\n" +
-                              "Write-Status \"$(Get-Date) - \" -NoNewline\r\n" +
-                              "Write-Status \"Deleting $RGName\" -ForegroundColor Cyan\r\n" +
-                              "Write-Status '  Checking ER circuit..........' -NoNewline\r\n" +
+                              "Write-Step \"Pre-delete checks for $RGName\"\r\n" +
+                              "Write-Detail 'Checking ExpressRoute circuit'\r\n" +
                               "Try {$circuit = Get-AzExpressRouteCircuit -ResourceGroupName $RGName -ErrorAction Stop}\r\n" +
-                              "Catch {Write-Status 'None found' -ForegroundColor Green\r\n" +
+                              "Catch {Write-OK 'No ER circuit found'\r\n" +
                               "       $OkToDelete = $true}\r\n\r\n" +
                               "If (-not $OkToDelete) {\r\n" +
                               "    If ($circuit.ServiceProviderProvisioningState -contains 'Provisioned') {\r\n" +
-                              "        Write-Status 'Failed' -ForegroundColor Red\r\n" +
-                              "        Write-Warning 'An ExpressRoute Circuit in this resource group is still provisioned, and as such this delete opertaion cannot continue, get this circuit into the \"Not Provisioned\" state before running this script!'\r\n" +
+                              "        Write-Fail 'An ExpressRoute Circuit in this resource group is still provisioned, and as such this delete operation cannot continue. Get this circuit into the \"Not Provisioned\" state before running this script.'\r\n" +
                               "        Return}\r\n" +
-                              "    Else {Write-Status 'NotProvisioned' -ForegroundColor Green\r\n" +
+                              "    Else {Write-OK 'ER circuit is NotProvisioned'\r\n" +
                               "          $OkToDelete = $true}\r\n" +
                               "}\r\n\r\n";
             }
-            strBackout += "Try {Write-Status '  Pulling config for archive...' -NoNewline\r\n" +
+            strBackout += "Write-Step 'Archiving resource group config'\r\n" +
+                          "Try {Write-Detail 'Pulling config for archive'\r\n" +
                           "     mkdir \"$env:TEMP\\ConfigGen\\\" -Force -ErrorAction Stop | Out-Null\r\n" +
                           "     Export-AzResourceGroup -ResourceGroupName $RGName -Path \"$env:TEMP\\ConfigGen\\$TenantGUID\" -IncludeComments -SkipAllParameterization -Force -ErrorAction Stop | Out-Null\r\n" +
-                          "     Write-Status 'Archive File Created' -ForegroundColor Green}\r\n" +
-                          "Catch {Write-Status 'Failed' -ForegroundColor Red\r\n" +
-                          "       Write-Warning 'Pulling or creating config file failed, the resource group was not found or was not deleted.'\r\n" +
+                          "     Write-OK 'Archive file created'}\r\n" +
+                          "Catch {Write-Fail 'Pulling or creating config file failed, the resource group was not found or was not deleted.'\r\n" +
                           "       Return}\r\n\r\n" +
-                          "Try {Write-Status '  Writing file to archive......' -NoNewline\r\n" +
+                          "Try {Write-Detail 'Writing archive to storage'\r\n" +
                           "     $sa = Get-AzStorageAccount -ResourceGroupName LabInfrastructure -Name labconfig\r\n" +
                           "     $ctx = $sa.Context\r\n" +
                           "     Set-AzStorageBlobContent -Context $ctx -Container archive -Blob \"$TenantGUID.json\" -File \"$env:TEMP\\ConfigGen\\$TenantGUID.json\" -Metadata @{ArchiveDate=(Get-Date -Format s);ArchiveBy=$UserName;ResourceGroup=$RGName} -Force | Out-Null\r\n" +
-                          "     Write-Status 'File saved' -ForegroundColor Green}\r\n" +
-                          "Catch {Write-Status 'Failed' -ForegroundColor Red\r\n" +
-                          "       Write-Warning 'Saving config to the archive storage account failed, the resource group was not deleted.'\r\n" +
+                          "     Write-OK 'Archive file saved to storage account'}\r\n" +
+                          "Catch {Write-Fail 'Saving config to the archive storage account failed, the resource group was not deleted.'\r\n" +
                           "       Return}\r\n\r\n" +
-                          "If ($OkToDelete) {Try {Get-AzResourceGroup -Name $RGName -ErrorAction Stop | Out-Null\r\n" +
-                          "                       Remove-AzResourceGroup -Name $RGName -Force -AsJob | Out-Null\r\n" +
-                          "                       Write-Status '  Resource group deletion requested as a job (Run Get-Job to see status)'}\r\n" +
-                          "                  Catch {Write-Warning 'Something happened and the resource group was not found or was not deleted.'}\r\n" +
+                          "If ($OkToDelete) {\r\n" +
+                          "    Write-Step \"Removing $RGName\"\r\n" +
+                          "    Try {Get-AzResourceGroup -Name $RGName -ErrorAction Stop | Out-Null\r\n" +
+                          "         Remove-AzResourceGroup -Name $RGName -Force -AsJob | Out-Null\r\n" +
+                          "         Write-OK 'Resource group deletion submitted as a background job (Run Get-Job to see status)'}\r\n" +
+                          "    Catch {Write-Fail 'Something happened and the resource group was not found or was not deleted.'}\r\n" +
                           "}\r\n\r\n";
+            strBackout += BuildPsSummary("CreateAzurePowerShell-out");
            _strDelete += "#######\r\n### Remove Azure Resources\r\n#######\r\n" + strBackout + "\r\n";
             await SaveToSql("CreateAzurePowerShell-out", tenant, strBackout);
             
