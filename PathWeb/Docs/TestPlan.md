@@ -211,6 +211,15 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6C.30 | Submit with invalid TenantGuid | Use devtools to POST `tenantGuid=00000000-...` | "Missing tenant or config type" error | | |
 | 6C.31 | Azure Automation service unavailable | Revoke Managed Identity permissions or block network | Graceful error in modal ("Automation submit failed"); no unhandled exception | | |
 | 6C.32 | Stale job ID in URL/memory | Poll status for a deleted job ID | Automation API returns error; PathWeb handles gracefully | | |
+| **Generated Script Quality (recent regressions)** | | | | | |
+| 6C.33 | Fresh deploy modal uses current DB script | Deploy to Azure once → close modal → regenerate config (so SQL content differs from the prior run) → click `Deploy to Azure` again (no `jobId` in URL) | Modal's `Prepared Script` reflects the **current** SQL config, not the previous run's `PreparedScript` | ✅ Pass | Regression covered by commit `3bac9c8` |
+| 6C.34 | History-link modal uses prior run's script | From the recent-run history list, click a specific prior run | Modal opens with `jobId` and shows that run's stored `PreparedScript` (not current SQL) | | |
+| 6C.35 | ER script — no bare `Write-Output` | Inspect generated `CreateERPowerShell` script | All `Write-Output` calls have an explicit message argument; no `Write-Output: missing InputObject` error when run | ✅ Pass | Regression covered by commit `7012918` |
+| 6C.36 | Generated script ordering | Open any generated PS script in the config page | `# Initialize` variable block appears **before** `# PathWeb output helpers`; helpers appear before the banner/login-check | ✅ Pass | Covers ER, Azure, and Azure backout scripts |
+| 6C.37 | `Write-Status` helper — manual console run | Copy a generated script → run interactively in `pwsh.exe` | Output is color-coded (cyan `Write-Step`, green `[ OK ]`, dark-gray `[SKIP]`, red `[FAIL]`); banner and final summary `[pscustomobject]` visible | | |
+| 6C.38 | `Write-Status` helper — Automation capture | Deploy via Azure Automation → open job in Azure portal → check `Output` stream | Same step/detail messages captured in Automation's Output stream (not just Verbose); final summary object visible as structured output | | |
+| 6C.39 | Login-check block stripped for Automation | Deploy to Azure → inspect `Prepared Script` in PathWeb modal | The `Try { Get-AzContext ... }` login block is removed; replaced by `Connect-AzAccount -Identity` for managed identity | ✅ Pass | Same prepared-script tab as 6C.3 |
+| 6C.40 | Backout script ordering | Open `-out` backout script (e.g., `CreateAzurePowerShell-out`) on the config page | Same ordering as live scripts: `# Initialize` first, helpers second, banner/login-check third | ✅ Pass | |
 
 ### 6D. Lab VM Actions (Create / Remove)
 
@@ -455,6 +464,14 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 | 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | | |
 | 12.9 | Validate Runbook Type — valid name | Settings → enter a known-good runtime environment name in `Automation Runbook Type` (e.g., the current `PowerShell72` or an existing custom runtime environment) → click `Validate` | Inline ✅ result: `<name> is a valid runtime environment in this Automation Account` | ✅ | |
 | 12.10 | Validate Runbook Type — invalid name | Settings → enter a bogus value (e.g., `NotARealRuntimeEnv`) in `Automation Runbook Type` → click `Validate` | Inline ❌ result: `<name> was not found...`, followed by a bulleted list of available runtime environments returned from the configured Automation Account | ✅ | |
+| 12.11 | Logging change takes effect immediately | Set `Logging:Default` = `Error`, remove all overrides → Save → trigger an `Information` log (e.g., navigate to `/Devices`) → check `/Logs` | New `Information` rows for `PathWeb.*` categories stop appearing within seconds (no 60-second wait); `Error` and above still recorded | | |
+| 12.12 | Logging override takes effect immediately | With `Default = Error`, add override `PathWeb.Controllers.DevicesController` = `Information` → Save → navigate to `/Devices` | `Information` logs for `DevicesController` start appearing in `/Logs` on the very next request | | |
+| 12.13 | View Available Categories — modal opens | Settings → click `View Available Categories` | Bootstrap modal opens with Prefix Overrides, per-namespace category groups, and a muted "Filtered Out" section | | |
+| 12.14 | View Available Categories — prefix list | Inspect Prefix Overrides section in the modal | Lists `PathWeb` plus each detected namespace group (e.g., `PathWeb.Controllers`, `PathWeb.Services`); sorted alphabetically | | |
+| 12.15 | View Available Categories — concrete categories | Inspect the namespace-grouped sections | Each section lists full type names (e.g., `PathWeb.Controllers.DevicesController`) for classes that inject `ILogger<T>`; alphabetical within group | | |
+| 12.16 | View Available Categories — excluded prefixes | Inspect the "Filtered Out" section | Lists `Microsoft.AspNetCore`, `Microsoft.EntityFrameworkCore`, `Microsoft.Hosting`, `Microsoft.Extensions`, `System.Net.Http` with a note that overrides for them have no effect | | |
+| 12.17 | View Available Categories — read-only for view-only role | Log in as Site Admin Read-Only (level 12–13) → Settings → open modal | Modal still opens and shows the full catalog; Save button on Settings remains disabled | | |
+| 12.18 | View Available Categories — used as override input | Copy a category from the modal → paste into the Category field of a new override row → Save | Override saves and applies on next log call (validates the modal value is a true category match) | | |
 
 ---
 
@@ -499,23 +516,28 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 | 15.2 | Warmup script | Run `Warmup.ps1` post-deploy | All warmup URLs return 200; EF Core queries pre-compiled | | |
 | 15.3 | Build timestamp after deploy | Check `/health` and footer | Both show same/consistent build timestamp | | |
 | 15.4 | First request after cold start | Restart App Service → first page load | Page loads (may be slow but no errors); warmup queries already cached | | |
+| 15.5 | Quick deploy — no overlapping `/warmup` calls | Run `quick-deploy.ps1` and watch the warmup loop output | Loop issues one `/warmup` at a time (90s timeout each), waits 5–10s between attempts, caps at 10 attempts; no parallel overlapping calls that previously caused worker stalls | | Regression fix for the 504/GatewayTimeout pile-up after deploy |
+| 15.6 | Quick deploy — site responsive after script returns | Immediately after `quick-deploy.ps1` reports success, hit `/health` and an authenticated page | `/health` returns 200 in < 1s; an authenticated page responds normally (no extended worker hang) | | |
+| 15.7 | App Service Health Check path set | After `deploy-to-azure.ps1` (or via ARM): `GET .../config/web` | `properties.healthCheckPath` equals `/health` | ✅ Pass | Applied live via ARM PATCH in commit `62d9616` follow-up |
+| 15.8 | Health Check probe behavior | Force-stall the worker (e.g., long-running request) and watch App Service health pings | Platform pings `/health`; when probes fail repeatedly, App Service marks instance unhealthy and (with multiple instances) takes it out of rotation | | |
+| 15.9 | `deploy-to-azure.ps1` is idempotent for Health Check | Run `deploy-to-azure.ps1` twice in a row | Second run does not error on the Health Check step; `healthCheckPath` remains `/health` | | |
 
 ---
 
 ## Summary
 
-**Total Test Cases: 288**
+**Total Test Cases: 309**
 
 ### Current Status
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 130 | 45.1% |
-| ❌ Fail | 9 | 3.1% |
-| ⏭️ Skipped | 4 | 1.4% |
-| Not tested | 145 | 50.3% |
+| ✅ Pass | 136 | 44.0% |
+| ❌ Fail | 9 | 2.9% |
+| ⏭️ Skipped | 4 | 1.3% |
+| Not tested | 160 | 51.8% |
 
-- **Tested:** 139 / 288 (48.3%)
-- **Pass rate (of tested):** 130 / 139 (93.5%)
+- **Tested:** 149 / 309 (48.2%)
+- **Pass rate (of tested):** 136 / 149 (91.3%)
 
-_Last updated: 2026-05-02_
+_Last updated: 2026-06-17_
