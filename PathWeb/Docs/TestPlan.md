@@ -447,11 +447,11 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 |---|-----------|-------|-----------------|-----------|-------|
 | 12.1 | Settings page loads | Admin → Settings | Page shows Auto Delete Runbooks toggle and Automation Runbook Type field | ✅ | |
 | 12.2 | Toggle Auto Delete Runbooks | Flip the toggle → Save | Value persists in SQL `Settings` table (`AutoDeleteRunbook`) | ✅ | |
-| 12.3 | Change Automation Runbook Type | Change value → Save | Value persists (`AutomationRunbookType`); next runbook creation uses new type | | |
-| 12.4 | Logging:Default level | Change default log level → Save | DB logger adjusts; verify by checking what appears in Logs page | | |
-| 12.5 | Add logging category override | Add `Logging:Microsoft.EntityFrameworkCore` = `Warning` | EF Core debug/info logs suppressed; category-specific override active | | |
-| 12.6 | Hierarchical subcategory matching | Set `Logging:PathWeb` = `Debug` | All `PathWeb.*` subcategories inherit Debug level | | |
-| 12.7 | Remove logging override | Delete a category override → Save | Falls back to `Logging:Default` for that category | | |
+| 12.3 | Change Automation Runbook Type | Change value → Save | Value persists (`AutomationRunbookType`); next runbook creation uses new type | ✅ | |
+| 12.4 | Logging:Default level | Change default log level → Save | DB logger adjusts; verify by checking what appears in Logs page | ✅ | |
+| 12.5 | Add logging category override | Add `Logging:Microsoft.EntityFrameworkCore` = `Warning` | EF Core debug/info logs suppressed; category-specific override active | ✅ | |
+| 12.6 | Hierarchical subcategory matching | Set `Logging:PathWeb` = `Debug` | All `PathWeb.*` subcategories inherit Debug level | ✅ | |
+| 12.7 | Remove logging override | Delete a category override → Save | Falls back to `Logging:Default` for that category | ⏭️ | |
 | 12.8 | Auth gating — level < 14 blocked | Log in as auth level 11 → navigate to `/Settings` directly | PermissionError view shown | | |
 | 12.9 | Validate Runbook Type — valid name | Settings → enter a known-good runtime environment name in `Automation Runbook Type` (e.g., the current `PowerShell72` or an existing custom runtime environment) → click `Validate` | Inline ✅ result: `<name> is a valid runtime environment in this Automation Account` | ✅ | |
 | 12.10 | Validate Runbook Type — invalid name | Settings → enter a bogus value (e.g., `NotARealRuntimeEnv`) in `Automation Runbook Type` → click `Validate` | Inline ❌ result: `<name> was not found...`, followed by a bulleted list of available runtime environments returned from the configured Automation Account | ✅ | |

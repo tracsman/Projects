@@ -18,12 +18,14 @@ public class SettingsService
 
     private readonly LabConfigContext _context;
     private readonly IMemoryCache _cache;
+    private readonly DbLoggerProvider _dbLoggerProvider;
     private readonly ILogger<SettingsService> _logger;
 
-    public SettingsService(LabConfigContext context, IMemoryCache cache, ILogger<SettingsService> logger)
+    public SettingsService(LabConfigContext context, IMemoryCache cache, DbLoggerProvider dbLoggerProvider, ILogger<SettingsService> logger)
     {
         _context = context;
         _cache = cache;
+        _dbLoggerProvider = dbLoggerProvider;
         _logger = logger;
     }
 
@@ -138,6 +140,10 @@ public class SettingsService
         };
 
         _cache.Set(LoggingSettingsCacheKey, snapshot, TimeSpan.FromMinutes(1));
+        // Force DbLoggerProvider to reload its in-process snapshot on the next
+        // IsEnabled call so the new default level / overrides take effect right
+        // away instead of waiting up to SettingsRefreshInterval.
+        _dbLoggerProvider.InvalidateLoggingSettings();
         _logger.LogInformation("Logging settings saved. Default={DefaultLevel}, Overrides={OverrideCount}", normalizedDefault, normalizedOverrides.Count);
     }
 

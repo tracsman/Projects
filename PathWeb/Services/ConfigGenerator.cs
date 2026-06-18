@@ -320,11 +320,8 @@ public class ConfigGenerator
                 string strProvider = (tenant.EruplinkPort == "ECX") ? "Equinix" : "";
                 string strUserName = _userEmail.Split('@')[0];
 
-                // Output helpers + header
-                strDB = BuildPsHelpersPreamble();
-
                 // Set Variables
-                strDB += "# Initialize\r\n" +
+                strDB = "# Initialize\r\n" +
                          $"$RGName = '{strRGName}'\r\n" +
                          $"$UserName = '{strUserName}'\r\n" +
                          $"$Region = '{tenant.AzureRegion}'\r\n" +
@@ -337,6 +334,9 @@ public class ConfigGenerator
                          $"$RGTagContact = '{tenant.Contacts}'\r\n" +
                          $"$RGTagNinja = '{tenant.NinjaOwner}'\r\n" +
                          $"$RGTagUsage = '{tenant.Usage.Substring(0, Math.Min(tenant.Usage.Length, 253))}'\r\n\r\n";
+
+                // Output helpers (declared after variables so Initialize sits at the top of the file)
+                strDB += BuildPsHelpersPreamble();
 
                 strDB += BuildPsHeader("Create ExpressRoute");
                 strDB += BuildPsLoginCheck();
@@ -473,9 +473,8 @@ public class ConfigGenerator
             // 2. Generate PowerShell script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Creating Azure PowerShell");
             string strUserName = _userEmail.Split('@')[0];
-            // Output helpers + variables (StartTime set inside BuildPsHeader)
-            strDB = BuildPsHelpersPreamble();
-            strDB += "# Initialize\r\n" +
+            // Initialize variables first so the script header is readable; helpers are emitted just below.
+            strDB = "# Initialize\r\n" +
                     $"$TenantID = '{tenant.TenantId}'\r\n" +
                     $"$RGName = '{strRGName}'\r\n" +
                     $"$UserName = '{strUserName}'\r\n" +
@@ -542,6 +541,9 @@ public class ConfigGenerator
                      "While ($password -cnotmatch $RegEx)\r\n\r\n" +
                      "$securePassword = ConvertTo-SecureString $password -AsPlainText -Force\r\n" +
                      "$KeyVaultAccessList = " + String.Join(",", lstContacts) + "\r\n\r\n";
+
+            // Output helpers (declared after Initialize so the variable block sits at the top of the file)
+            strDB += BuildPsHelpersPreamble();
 
             // Header + Login Check
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding script for Header and Login Check");
@@ -895,10 +897,11 @@ public class ConfigGenerator
 
             // Back out script
             _logger.LogDebug("{Method}: {Msg}", "AppLogic.GenerateAzureConfig", "Adding backout script for Azure resources");
-            var strBackout = BuildPsHelpersPreamble() +
+            var strBackout = "# Initialize\r\n" +
                           $"$RGName='{strRGName}'\r\n" +
                           $"$UserName='{strUserName}'\r\n" +
                           $"$TenantGUID='{tenant.TenantGuid}'\r\n";
+            strBackout += BuildPsHelpersPreamble();
             strBackout += BuildPsHeader("Remove Azure Resources");
             strBackout += BuildPsLoginCheck();
             if (HasERDirect)

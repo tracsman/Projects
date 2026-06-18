@@ -118,6 +118,7 @@
 ### Infrastructure / DevOps
 
 - [ ] **Storage access for post-install VM scripts** — Post-SFI: investigate whether the App Service Managed Identity can access the Scripts storage account directly, and pass credentials/SAS to VMs during provisioning
+- [ ] **Click-to-add from "View Available Categories" modal (low priority)** — In the Settings page logging modal, make each `<code>` category entry clickable so it adds a new row to the Logging Category Overrides table pre-populated with the chosen category and the current Default Level. Suppress the action (and visually mark the entry) if a row for that exact category already exists in the table so duplicates are never created. Keep the prefix overrides (`PathWeb`, `PathWeb.Controllers`, etc.) clickable too, and skip the "Filtered Out" section since those cannot be enabled.
 
 ### Runbook Output Hygiene
 

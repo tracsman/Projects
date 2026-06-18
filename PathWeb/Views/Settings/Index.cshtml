@@ -90,10 +90,13 @@
             <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                     <label class="form-label fw-semibold mb-0">Logging Category Overrides</label>
-                    @if (Model.CanEdit)
-                    {
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="addLoggingOverrideBtn">Add Override</button>
-                    }
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#loggingCategoriesModal">View Available Categories</button>
+                        @if (Model.CanEdit)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="addLoggingOverrideBtn">Add Override</button>
+                        }
+                    </div>
                 </div>
 
                 <div class="table-responsive">
@@ -160,6 +163,62 @@
                 <a asp-controller="Home" asp-action="Index" class="btn btn-secondary">Back to Home</a>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="modal fade" id="loggingCategoriesModal" tabindex="-1" aria-labelledby="loggingCategoriesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loggingCategoriesModalLabel">Available Logging Categories</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-body-secondary">
+                    Use any of these values in the <strong>Category</strong> column of a logging override. The most specific match wins, so a longer category name takes precedence over a shorter prefix.
+                </p>
+
+                @if (Model.LoggingCategoryCatalog.PrefixOverrides.Count > 0)
+                {
+                    <h6 class="fw-semibold mt-3">Prefix Overrides (apply to everything beneath)</h6>
+                    <ul class="list-unstyled mb-3">
+                        @foreach (var prefix in Model.LoggingCategoryCatalog.PrefixOverrides)
+                        {
+                            <li><code>@prefix</code></li>
+                        }
+                    </ul>
+                }
+
+                @foreach (var group in Model.LoggingCategoryCatalog.Groups)
+                {
+                    <h6 class="fw-semibold mt-3">@group.GroupName</h6>
+                    <ul class="list-unstyled mb-3">
+                        @foreach (var category in group.Categories)
+                        {
+                            <li><code>@category</code></li>
+                        }
+                    </ul>
+                }
+
+                @if (Model.LoggingCategoryCatalog.ExcludedPrefixes.Count > 0)
+                {
+                    <hr />
+                    <h6 class="fw-semibold text-body-secondary">Filtered Out (cannot be enabled by override)</h6>
+                    <p class="small text-body-secondary mb-1">
+                        These framework categories are dropped before the override map is consulted, so adding an override for them has no effect.
+                    </p>
+                    <ul class="list-unstyled mb-0">
+                        @foreach (var excluded in Model.LoggingCategoryCatalog.ExcludedPrefixes)
+                        {
+                            <li><code>@excluded</code></li>
+                        }
+                    </ul>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
 </div>
 

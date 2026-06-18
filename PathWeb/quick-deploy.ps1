@@ -92,29 +92,38 @@ Write-Step "Restarting $WebAppName..."
 Restart-AzWebApp -ResourceGroupName $ResourceGroup -Name $WebAppName | Out-Null
 Write-Success "Restart initiated"
 
-# Wait for the NEW build to be live (compare build timestamps)
+# Wait for the NEW build to be live (compare build timestamps).
+# Important: use a generous per-attempt timeout (90s) and let each call complete
+# before issuing the next one. Earlier versions used a 30s timeout in a 5s loop,
+# which on Basic SKU + cold SQL connection pool produced multiple overlapping
+# /warmup calls (each runs ~30 EF queries), saturating the single worker and
+# stalling even AllowAnonymous endpoints like /health for several minutes.
 Write-Step "Waiting for new build ($buildTime) to come online..."
 $ready = $false
-for ($i = 1; $i -le 60; $i++) {
+$maxAttempts = 10
+for ($i = 1; $i -le $maxAttempts; $i++) {
     try {
-        $response = Invoke-WebRequest -Uri "$appUrl/warmup" -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
+        $response = Invoke-WebRequest -Uri "$appUrl/warmup" -TimeoutSec 90 -UseBasicParsing -ErrorAction Stop
         $warmup = $response.Content | ConvertFrom-Json
         if ($warmup.build -eq $buildTime) {
             Write-Host ""
-            Write-Success "New build is live! (build: $($warmup.build), db: $($warmup.dbMs)ms)"
+            Write-Success "New build is live! (build: $($warmup.build), db: $($warmup.dbMs)ms, attempt $i)"
             $ready = $true
             break
         } else {
+            # Old build is still answering; the swap hasn't completed yet.
             Write-Host "." -NoNewline
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 10
         }
     } catch {
+        # Timeout or error - wait briefly before the next attempt so we never
+        # have two overlapping /warmup requests against the cold worker.
         Write-Host "." -NoNewline
         Start-Sleep -Seconds 5
     }
 }
 if (-not $ready) {
-    Write-Info "New build did not appear after 5 minutes. Current build may still be swapping in."
+    Write-Info "New build did not appear after $maxAttempts attempts (~15 min worst case). Current build may still be swapping in."
 }
 
 Write-Step "Compiling MVC/Razor views..."

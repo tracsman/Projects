@@ -35,6 +35,8 @@ builder.Services.AddScoped<LogicAppService>();
 builder.Services.Configure<AutomationOptions>(builder.Configuration.GetSection("Automation"));
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<AutomationService>();
+builder.Services.AddSingleton<LoggingCategoryDiscovery>();
+builder.Services.AddSingleton<DbLoggerProvider>();
 
 // Register memory cache for field help tooltips
 builder.Services.AddMemoryCache();
@@ -106,11 +108,11 @@ else
 
 var app = builder.Build();
 
-// Register the database logger provider (must happen after Build so DI is available)
+// Register the database logger provider (must happen after Build so DI is available).
+// We resolve the singleton DbLoggerProvider from DI so SettingsService can grab the
+// same instance and invalidate its in-process snapshot when the Settings page saves.
 app.Services.GetRequiredService<ILoggerFactory>()
-    .AddProvider(new DbLoggerProvider(
-        app.Services.GetRequiredService<IServiceScopeFactory>(),
-        app.Services.GetRequiredService<IHttpContextAccessor>()));
+    .AddProvider(app.Services.GetRequiredService<DbLoggerProvider>());
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

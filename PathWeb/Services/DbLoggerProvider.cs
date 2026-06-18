@@ -16,12 +16,11 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
 {
     private static readonly TimeSpan SettingsRefreshInterval = TimeSpan.FromMinutes(1);
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ConcurrentQueue<AppLog> _queue = new();
-    private readonly Timer _flushTimer;
-    private readonly object _settingsLock = new();
-    private readonly HashSet<string> _excludedPrefixes =
+    /// <summary>
+    /// Category prefixes that are unconditionally suppressed from the SQL log.
+    /// Exposed so the Settings UI can show users which categories cannot be overridden.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ExcludedPrefixes =
     [
         "Microsoft.AspNetCore",
         "Microsoft.EntityFrameworkCore",
@@ -29,6 +28,13 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
         "Microsoft.Extensions",
         "System.Net.Http"
     ];
+
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ConcurrentQueue<AppLog> _queue = new();
+    private readonly Timer _flushTimer;
+    private readonly object _settingsLock = new();
+    private readonly HashSet<string> _excludedPrefixes = new(ExcludedPrefixes, StringComparer.OrdinalIgnoreCase);
     private LoggingSettingsSnapshot _loggingSettings = new();
     private DateTime _loggingSettingsLoadedUtc = DateTime.MinValue;
 
@@ -89,6 +95,20 @@ public sealed class DbLoggerProvider : ILoggerProvider, IDisposable
         var settings = GetLoggingSettings();
         var minimumLevel = ResolveMinimumLevel(settings, categoryName);
         return minimumLevel != LogLevel.None && logLevel >= minimumLevel;
+    }
+
+    /// <summary>
+    /// Forces the next IsEnabled call to reload settings from SQL. Invoked by
+    /// SettingsService after the Settings page saves a new default level or
+    /// override set so the change takes effect immediately instead of waiting
+    /// up to SettingsRefreshInterval.
+    /// </summary>
+    public void InvalidateLoggingSettings()
+    {
+        lock (_settingsLock)
+        {
+            _loggingSettingsLoadedUtc = DateTime.MinValue;
+        }
     }
 
     private static string TrimToLength(string value, int maxLength) =>

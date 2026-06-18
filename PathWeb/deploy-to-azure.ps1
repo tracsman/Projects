@@ -315,6 +315,24 @@ try {
     Write-Error "Failed to configure Always On: $_"
 }
 
+# Configure Health Check path so App Service knows when the worker is responsive.
+# /health is AllowAnonymous, returns immediately, and is excluded from Easy Auth,
+# so the platform can probe it without auth context. Helps with restart sequencing
+# and surfaces unresponsive workers earlier than a full SLA window.
+Write-Step "Configuring Health Check path (/health)..."
+try {
+    $healthUri = "/subscriptions/$($context.Subscription.Id)/resourceGroups/$ResourceGroup/providers/Microsoft.Web/sites/$WebAppName/config/web?api-version=2024-04-01"
+    $healthBody = @{ properties = @{ healthCheckPath = "/health" } } | ConvertTo-Json -Depth 5
+    $healthResp = Invoke-AzRestMethod -Method PATCH -Uri $healthUri -Payload $healthBody
+    if ($healthResp.StatusCode -ge 200 -and $healthResp.StatusCode -lt 300) {
+        Write-Success "Health Check path set to /health"
+    } else {
+        Write-Info "Health Check PATCH returned $($healthResp.StatusCode): $($healthResp.Content)"
+    }
+} catch {
+    Write-Error "Failed to configure Health Check path: $_"
+}
+
 # Configure Linux runtime stack for .NET 10
 Write-Step "Configuring .NET 10 runtime stack..."
 try {

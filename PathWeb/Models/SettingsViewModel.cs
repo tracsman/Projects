@@ -10,5 +10,7 @@ public class SettingsViewModel
 
     public List<LoggingOverrideViewModel> LoggingOverrides { get; set; } = [];
 
+    public LoggingCategoryCatalog LoggingCategoryCatalog { get; set; } = new();
+
     public bool CanEdit { get; set; }
 }

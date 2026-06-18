@@ -8,12 +8,14 @@ public class SettingsController : BaseController
 {
     private readonly SettingsService _settingsService;
     private readonly AutomationService _automationService;
+    private readonly LoggingCategoryDiscovery _loggingCategoryDiscovery;
     private readonly ILogger<SettingsController> _logger;
 
-    public SettingsController(SettingsService settingsService, AutomationService automationService, ILogger<SettingsController> logger)
+    public SettingsController(SettingsService settingsService, AutomationService automationService, LoggingCategoryDiscovery loggingCategoryDiscovery, ILogger<SettingsController> logger)
     {
         _settingsService = settingsService;
         _automationService = automationService;
+        _loggingCategoryDiscovery = loggingCategoryDiscovery;
         _logger = logger;
     }
 
@@ -34,6 +36,7 @@ public class SettingsController : BaseController
                 .OrderBy(kvp => kvp.Key)
                 .Select(kvp => new LoggingOverrideViewModel { Category = kvp.Key, Level = kvp.Value })
                 .ToList(),
+            LoggingCategoryCatalog = _loggingCategoryDiscovery.GetCatalog(),
             CanEdit = GetAuthLevel() >= (byte)AuthLevels.SiteAdmin
         };
 
@@ -69,6 +72,7 @@ public class SettingsController : BaseController
         if (!ModelState.IsValid)
         {
             model.CanEdit = true;
+            model.LoggingCategoryCatalog = _loggingCategoryDiscovery.GetCatalog();
             return View(model);
         }
 
