@@ -98,7 +98,7 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 5.7 | Search filter | Enter a lab name in search box → search | Only matching tenants shown | ✅ | |
 | 5.8 | Search — no results | Enter gibberish search string | Empty table with appropriate message | ❌ | Add "No tenants found." |
 | 5.9 | Show released tenants | Toggle "Show Released" | Table shows tenants with non-null DeletedDate | ✅ | |
-| 5.10 | Pagination (released) | If >50 released tenants, click page 2 | Second page of results loads | | |
+| 5.10 | Pagination (released) | If >50 released tenants, click page 2 | Second page of results loads | ✅ | |
 | 5.11 | Create tenant 🔒8 | Click Create New → fill form → Save | Redirected to Details with new tenant; TenantId auto-assigned | ❌ | Record created but ADO work item not created |
 | 5.12 | Create — validation errors | Leave required fields blank → Save | Inline validation errors; no save | ✅ | |
 | 5.13 | View tenant Details | Click a tenant row | Details page shows all fields | ✅ | |

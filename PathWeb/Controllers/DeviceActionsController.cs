@@ -49,14 +49,13 @@ public class DeviceActionsController : BaseController
         var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
 
-        var command = PlatformDetector.GetShowCommand(platform, searchPattern);
-        if (command == null)
+        if (PlatformDetector.GetShowCommand(platform, searchPattern) == null)
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
 
         _logger.LogInformation("VerifyOffDevice: {Device} ({Host}) searching for '{Pattern}' by {User}",
             configType, device.MgmtIpv4, searchPattern, GetUserEmail());
 
-        var (sshSuccess, output) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, command);
+        var (sshSuccess, output) = await PullDeviceConfigAsync(device.MgmtIpv4, platform, searchPattern);
         if (!sshSuccess)
             return Json(new { success = false, output = $"SSH failed: {output}" });
 
@@ -105,14 +104,13 @@ public class DeviceActionsController : BaseController
         var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
 
-        var command = PlatformDetector.GetShowCommand(platform, searchPattern);
-        if (command == null)
+        if (PlatformDetector.GetShowCommand(platform, searchPattern) == null)
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
 
         _logger.LogInformation("CompareToDevice: {Device} ({Host}) comparing config by {User}",
             configType, device.MgmtIpv4, GetUserEmail());
 
-        var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, command);
+        var (sshSuccess, sshOutput) = await PullDeviceConfigAsync(device.MgmtIpv4, platform, searchPattern);
         if (!sshSuccess)
             return Json(new { success = false, output = $"SSH failed: {sshOutput}" });
 
@@ -172,8 +170,7 @@ public class DeviceActionsController : BaseController
 
         var platform = PlatformDetector.DetectPlatform(configType);
         var searchPattern = $"Cust{tenant.TenantId}";
-        var showCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
-        if (showCommand == null)
+        if (PlatformDetector.GetShowCommand(platform, searchPattern) == null)
         {
             var applyRun = await RecordDeviceActionRunAsync(tenantGuid, configType, "Apply", false, "Apply Failed", $"Unknown platform for device '{configType}'.");
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'.", applyRun });
@@ -203,7 +200,7 @@ public class DeviceActionsController : BaseController
         {
             try
             {
-                var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(host, 22, showCommand);
+                var (sshSuccess, sshOutput) = await PullDeviceConfigAsync(host, platform, searchPattern);
                 if (!sshSuccess)
                 {
                     await CompleteRunAsync(run, false, "Apply Failed", $"SSH failed during comparison: {sshOutput}");
@@ -293,8 +290,7 @@ public class DeviceActionsController : BaseController
 
         var platform = PlatformDetector.DetectPlatform(configType);
         var searchPattern = $"Cust{tenant.TenantId}";
-        var showCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
-        if (showCommand == null)
+        if (PlatformDetector.GetShowCommand(platform, searchPattern) == null)
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
 
         var runId = $"patch-{configType}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
@@ -321,7 +317,7 @@ public class DeviceActionsController : BaseController
         {
             try
             {
-                var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(host, 22, showCommand);
+                var (sshSuccess, sshOutput) = await PullDeviceConfigAsync(host, platform, searchPattern);
                 if (!sshSuccess)
                 {
                     await CompleteRunAsync(run, false, "Patch Failed", $"SSH failed during comparison: {sshOutput}");
@@ -541,6 +537,67 @@ public class DeviceActionsController : BaseController
             actionType = run.ActionType,
             deviceName = configType
         });
+    }
+
+    /// <summary>
+    /// Runs the platform-appropriate show/match command against the device, then — on Juniper —
+    /// discovers every `set interfaces &lt;intf&gt; unit &lt;N&gt;` unit stanza referenced in that
+    /// first pass and pulls all *set* lines under those exact unit stanzas so attribute lines
+    /// (`vlan-tags outer …`, `family inet address …`, etc.) that don't literally contain the
+    /// `Cust{id}` marker are still returned. Prevents diff false-positives where the description
+    /// line matches but the sibling attribute lines look "missing from device" even though they
+    /// are present. Cisco is unaffected because parent-stanza context is reconstructed later by
+    /// <see cref="BuildCiscoAddLines"/>.
+    /// </summary>
+    private async Task<(bool Success, string Output)> PullDeviceConfigAsync(
+        string host, string platform, string searchPattern)
+    {
+        var initialCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
+        if (initialCommand == null)
+            return (false, $"Unknown platform '{platform}'.");
+
+        var (ok, initial) = await _sshService.RunCommandAsync(host, 22, initialCommand);
+        if (!ok)
+            return (false, initial);
+
+        if (platform != "Juniper")
+            return (true, initial);
+
+        // Discover every unique `set interfaces <intf> unit <N>` prefix in the first pass output.
+        var unitPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unitRegex = new System.Text.RegularExpressions.Regex(
+            @"^\s*set\s+interfaces\s+(\S+)\s+unit\s+(\d+)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (var raw in initial.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var m = unitRegex.Match(raw);
+            if (m.Success)
+                unitPrefixes.Add($"set interfaces {m.Groups[1].Value} unit {m.Groups[2].Value}");
+        }
+
+        if (unitPrefixes.Count == 0)
+            return (true, initial);
+
+        // Second pass: for each discovered unit, fetch all set lines under that exact stanza.
+        // Anchor with `^` and require a trailing space so `unit 50` won't match `unit 500`.
+        var sb = new System.Text.StringBuilder(initial);
+        if (!initial.EndsWith('\n')) sb.Append('\n');
+
+        foreach (var prefix in unitPrefixes)
+        {
+            var escaped = prefix.Replace("/", @"\/");
+            var cmd = $"show configuration | display set | match \"^{escaped} \"";
+            var (subOk, subOut) = await _sshService.RunCommandAsync(host, 22, cmd);
+            if (!subOk)
+            {
+                _logger.LogWarning("Juniper unit-stanza pull failed for '{Prefix}' on {Host}: {Err}", prefix, host, subOut);
+                continue;
+            }
+            sb.Append(subOut);
+            if (!subOut.EndsWith('\n')) sb.Append('\n');
+        }
+
+        return (true, sb.ToString());
     }
 
     private static HashSet<string> NormalizeConfigLines(string text, string platform)
