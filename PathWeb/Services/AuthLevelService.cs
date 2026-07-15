@@ -50,7 +50,7 @@ public class AuthLevelService
             }
 
             _logger.LogDebug("User '{UserName}' has AuthLevel {AuthLevel}", userName, user.AuthLevel);
-            _cache.Set(cacheKey, user.AuthLevel, TimeSpan.FromMinutes(1)); // Reduced from 5 min for testing — restore to 5 when done
+            _cache.Set(cacheKey, user.AuthLevel, TimeSpan.FromMinutes(5));
             return user.AuthLevel;
         }
         catch (Exception ex)
