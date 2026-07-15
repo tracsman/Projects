@@ -573,24 +573,61 @@ public class ConfigGenerator
                      "Else {Write-Skip \"$kvName already exists\"}\r\n" +
                      "$kvScope = (Get-AzKeyVault -VaultName $kvName -ResourceGroupName $RGName).ResourceId\r\n\r\n" +
                      "Write-Step 'Key Vault RBAC'\r\n" +
+                     "# Grant the caller (identity running this script) Secrets Officer so the secret write below succeeds\r\n" +
+                     "$ctx = Get-AzContext\r\n" +
+                     "$callerId = $null\r\n" +
+                     "If ($ctx.Account.Type -eq 'User') {\r\n" +
+                     "    $callerObj = Get-AzADUser -Mail $ctx.Account.Id -ErrorAction SilentlyContinue | Select-Object -First 1\r\n" +
+                     "    If ($null -eq $callerObj) {$callerObj = Get-AzADUser -UserPrincipalName $ctx.Account.Id -ErrorAction SilentlyContinue | Select-Object -First 1}\r\n" +
+                     "    If ($null -eq $callerObj) {$callerObj = Get-AzADUser -SignInName $ctx.Account.Id -ErrorAction SilentlyContinue | Select-Object -First 1}\r\n" +
+                     "    If ($null -ne $callerObj) {$callerId = $callerObj.Id}\r\n" +
+                     "} Else {\r\n" +
+                     "    # ServicePrincipal or ManagedService: Account.Id is the App/Client ID\r\n" +
+                     "    $callerObj = Get-AzADServicePrincipal -ApplicationId $ctx.Account.Id -ErrorAction SilentlyContinue | Select-Object -First 1\r\n" +
+                     "    If ($null -ne $callerObj) {$callerId = $callerObj.Id}\r\n" +
+                     "}\r\n" +
+                     "If ($null -eq $callerId) {\r\n" +
+                     "    Write-Warning \"Could not resolve caller principal ($($ctx.Account.Type):$($ctx.Account.Id)); secret write may fail\"}\r\n" +
+                     "Else {Write-Detail \"Caller: $($ctx.Account.Type) $($ctx.Account.Id)\"\r\n" +
+                     "      If ((Get-AzRoleAssignment -ObjectId $callerId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue).Count -gt 0) {\r\n" +
+                     "          Write-Skip \"Caller already has Key Vault Secrets Officer on $kvName\"}\r\n" +
+                     "      Else {New-AzRoleAssignment -ObjectId $callerId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue | Out-Null\r\n" +
+                     "            Write-OK \"Granted Key Vault Secrets Officer to caller on $kvName\"}}\r\n" +
                      "ForEach ($User in $KeyVaultAccessList.Split(';')) {\r\n" +
                      "    $User = $User.Trim()\r\n" +
                      "    Write-Detail \"Adding $User\"\r\n" +
-                     "    $userId = (Get-AzADUser -UserPrincipalName $User).Id\r\n" +
-                     "    New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue | Out-Null\r\n" +
-                     "    If ((Get-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName -ErrorAction Stop).Count -gt 0) {\r\n" +
+                     "    # Resolve principal: try Mail first (works for guests), then UPN, then otherMails\r\n" +
+                     "    $userObj = Get-AzADUser -Mail $User -ErrorAction SilentlyContinue | Select-Object -First 1\r\n" +
+                     "    If ($null -eq $userObj) {\r\n" +
+                     "        $userObj = Get-AzADUser -UserPrincipalName $User -ErrorAction SilentlyContinue | Select-Object -First 1}\r\n" +
+                     "    If ($null -eq $userObj) {\r\n" +
+                     "        $userObj = Get-AzADUser -Filter \"otherMails/any(m:m eq '$User')\" -ErrorAction SilentlyContinue | Select-Object -First 1}\r\n" +
+                     "    If ($null -eq $userObj) {\r\n" +
+                     "        Write-Warning \"Could not resolve principal for $User, skipping RBAC assignment\"\r\n" +
+                     "        Continue}\r\n" +
+                     "    $userId = $userObj.Id\r\n" +
+                     "    If ((Get-AzRoleAssignment -ObjectId $userId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue).Count -gt 0) {\r\n" +
+                     "        Write-Skip \"$User already has Key Vault Secrets Officer on $kvName\"}\r\n" +
+                     "    Else {New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope -ErrorAction SilentlyContinue | Out-Null\r\n" +
+                     "          Write-OK \"Granted Key Vault Secrets Officer to $User on $kvName\"}\r\n" +
+                     "    If ((Get-AzRoleAssignment -ObjectId $userId -RoleDefinitionName Contributor -ResourceGroupName $RGName -ErrorAction SilentlyContinue).Count -gt 0) {\r\n" +
                      "        Write-Skip \"$User already has Contributor on $RGName\"}\r\n" +
-                     "    Else {New-AzRoleAssignment -SignInName $User -RoleDefinitionName Contributor -ResourceGroupName $RGName | Out-Null\r\n" +
+                     "    Else {New-AzRoleAssignment -ObjectId $userId -RoleDefinitionName Contributor -ResourceGroupName $RGName -ErrorAction SilentlyContinue | Out-Null\r\n" +
                      "          Write-OK \"Granted Contributor to $User on $RGName\"}\r\n" +
                      "}\r\n\r\n" +
                      "Write-Step 'Key Vault Secret'\r\n" +
                      "$kvs = Get-AzKeyVaultSecret -VaultName $kvName -Name $username -ErrorAction SilentlyContinue\r\n" +
-                     "If ($kvs -eq $null) {Try {Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null\r\n" +
-                     "                          Write-OK \"Stored secret $username in $kvName\"}\r\n" +
-                     "                     Catch {Write-Detail 'RBAC propagating, waiting 15 seconds and trying again'\r\n" +
-                     "                            Sleep -Seconds 15\r\n" +
-                     "                            Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null\r\n" +
-                     "                            Write-OK \"Stored secret $username in $kvName\"}}\r\n" +
+                     "If ($kvs -eq $null) {\r\n" +
+                     "    $stored = $false\r\n" +
+                     "    ForEach ($wait in 0,15,15,30,30,30) {\r\n" +
+                     "        If ($wait -gt 0) {Write-Detail \"RBAC propagating, waiting $wait seconds and trying again\"; Sleep -Seconds $wait}\r\n" +
+                     "        Try {Set-AzKeyVaultSecret -VaultName $kvName -Name $username -SecretValue $securePassword -ErrorAction Stop | Out-Null\r\n" +
+                     "             Write-OK \"Stored secret $username in $kvName\"\r\n" +
+                     "             $stored = $true; Break}\r\n" +
+                     "        Catch {If ($_.Exception.Message -notmatch 'Forbidden|Unauthorized') {Throw}}\r\n" +
+                     "    }\r\n" +
+                     "    If (-not $stored) {Throw \"Unable to write secret $username to $kvName after RBAC propagation retries; check caller permissions.\"}\r\n" +
+                     "}\r\n" +
                      "Else {Write-Skip \"Secret $username already exists in $kvName\"}\r\n" +
                      "$cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)\r\n\r\n";
 

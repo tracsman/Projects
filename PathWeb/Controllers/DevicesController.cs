@@ -234,15 +234,20 @@ public class DevicesController : BaseController
             return View("PermissionError");
         }
 
-        var devices = await _context.Devices
+        var networkDevices = await _context.Devices
             .Where(d => NetworkDeviceTypes.Contains(d.Type) && d.InService && d.MgmtIpv4 != null)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+
+        var servers = await _context.Devices
+            .Where(d => ServerTypes.Contains(d.Type) && d.InService && d.MgmtIpv4 != null)
             .OrderBy(d => d.Name)
             .ToListAsync();
 
         int updated = 0, failed = 0;
         var errors = new List<string>();
 
-        foreach (var device in devices)
+        foreach (var device in networkDevices)
         {
             var (success, osVersion) = await _sshService.DetectOsVersionAsync(device.MgmtIpv4!, device.Name);
             if (success)
@@ -257,14 +262,53 @@ public class DevicesController : BaseController
             }
         }
 
+        // Servers use a different credential (LabSecrets/Server-Admin) and a pwsh probe.
+        // Only fetch the secret once and only if we actually have any servers to hit.
+        if (servers.Count > 0)
+        {
+            string? adminPassword = null;
+            try
+            {
+                var secretClient = new SecretClient(
+                    new Uri($"https://{ServerAdminVaultName.ToLowerInvariant()}.vault.azure.net/"),
+                    new DefaultAzureCredential());
+                adminPassword = (await secretClient.GetSecretAsync(ServerAdminSecretName)).Value.Value;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PopulateOs: failed to retrieve server admin secret");
+                errors.Add($"Servers skipped — failed to retrieve admin credential: {ex.Message}");
+                failed += servers.Count;
+            }
+
+            if (adminPassword != null)
+            {
+                foreach (var device in servers)
+                {
+                    var (success, osVersion) = await _sshService.DetectServerOsVersionAsync(
+                        device.MgmtIpv4!, ServerAdminUserName, adminPassword);
+                    if (success)
+                    {
+                        device.Os = osVersion.Length > 30 ? osVersion[..30] : osVersion;
+                        updated++;
+                    }
+                    else
+                    {
+                        errors.Add($"{device.Name}: {osVersion}");
+                        failed++;
+                    }
+                }
+            }
+        }
+
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("PopulateOs completed: {Updated} updated, {Failed} failed, by {User}",
-            updated, failed, GetUserEmail());
+        _logger.LogInformation("PopulateOs completed: {Updated} updated, {Failed} failed (network: {Net}, servers: {Srv}), by {User}",
+            updated, failed, networkDevices.Count, servers.Count, GetUserEmail());
 
         if (failed == 0)
         {
-            TempData["Message"] = $"OS versions updated for all {updated} devices.";
+            TempData["Message"] = $"OS versions updated for all {updated} devices ({networkDevices.Count} network, {servers.Count} server).";
             TempData["MessageLevel"] = "success";
         }
         else

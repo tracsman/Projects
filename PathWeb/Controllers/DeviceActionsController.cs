@@ -11,12 +11,21 @@ public class DeviceActionsController : BaseController
     private readonly LabConfigContext _context;
     private readonly ILogger<DeviceActionsController> _logger;
     private readonly SshService _sshService;
+    private readonly DeviceActionRunTracker _tracker;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public DeviceActionsController(LabConfigContext context, ILogger<DeviceActionsController> logger, SshService sshService)
+    public DeviceActionsController(
+        LabConfigContext context,
+        ILogger<DeviceActionsController> logger,
+        SshService sshService,
+        DeviceActionRunTracker tracker,
+        IServiceScopeFactory scopeFactory)
     {
         _context = context;
         _logger = logger;
         _sshService = sshService;
+        _tracker = tracker;
+        _scopeFactory = scopeFactory;
     }
 
     [HttpPost]
@@ -33,7 +42,7 @@ public class DeviceActionsController : BaseController
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Name == configType);
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
         {
-            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", $"Device '{configType}' not found or has no management IP.");
+            var applyRun = await RecordDeviceActionRunAsync(tenantGuid, configType, "Apply", false, "Apply Failed", $"Device '{configType}' not found or has no management IP.");
             return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP.", applyRun });
         }
 
@@ -89,7 +98,7 @@ public class DeviceActionsController : BaseController
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
         {
             var output = $"Device '{configType}' not found or has no management IP.";
-            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", output);
+            var applyRun = await RecordDeviceActionRunAsync(tenantGuid, configType, "Apply", false, "Apply Failed", output);
             return Json(new { success = false, output, applyRun });
         }
 
@@ -144,6 +153,10 @@ public class DeviceActionsController : BaseController
         if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
             return Json(new { success = false, output = "Permission denied." });
 
+        var existing = _tracker.GetActive(tenantGuid, configType);
+        if (existing != null)
+            return Json(new { success = false, output = $"An {existing.ActionType} run is already in progress on {configType}.", runId = existing.RunId, actionType = existing.ActionType });
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid);
         if (tenant == null)
             return Json(new { success = false, output = "Tenant not found." });
@@ -157,71 +170,100 @@ public class DeviceActionsController : BaseController
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
             return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP." });
 
-        var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
-
+        var searchPattern = $"Cust{tenant.TenantId}";
         var showCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
         if (showCommand == null)
         {
-            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", $"Unknown platform for device '{configType}'.");
+            var applyRun = await RecordDeviceActionRunAsync(tenantGuid, configType, "Apply", false, "Apply Failed", $"Unknown platform for device '{configType}'.");
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'.", applyRun });
         }
 
-        var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, showCommand);
-        if (!sshSuccess)
+        var runId = $"apply-{configType}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+        var storedConfig = config.Config1;
+        var host = device.MgmtIpv4!;
+        var tenantId = tenant.TenantId;
+        var submittedBy = GetUserEmail();
+
+        var run = new DeviceActionRunInfo
         {
-            var output = $"SSH failed during comparison: {sshOutput}";
-            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", output);
-            return Json(new { success = false, output, applyRun });
-        }
+            RunId = runId,
+            TenantGuid = tenantGuid,
+            ConfigType = configType,
+            ActionType = "Apply",
+            SubmittedBy = submittedBy,
+            StartedAt = DateTimeOffset.UtcNow,
+            DeviceName = configType
+        };
+        _tracker.Track(runId, run);
 
-        var storedSet = NormalizeConfigLines(config.Config1, platform);
-        var deviceSet = NormalizeConfigLines(sshOutput, platform);
-        var missingKeys = storedSet.Except(deviceSet).ToHashSet();
+        _logger.LogInformation("ApplyToDevice.Submit: {Device} ({Host}) run {RunId} by {User}", configType, host, runId, submittedBy);
 
-        if (missingKeys.Count == 0)
-            return Json(new { success = true, applied = false, output = $"✔ Already in sync — nothing to apply on {configType}." });
-
-        List<string> linesToApply;
-        if (platform == "Juniper")
+        _ = Task.Run(async () =>
         {
-            var originalLines = OriginalCaseConfigLines(config.Config1, platform);
-            linesToApply = missingKeys
-                .Select(key => originalLines.TryGetValue(key, out var orig) ? orig : key)
-                .ToList();
-        }
-        else
-        {
-            linesToApply = BuildCiscoAddLines(config.Config1, missingKeys, platform);
-        }
+            try
+            {
+                var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(host, 22, showCommand);
+                if (!sshSuccess)
+                {
+                    await CompleteRunAsync(run, false, "Apply Failed", $"SSH failed during comparison: {sshOutput}");
+                    return;
+                }
 
-        _logger.LogInformation("ApplyToDevice: {Device} ({Host}) applying {Count} lines by {User}",
-            configType, device.MgmtIpv4, linesToApply.Count, GetUserEmail());
+                var storedSet = NormalizeConfigLines(storedConfig, platform);
+                var deviceSet = NormalizeConfigLines(sshOutput, platform);
+                var missingKeys = storedSet.Except(deviceSet).ToHashSet();
 
-        var (applySuccess, transcript, compareOutput) =
-            await _sshService.RunConfigSessionAsync(device.MgmtIpv4, 22, linesToApply, platform);
+                if (missingKeys.Count == 0)
+                {
+                    await CompleteRunAsync(run, true, "In Sync", $"Already in sync — nothing to apply on {configType}.");
+                    return;
+                }
 
-        if (!applySuccess)
-        {
-            _logger.LogWarning("ApplyToDevice: {Device} config session failed", configType);
-            var applyRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, false, "Apply Failed", transcript);
-            return Json(new { success = false, output = transcript, applyRun });
-        }
+                List<string> linesToApply;
+                if (platform == "Juniper")
+                {
+                    var originalLines = OriginalCaseConfigLines(storedConfig, platform);
+                    linesToApply = missingKeys
+                        .Select(key => originalLines.TryGetValue(key, out var orig) ? orig : key)
+                        .ToList();
+                }
+                else
+                {
+                    linesToApply = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+                }
 
-        _logger.LogInformation("ApplyToDevice: {Device} successfully applied {Count} lines", configType, linesToApply.Count);
+                _logger.LogInformation("ApplyToDevice.Run: {Device} ({Host}) applying {Count} lines (run {RunId})",
+                    configType, host, linesToApply.Count, runId);
 
-        var successRun = await RecordDeviceApplyRunAsync(tenantGuid, configType, true, "Applied", transcript);
+                var (applySuccess, transcript, _) =
+                    await _sshService.RunConfigSessionAsync(host, 22, linesToApply, platform);
+
+                if (!applySuccess)
+                {
+                    _logger.LogWarning("ApplyToDevice.Run: {Device} config session failed (run {RunId})", configType, runId);
+                    await CompleteRunAsync(run, false, "Apply Failed", transcript, transcript: transcript, appliedLines: linesToApply);
+                    return;
+                }
+
+                _logger.LogInformation("ApplyToDevice.Run: {Device} successfully applied {Count} lines (run {RunId})",
+                    configType, linesToApply.Count, runId);
+                await CompleteRunAsync(run, true, "Applied", transcript, transcript: transcript, appliedLines: linesToApply, appliedCount: linesToApply.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "ApplyToDevice.Run: {Device} background task failed (run {RunId})", configType, runId);
+                await CompleteRunAsync(run, false, "Apply Failed", $"Background execution failed: {ex.Message}");
+            }
+        });
 
         return Json(new
         {
             success = true,
-            applied = true,
-            deviceName = configType,
-            appliedCount = linesToApply.Count,
-            appliedLines = linesToApply,
-            compareOutput,
-            transcript,
-            applyRun = successRun
+            runId,
+            status = run.Status,
+            actionType = run.ActionType,
+            deviceName = configType
         });
     }
 
@@ -232,6 +274,10 @@ public class DeviceActionsController : BaseController
         if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
             return Json(new { success = false, output = "Permission denied." });
 
+        var existing = _tracker.GetActive(tenantGuid, configType);
+        if (existing != null)
+            return Json(new { success = false, output = $"An {existing.ActionType} run is already in progress on {configType}.", runId = existing.RunId, actionType = existing.ActionType });
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid);
         if (tenant == null)
             return Json(new { success = false, output = "Tenant not found." });
@@ -245,92 +291,128 @@ public class DeviceActionsController : BaseController
         if (device == null || string.IsNullOrEmpty(device.MgmtIpv4))
             return Json(new { success = false, output = $"Device '{configType}' not found or has no management IP." });
 
-        var searchPattern = $"Cust{tenant.TenantId}";
         var platform = PlatformDetector.DetectPlatform(configType);
-
+        var searchPattern = $"Cust{tenant.TenantId}";
         var showCommand = PlatformDetector.GetShowCommand(platform, searchPattern);
         if (showCommand == null)
             return Json(new { success = false, output = $"Unknown platform for device '{configType}'." });
 
-        var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(device.MgmtIpv4, 22, showCommand);
-        if (!sshSuccess)
-            return Json(new { success = false, output = $"SSH failed during comparison: {sshOutput}" });
+        var runId = $"patch-{configType}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+        var storedConfig = config.Config1;
+        var host = device.MgmtIpv4!;
+        var tenantId = tenant.TenantId;
+        var submittedBy = GetUserEmail();
 
-        var storedSet = NormalizeConfigLines(config.Config1, platform);
-        var deviceSet = NormalizeConfigLines(sshOutput, platform);
-        var missingKeys = storedSet.Except(deviceSet).ToHashSet();
-        var extraKeys = deviceSet.Except(storedSet).ToHashSet();
-
-        if (missingKeys.Count == 0 && extraKeys.Count == 0)
-            return Json(new { success = true, patched = false, output = $"✔ Already in sync — nothing to patch on {configType}." });
-
-        var storedOriginals = OriginalCaseConfigLines(config.Config1, platform);
-        var deviceOriginals = OriginalCaseConfigLines(sshOutput, platform);
-        var configLines = new List<string>();
-        var addedLines = new List<string>();
-        var removedLines = new List<string>();
-
-        if (platform == "Juniper")
+        var run = new DeviceActionRunInfo
         {
-            foreach (var key in missingKeys)
+            RunId = runId,
+            TenantGuid = tenantGuid,
+            ConfigType = configType,
+            ActionType = "Patch",
+            SubmittedBy = submittedBy,
+            StartedAt = DateTimeOffset.UtcNow,
+            DeviceName = configType
+        };
+        _tracker.Track(runId, run);
+
+        _logger.LogInformation("PatchDevice.Submit: {Device} ({Host}) run {RunId} by {User}", configType, host, runId, submittedBy);
+
+        _ = Task.Run(async () =>
+        {
+            try
             {
-                var line = storedOriginals.TryGetValue(key, out var orig) ? orig : key;
-                configLines.Add(line);
-                addedLines.Add(line);
+                var (sshSuccess, sshOutput) = await _sshService.RunCommandAsync(host, 22, showCommand);
+                if (!sshSuccess)
+                {
+                    await CompleteRunAsync(run, false, "Patch Failed", $"SSH failed during comparison: {sshOutput}");
+                    return;
+                }
+
+                var storedSet = NormalizeConfigLines(storedConfig, platform);
+                var deviceSet = NormalizeConfigLines(sshOutput, platform);
+                var missingKeys = storedSet.Except(deviceSet).ToHashSet();
+                var extraKeys = deviceSet.Except(storedSet).ToHashSet();
+
+                if (missingKeys.Count == 0 && extraKeys.Count == 0)
+                {
+                    await CompleteRunAsync(run, true, "In Sync", $"Already in sync — nothing to patch on {configType}.");
+                    return;
+                }
+
+                var storedOriginals = OriginalCaseConfigLines(storedConfig, platform);
+                var deviceOriginals = OriginalCaseConfigLines(sshOutput, platform);
+                var configLines = new List<string>();
+                var addedLines = new List<string>();
+                var removedLines = new List<string>();
+
+                if (platform == "Juniper")
+                {
+                    foreach (var key in missingKeys)
+                    {
+                        var line = storedOriginals.TryGetValue(key, out var orig) ? orig : key;
+                        configLines.Add(line);
+                        addedLines.Add(line);
+                    }
+                }
+                else
+                {
+                    var ciscoAdds = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+                    foreach (var line in ciscoAdds)
+                    {
+                        configLines.Add(line);
+                        addedLines.Add(line);
+                    }
+                }
+
+                if (platform == "Juniper")
+                {
+                    AppendJuniperDeletes(extraKeys, deviceSet, deviceOriginals, tenantId,
+                        configLines, removedLines);
+                }
+                else
+                {
+                    foreach (var key in extraKeys)
+                    {
+                        var line = deviceOriginals.TryGetValue(key, out var orig) ? orig : key;
+                        var removeLine = "no " + line;
+                        configLines.Add(removeLine);
+                        removedLines.Add(removeLine);
+                    }
+                }
+
+                _logger.LogInformation("PatchDevice.Run: {Device} ({Host}) patching +{AddCount}/-{RemoveCount} lines (run {RunId})",
+                    configType, host, addedLines.Count, removedLines.Count, runId);
+
+                var (patchSuccess, transcript, _) =
+                    await _sshService.RunConfigSessionAsync(host, 22, configLines, platform);
+
+                if (!patchSuccess)
+                {
+                    _logger.LogWarning("PatchDevice.Run: {Device} config session failed (run {RunId})", configType, runId);
+                    await CompleteRunAsync(run, false, "Patch Failed", transcript, transcript: transcript, appliedLines: addedLines, removedLines: removedLines);
+                    return;
+                }
+
+                _logger.LogInformation("PatchDevice.Run: {Device} successfully patched +{AddCount}/-{RemoveCount} lines (run {RunId})",
+                    configType, addedLines.Count, removedLines.Count, runId);
+                await CompleteRunAsync(run, true, "Patched", transcript, transcript: transcript,
+                    appliedLines: addedLines, removedLines: removedLines,
+                    appliedCount: addedLines.Count, removedCount: removedLines.Count);
             }
-        }
-        else
-        {
-            var ciscoAdds = BuildCiscoAddLines(config.Config1, missingKeys, platform);
-            foreach (var line in ciscoAdds)
+            catch (Exception ex)
             {
-                configLines.Add(line);
-                addedLines.Add(line);
+                _logger.LogError(ex, "PatchDevice.Run: {Device} background task failed (run {RunId})", configType, runId);
+                await CompleteRunAsync(run, false, "Patch Failed", $"Background execution failed: {ex.Message}");
             }
-        }
-
-        if (platform == "Juniper")
-        {
-            AppendJuniperDeletes(extraKeys, deviceSet, deviceOriginals, tenant.TenantId,
-                configLines, removedLines);
-        }
-        else
-        {
-            foreach (var key in extraKeys)
-            {
-                var line = deviceOriginals.TryGetValue(key, out var orig) ? orig : key;
-                var removeLine = "no " + line;
-                configLines.Add(removeLine);
-                removedLines.Add(removeLine);
-            }
-        }
-
-        _logger.LogInformation("PatchDevice: {Device} ({Host}) patching +{AddCount}/-{RemoveCount} lines by {User}",
-            configType, device.MgmtIpv4, addedLines.Count, removedLines.Count, GetUserEmail());
-
-        var (patchSuccess, transcript, compareOutput) =
-            await _sshService.RunConfigSessionAsync(device.MgmtIpv4, 22, configLines, platform);
-
-        if (!patchSuccess)
-        {
-            _logger.LogWarning("PatchDevice: {Device} config session failed", configType);
-            return Json(new { success = false, output = transcript });
-        }
-
-        _logger.LogInformation("PatchDevice: {Device} successfully patched +{AddCount}/-{RemoveCount} lines",
-            configType, addedLines.Count, removedLines.Count);
+        });
 
         return Json(new
         {
             success = true,
-            patched = true,
-            deviceName = configType,
-            addedLines,
-            removedLines,
-            addedCount = addedLines.Count,
-            removedCount = removedLines.Count,
-            compareOutput,
-            transcript
+            runId,
+            status = run.Status,
+            actionType = run.ActionType,
+            deviceName = configType
         });
     }
 
@@ -380,6 +462,10 @@ public class DeviceActionsController : BaseController
         if (GetAuthLevel() < (byte)AuthLevels.TenantAdmin)
             return Json(new { success = false, output = "Permission denied." });
 
+        var existing = _tracker.GetActive(tenantGuid, configType);
+        if (existing != null)
+            return Json(new { success = false, output = $"An {existing.ActionType} run is already in progress on {configType}.", runId = existing.RunId, actionType = existing.ActionType });
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == tenantGuid);
         if (tenant == null)
             return Json(new { success = false, output = "Tenant not found." });
@@ -403,29 +489,57 @@ public class DeviceActionsController : BaseController
         if (lines.Count == 0)
             return Json(new { success = true, removed = false, output = $"Backout config for '{configType}' is empty — nothing to remove." });
 
-        _logger.LogInformation("RemoveFromDevice: {Device} ({Host}) removing {Count} lines by {User}",
-            configType, device.MgmtIpv4, lines.Count, GetUserEmail());
+        var runId = $"remove-{configType}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}";
+        var host = device.MgmtIpv4!;
+        var submittedBy = GetUserEmail();
 
-        var (removeSuccess, transcript, compareOutput) =
-            await _sshService.RunConfigSessionAsync(device.MgmtIpv4, 22, lines, platform);
-
-        if (!removeSuccess)
+        var run = new DeviceActionRunInfo
         {
-            _logger.LogWarning("RemoveFromDevice: {Device} config session failed", configType);
-            return Json(new { success = false, output = transcript });
-        }
+            RunId = runId,
+            TenantGuid = tenantGuid,
+            ConfigType = configType,
+            ActionType = "Remove",
+            SubmittedBy = submittedBy,
+            StartedAt = DateTimeOffset.UtcNow,
+            DeviceName = configType
+        };
+        _tracker.Track(runId, run);
 
-        _logger.LogInformation("RemoveFromDevice: {Device} successfully removed {Count} lines", configType, lines.Count);
+        _logger.LogInformation("RemoveFromDevice.Submit: {Device} ({Host}) removing {Count} lines run {RunId} by {User}",
+            configType, host, lines.Count, runId, submittedBy);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var (removeSuccess, transcript, _) =
+                    await _sshService.RunConfigSessionAsync(host, 22, lines, platform);
+
+                if (!removeSuccess)
+                {
+                    _logger.LogWarning("RemoveFromDevice.Run: {Device} config session failed (run {RunId})", configType, runId);
+                    await CompleteRunAsync(run, false, "Remove Failed", transcript, transcript: transcript, removedLines: lines);
+                    return;
+                }
+
+                _logger.LogInformation("RemoveFromDevice.Run: {Device} successfully removed {Count} lines (run {RunId})",
+                    configType, lines.Count, runId);
+                await CompleteRunAsync(run, true, "Removed", transcript, transcript: transcript, removedLines: lines, removedCount: lines.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "RemoveFromDevice.Run: {Device} background task failed (run {RunId})", configType, runId);
+                await CompleteRunAsync(run, false, "Remove Failed", $"Background execution failed: {ex.Message}");
+            }
+        });
 
         return Json(new
         {
             success = true,
-            removed = true,
-            deviceName = configType,
-            removedLines = lines,
-            removedCount = lines.Count,
-            compareOutput,
-            transcript
+            runId,
+            status = run.Status,
+            actionType = run.ActionType,
+            deviceName = configType
         });
     }
 
@@ -640,14 +754,14 @@ public class DeviceActionsController : BaseController
         return string.Join(" ", tokens.Take(lastMarker + 1));
     }
 
-    private async Task<object> RecordDeviceApplyRunAsync(Guid tenantGuid, string configType, bool success, string status, string output)
+    private async Task<object> RecordDeviceActionRunAsync(Guid tenantGuid, string configType, string actionType, bool success, string status, string output)
     {
         var run = new DeviceActionRun
         {
             DeviceActionRunId = Guid.NewGuid(),
             TenantGuid = tenantGuid,
             ConfigType = configType,
-            ActionType = "Apply",
+            ActionType = actionType,
             Success = success,
             Status = status,
             SubmittedBy = GetUserEmail(),
@@ -658,6 +772,91 @@ public class DeviceActionsController : BaseController
         _context.DeviceActionRuns.Add(run);
         await _context.SaveChangesAsync();
         return ToClientModel(run);
+    }
+
+    /// <summary>
+    /// Called from background tasks to finalize a run in the tracker and persist a row to the
+    /// DeviceActionRuns table so the card's badge/summary survives an app restart or page reload.
+    /// Uses IServiceScopeFactory because the original request scope is gone by the time this runs.
+    /// </summary>
+    private async Task CompleteRunAsync(
+        DeviceActionRunInfo run,
+        bool success,
+        string status,
+        string output,
+        string? transcript = null,
+        List<string>? appliedLines = null,
+        List<string>? removedLines = null,
+        int? appliedCount = null,
+        int? removedCount = null)
+    {
+        run.Success = success;
+        run.Status = status;
+        run.Output = output;
+        run.Transcript = transcript;
+        run.AppliedLines = appliedLines;
+        run.RemovedLines = removedLines;
+        run.AppliedCount = appliedCount;
+        run.RemovedCount = removedCount;
+        run.CompletedAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<LabConfigContext>();
+            db.DeviceActionRuns.Add(new DeviceActionRun
+            {
+                DeviceActionRunId = Guid.NewGuid(),
+                TenantGuid = run.TenantGuid,
+                ConfigType = run.ConfigType,
+                ActionType = run.ActionType,
+                Success = success,
+                Status = status,
+                SubmittedBy = run.SubmittedBy,
+                SubmittedDate = run.StartedAt.UtcDateTime,
+                Output = output
+            });
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist DeviceActionRun for {ConfigType} run {RunId}", run.ConfigType, run.RunId);
+        }
+    }
+
+    [HttpGet]
+    public IActionResult Status(string runId)
+    {
+        if (GetAuthLevel() < (byte)AuthLevels.TenantReadOnly)
+            return Json(new { success = false, output = "Permission denied." });
+
+        if (string.IsNullOrWhiteSpace(runId))
+            return Json(new { success = false, output = "Missing run ID." });
+
+        var run = _tracker.Get(runId);
+        if (run == null)
+            return Json(new { success = false, output = "Run not found. It may have expired after an app restart." });
+
+        return Json(new
+        {
+            success = true,
+            runId = run.RunId,
+            configType = run.ConfigType,
+            actionType = run.ActionType,
+            deviceName = run.DeviceName,
+            status = run.Status,
+            success_ = run.Success,
+            isTerminal = run.CompletedAt != null,
+            startedAt = run.StartedAt,
+            completedAt = run.CompletedAt,
+            submittedBy = run.SubmittedBy,
+            output = run.Output ?? string.Empty,
+            transcript = run.Transcript ?? string.Empty,
+            appliedLines = run.AppliedLines,
+            removedLines = run.RemovedLines,
+            appliedCount = run.AppliedCount,
+            removedCount = run.RemovedCount
+        });
     }
 
     private static object ToClientModel(DeviceActionRun run) => new

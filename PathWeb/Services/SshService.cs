@@ -365,4 +365,37 @@ public class SshService
         }
     }
 
+    /// <summary>
+    /// Connects to a Windows/Hyper-V server via SSH with explicit admin credentials,
+    /// runs a short pwsh probe, and returns a compact OS string like "Server 2025 (10.0.26100)".
+    /// </summary>
+    public async Task<(bool Success, string OsVersion)> DetectServerOsVersionAsync(string host, string username, string password)
+    {
+        try
+        {
+            var script = "$c = (Get-CimInstance Win32_OperatingSystem).Caption; $v = [System.Environment]::OSVersion.Version; \"$c|$v\"";
+            var (success, output) = await RunPowerShellCommandWithCredentialsAsync(host, 22, username, password, script);
+            if (!success)
+                return (false, output);
+
+            var line = (output ?? string.Empty).Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault()?.Trim() ?? string.Empty;
+            var parts = line.Split('|', 2);
+            var caption = parts.Length > 0 ? parts[0].Trim() : line;
+            var version = parts.Length > 1 ? parts[1].Trim() : string.Empty;
+
+            // Normalize "Microsoft Windows Server 2025 Datacenter" -> "Server 2025"
+            var match = Regex.Match(caption, @"Windows Server\s+(\d{4})", RegexOptions.IgnoreCase);
+            var shortCaption = match.Success ? $"Server {match.Groups[1].Value}" : caption;
+            var osVersion = string.IsNullOrEmpty(version) ? shortCaption : $"{shortCaption} ({version})";
+
+            _logger.LogInformation("Detected server OS for {Host}: {OsVersion}", host, osVersion);
+            return (true, osVersion);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Server OS detection failed for {Host}", host);
+            return (false, $"Error: {ex.Message}");
+        }
+    }
+
     }

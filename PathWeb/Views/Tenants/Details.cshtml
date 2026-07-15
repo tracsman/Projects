@@ -17,6 +17,7 @@
             <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
             <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
             <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+            <a asp-action="Clone" asp-route-id="@Model.TenantGuid" class="btn btn-success">Clone Tenant</a>
         }
         else
         {
@@ -147,6 +148,7 @@
             <a asp-action="Edit" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Edit</a>
             <a asp-action="Release" asp-route-id="@Model.TenantGuid" class="btn btn-danger">Release</a>
             <a asp-action="ConfigGen" asp-route-id="@Model.TenantGuid" class="btn btn-primary">Create Config</a>
+            <a asp-action="Clone" asp-route-id="@Model.TenantGuid" class="btn btn-success">Clone Tenant</a>
         }
         else
         {

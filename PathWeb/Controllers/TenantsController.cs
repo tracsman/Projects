@@ -344,13 +344,6 @@ public class TenantsController : BaseController
             return RedirectToAction(nameof(Index));
         }
 
-        if (tenant.DeletedDate == null)
-        {
-            TempData["Message"] = $"Tenant {tenant.TenantName} is already active and cannot be cloned from the released-tenant workflow.";
-            TempData["MessageLevel"] = "warning";
-            return RedirectToAction(nameof(Details), new { id });
-        }
-
         _logger.LogInformation("Tenants.Clone confirmation for {TenantName} by {User}", tenant.TenantName, GetUserEmail());
         return View(tenant);
     }
@@ -371,13 +364,6 @@ public class TenantsController : BaseController
             TempData["Message"] = "Invalid Tenant GUID requested!";
             TempData["MessageLevel"] = "danger";
             return RedirectToAction(nameof(Index));
-        }
-
-        if (sourceTenant.DeletedDate == null)
-        {
-            TempData["Message"] = $"Tenant {sourceTenant.TenantName} is already active and cannot be cloned from the released-tenant workflow.";
-            TempData["MessageLevel"] = "warning";
-            return RedirectToAction(nameof(Details), new { id });
         }
 
         var now = DateTime.Now;
@@ -428,8 +414,8 @@ public class TenantsController : BaseController
         _context.Tenants.Add(clone);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("Tenant cloned from released source {SourceTenantName} to new tenant {TenantName} by {User}",
-            sourceTenant.TenantName, clone.TenantName, GetUserEmail());
+        _logger.LogInformation("Tenant cloned from source {SourceTenantName} ({SourceState}) to new tenant {TenantName} by {User}",
+            sourceTenant.TenantName, sourceTenant.DeletedDate == null ? "active" : "released", clone.TenantName, GetUserEmail());
         TempData["Message"] = $"Tenant {sourceTenant.TenantName} was cloned to new active tenant {clone.TenantName}.";
         TempData["MessageLevel"] = "success";
         return RedirectToAction(nameof(Details), new { id = clone.TenantGuid });

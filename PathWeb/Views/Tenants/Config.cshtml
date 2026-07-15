@@ -453,6 +453,13 @@ else
         var _labVmRun = @Html.Raw(labVmRunJson);
         var _canRunAutomation = @(authLevel >= 8 ? "true" : "false");
 
+        // Per-configType device run state for async Apply/Patch/Remove. Keyed by configType so
+        // multiple devices can run in parallel without stomping shared state.
+        // Shape: _deviceRuns[configType] = { runId, actionType, pollTimer, isTerminal, latestData }
+        var _deviceRuns = {};
+        // The configType whose result is currently rendered in the shared deviceResultModal, or null.
+        var _activeModalConfigType = null;
+
         function resetModal() {
             var outputEl = document.getElementById('deviceResultOutput');
             outputEl.className = 'bg-dark text-light p-3 rounded';
@@ -705,6 +712,18 @@ else
             var text = document.getElementById('deviceApplyStatusText-' + configType);
             if (!badge || !text) return;
 
+            // If a live run is tracked for this device, show a Running (or terminal-from-tracker) state.
+            var live = _deviceRuns[configType];
+            if (live && !live.isTerminal) {
+                badge.className = 'badge border-0 text-bg-warning';
+                badge.textContent = live.actionType ? live.actionType + '…' : 'Running…';
+                badge.classList.remove('d-none');
+                badge.title = 'Click to view live progress';
+                text.textContent = 'Started ' + formatAutomationDate(live.startedAt);
+                text.classList.remove('d-none');
+                return;
+            }
+
             var run = getDeviceApplyRun(configType);
             if (!run) {
                 badge.className = 'badge text-bg-secondary d-none';
@@ -802,6 +821,24 @@ else
         }
 
         function openDeviceApplyRunModal(configType) {
+            // If there's a live run in flight (or just-terminal) for this device, prefer showing it.
+            var live = _deviceRuns[configType];
+            if (live) {
+                _activeModalConfigType = configType;
+                var actionLabel = live.actionType || 'Run';
+                showModal(actionLabel + ' Device: ' + configType);
+                // Immediately render whatever we know from the last poll
+                if (live.latestData) {
+                    renderDeviceRunModal(configType, live.latestData);
+                } else if (!live.isTerminal) {
+                    setStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> <strong>' + actionLabel + '</strong> in progress on <strong>' + configType + '</strong>...</div>');
+                    setOutputHtml(null);
+                }
+                // Kick a poll now to refresh; if it's still running the timer will keep going.
+                if (!live.isTerminal) pollDeviceRun(configType);
+                return;
+            }
+
             var run = getDeviceApplyRun(configType);
             if (!run) return;
 
@@ -1517,7 +1554,92 @@ else
                 // Don't stop polling — it continues in the background for the badge.
                 // Polling self-terminates when the run reaches a terminal state.
             });
+
+            document.getElementById('deviceResultModal').addEventListener('hidden.bs.modal', function () {
+                // Modal closed — clear the "which configType is showing" marker so future badge clicks
+                // route correctly. Do NOT stop polling; badges must keep updating in the background.
+                _activeModalConfigType = null;
+            });
         });
+
+        // --- Async device run polling (shared between Apply/Patch/Remove) ---
+        function pollDeviceRun(configType) {
+            var live = _deviceRuns[configType];
+            if (!live || !live.runId) return;
+
+            fetch('@Url.Action("Status", "DeviceActions")?runId=' + encodeURIComponent(live.runId))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.success) {
+                        // Run vanished (app restart?) — clear tracker and re-render badge from DB.
+                        delete _deviceRuns[configType];
+                        renderDeviceApplySummary(configType);
+                        if (_activeModalConfigType === configType) {
+                            setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.output || 'Run status unavailable.') + '</div>');
+                        }
+                        return;
+                    }
+
+                    live.latestData = data;
+                    live.isTerminal = !!data.isTerminal;
+                    live.actionType = data.actionType || live.actionType;
+
+                    if (_activeModalConfigType === configType) {
+                        renderDeviceRunModal(configType, data);
+                    }
+
+                    if (!data.isTerminal) {
+                        live.pollTimer = setTimeout(function () { pollDeviceRun(configType); }, 3000);
+                    } else {
+                        // Terminal — persist a synthetic apply-run so the badge/summary shows the outcome.
+                        setDeviceApplyRun({
+                            configType: configType,
+                            actionType: data.actionType,
+                            success: !!data.success_,
+                            status: data.status || (data.success_ ? 'Completed' : 'Failed'),
+                            submittedBy: data.submittedBy,
+                            submittedDate: data.completedAt || data.startedAt,
+                            output: data.output || ''
+                        });
+                        // Keep the tracker entry so re-open still works, but flag terminal so the
+                        // badge switches back to the success/failure style rather than Running.
+                        renderDeviceApplySummary(configType);
+                    }
+                })
+                .catch(function (err) {
+                    // Transient network error — retry.
+                    live.pollTimer = setTimeout(function () { pollDeviceRun(configType); }, 5000);
+                });
+        }
+
+        function renderDeviceRunModal(configType, data) {
+            var actionType = data.actionType || 'Run';
+            document.getElementById('deviceResultModalLabel').textContent = actionType + ' Device: ' + configType;
+
+            if (!data.isTerminal) {
+                setStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> <strong>' + actionType + '</strong> in progress on <strong>' + configType + '</strong>...' + (data.startedAt ? ' Started ' + formatAutomationDate(data.startedAt) + '.' : '') + '</div>');
+                setOutputHtml(null);
+                return;
+            }
+
+            if (data.success_) {
+                var summary = [];
+                if (typeof data.appliedCount === 'number' && data.appliedCount > 0) summary.push('<strong>' + data.appliedCount + '</strong> added');
+                if (typeof data.removedCount === 'number' && data.removedCount > 0) summary.push('<strong>' + data.removedCount + '</strong> removed');
+                var summaryText = summary.length > 0 ? ' — ' + summary.join(', ') + ' line(s)' : '';
+                setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> <strong>' + (data.status || actionType) + '</strong> on <strong>' + configType + '</strong>' + summaryText + '.</div>');
+                var details = '';
+                if (data.appliedLines && data.appliedLines.length > 0)
+                    details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-plus-circle"></i> Added (' + data.appliedLines.length + '):</strong>' + renderPre(data.appliedLines, '#6bff6b') + '</div>';
+                if (data.removedLines && data.removedLines.length > 0)
+                    details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-dash-circle"></i> Removed (' + data.removedLines.length + '):</strong>' + renderPre(data.removedLines, '#ff6b6b') + '</div>';
+                details += renderTranscript('devRunTranscript-' + configType, data.transcript);
+                setOutputHtml(details || null);
+            } else {
+                setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> <strong>' + (data.status || actionType + ' Failed') + '</strong> on <strong>' + configType + '</strong></div>');
+                setOutputError(data.output || 'No output captured.');
+            }
+        }
 
         function verifyOffDevice(configType) {
             var btn = event.currentTarget;
@@ -1582,6 +1704,13 @@ else
         }
 
         function applyToDevice(configType) {
+            // If an async run is already in flight for this device, just show it live.
+            var live = _deviceRuns[configType];
+            if (live && !live.isTerminal) {
+                openDeviceApplyRunModal(configType);
+                return;
+            }
+
             var btn = event.currentTarget;
             var originalHtml = btn.innerHTML;
             setSpinner(btn, 'Comparing...');
@@ -1589,6 +1718,7 @@ else
             postAction('@Url.Action("CompareToDevice", "DeviceActions")', configType)
             .then(function (data) {
                 showModal('Apply to Device: ' + configType);
+                _activeModalConfigType = configType;
                 if (!data.success) {
                     setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
                     setOutputHtml(null);
@@ -1611,36 +1741,43 @@ else
         function executeApply() {
             if (!_pendingConfigType) return;
             var configType = _pendingConfigType;
+            _activeModalConfigType = configType;
             var applyBtn = document.getElementById('applyNowBtn');
-            setSpinner(applyBtn, 'Applying...');
+            setSpinner(applyBtn, 'Submitting...');
 
             postAction('@Url.Action("ApplyToDevice", "DeviceActions")', configType)
             .then(function (data) {
                 applyBtn.classList.add('d-none');
                 _pendingConfigType = null;
-                if (data.applyRun) {
-                    setDeviceApplyRun(data.applyRun);
-                }
                 if (!data.success) {
-                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Apply failed on <strong>' + configType + '</strong></div>');
-                    setOutputError(data.output);
-                } else if (data.applied === false) {
-                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>');
-                    setOutputHtml(null);
-                } else {
-                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Successfully applied <strong>' + data.appliedCount + '</strong> line(s) to <strong>' + data.deviceName + '</strong>.</div>');
-                    var details = '';
-                    if (data.appliedLines && data.appliedLines.length > 0)
-                        details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-check-circle"></i> Applied lines:</strong>' + renderPre(data.appliedLines, '#6bff6b') + '</div>';
-                    details += renderTranscript('applyTranscript', data.transcript);
-                    setOutputHtml(details);
+                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
+                    setOutputError(data.output || 'Submit failed.');
+                    return;
                 }
+                // Background run started — track it, show Running, and start polling.
+                _deviceRuns[configType] = {
+                    runId: data.runId,
+                    actionType: data.actionType || 'Apply',
+                    isTerminal: false,
+                    startedAt: new Date().toISOString(),
+                    latestData: null
+                };
+                renderDeviceApplySummary(configType);
+                setStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> <strong>Apply</strong> in progress on <strong>' + configType + '</strong>. You can close this dialog; the badge on the card will update when the run finishes.</div>');
+                setOutputHtml(null);
+                pollDeviceRun(configType);
             })
             .catch(function (err) { alert('Apply request failed: ' + err); })
             .finally(function () { applyBtn.disabled = false; applyBtn.innerHTML = '<i class="bi bi-play-fill"></i> Apply Now'; });
         }
 
         function patchDevice(configType) {
+            var live = _deviceRuns[configType];
+            if (live && !live.isTerminal) {
+                openDeviceApplyRunModal(configType);
+                return;
+            }
+
             var btn = event.currentTarget;
             var originalHtml = btn.innerHTML;
             setSpinner(btn, 'Comparing...');
@@ -1648,6 +1785,7 @@ else
             postAction('@Url.Action("CompareToDevice", "DeviceActions")', configType)
             .then(function (data) {
                 showModal('Patch Device: ' + configType);
+                _activeModalConfigType = configType;
                 if (!data.success) {
                     setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
                     setOutputHtml(null);
@@ -1675,38 +1813,42 @@ else
         function executePatch() {
             if (!_pendingConfigType) return;
             var configType = _pendingConfigType;
+            _activeModalConfigType = configType;
             var patchBtn = document.getElementById('patchNowBtn');
-            setSpinner(patchBtn, 'Patching...');
+            setSpinner(patchBtn, 'Submitting...');
 
             postAction('@Url.Action("PatchDevice", "DeviceActions")', configType)
             .then(function (data) {
                 patchBtn.classList.add('d-none');
                 _pendingConfigType = null;
                 if (!data.success) {
-                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Patch failed on <strong>' + configType + '</strong></div>');
-                    setOutputError(data.output);
-                } else if (data.patched === false) {
-                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>');
-                    setOutputHtml(null);
-                } else {
-                    var summaryParts = [];
-                    if (data.addedCount > 0) summaryParts.push('added <strong>' + data.addedCount + '</strong>');
-                    if (data.removedCount > 0) summaryParts.push('removed <strong>' + data.removedCount + '</strong>');
-                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Patch complete on <strong>' + data.deviceName + '</strong> — ' + summaryParts.join(', ') + ' line(s).</div>');
-                    var details = '';
-                    if (data.addedLines && data.addedLines.length > 0)
-                        details += '<div class="mt-2"><strong class="text-success"><i class="bi bi-plus-circle"></i> Added:</strong>' + renderPre(data.addedLines, '#6bff6b') + '</div>';
-                    if (data.removedLines && data.removedLines.length > 0)
-                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-dash-circle"></i> Removed:</strong>' + renderPre(data.removedLines, '#ff6b6b') + '</div>';
-                    details += renderTranscript('patchTranscript', data.transcript);
-                    setOutputHtml(details);
+                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
+                    setOutputError(data.output || 'Submit failed.');
+                    return;
                 }
+                _deviceRuns[configType] = {
+                    runId: data.runId,
+                    actionType: data.actionType || 'Patch',
+                    isTerminal: false,
+                    startedAt: new Date().toISOString(),
+                    latestData: null
+                };
+                renderDeviceApplySummary(configType);
+                setStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> <strong>Patch</strong> in progress on <strong>' + configType + '</strong>. You can close this dialog; the badge on the card will update when the run finishes.</div>');
+                setOutputHtml(null);
+                pollDeviceRun(configType);
             })
             .catch(function (err) { alert('Patch request failed: ' + err); })
             .finally(function () { patchBtn.disabled = false; patchBtn.innerHTML = '<i class="bi bi-play-fill"></i> Patch Now'; });
         }
 
         function removeFromDevice(configType) {
+            var live = _deviceRuns[configType];
+            if (live && !live.isTerminal) {
+                openDeviceApplyRunModal(configType);
+                return;
+            }
+
             var btn = event.currentTarget;
             var originalHtml = btn.innerHTML;
             setSpinner(btn, 'Loading...');
@@ -1714,6 +1856,7 @@ else
             postAction('@Url.Action("PreviewRemoveFromDevice", "DeviceActions")', configType)
             .then(function (data) {
                 showModal('Remove from Device: ' + configType);
+                _activeModalConfigType = configType;
                 if (!data.success) {
                     setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
                     setOutputHtml(null);
@@ -1730,27 +1873,35 @@ else
         function executeRemove() {
             if (!_pendingConfigType) return;
             var configType = _pendingConfigType;
+            _activeModalConfigType = configType;
             var removeBtn = document.getElementById('removeNowBtn');
-            setSpinner(removeBtn, 'Removing...');
+            setSpinner(removeBtn, 'Submitting...');
 
             postAction('@Url.Action("RemoveFromDevice", "DeviceActions")', configType)
             .then(function (data) {
                 removeBtn.classList.add('d-none');
                 _pendingConfigType = null;
                 if (!data.success) {
-                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Remove failed on <strong>' + configType + '</strong></div>');
-                    setOutputError(data.output);
-                } else if (data.removed === false) {
+                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + data.output + '</div>');
+                    setOutputError(data.output || 'Submit failed.');
+                    return;
+                }
+                if (data.removed === false) {
                     setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + data.output + '</div>');
                     setOutputHtml(null);
-                } else {
-                    setStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> Successfully removed <strong>' + data.removedCount + '</strong> line(s) from <strong>' + data.deviceName + '</strong>.</div>');
-                    var details = '';
-                    if (data.removedLines && data.removedLines.length > 0)
-                        details += '<div class="mt-2"><strong class="text-danger"><i class="bi bi-trash"></i> Removed:</strong>' + renderPre(data.removedLines, '#ff6b6b') + '</div>';
-                    details += renderTranscript('removeTranscript', data.transcript);
-                    setOutputHtml(details);
+                    return;
                 }
+                _deviceRuns[configType] = {
+                    runId: data.runId,
+                    actionType: data.actionType || 'Remove',
+                    isTerminal: false,
+                    startedAt: new Date().toISOString(),
+                    latestData: null
+                };
+                renderDeviceApplySummary(configType);
+                setStatus('<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> <strong>Remove</strong> in progress on <strong>' + configType + '</strong>. You can close this dialog; the badge on the card will update when the run finishes.</div>');
+                setOutputHtml(null);
+                pollDeviceRun(configType);
             })
             .catch(function (err) { alert('Remove request failed: ' + err); })
             .finally(function () { removeBtn.disabled = false; removeBtn.innerHTML = '<i class="bi bi-trash"></i> Remove Now'; });

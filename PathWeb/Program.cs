@@ -54,6 +54,7 @@ else
 }
 builder.Services.AddScoped<SshService>();
 builder.Services.AddSingleton<LabVmRunTracker>();
+builder.Services.AddSingleton<DeviceActionRunTracker>();
 
 // Check if running on Azure App Service with Easy Auth
 var isEasyAuth = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
