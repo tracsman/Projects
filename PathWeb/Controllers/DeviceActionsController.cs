@@ -218,20 +218,24 @@ public class DeviceActionsController : BaseController
                 }
 
                 List<string> linesToApply;
+                List<string> reportedLines;
                 if (platform == "Juniper")
                 {
                     var originalLines = OriginalCaseConfigLines(storedConfig, platform);
                     linesToApply = missingKeys
                         .Select(key => originalLines.TryGetValue(key, out var orig) ? orig : key)
                         .ToList();
+                    reportedLines = linesToApply;
                 }
                 else
                 {
-                    linesToApply = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+                    var (ciscoCommands, ciscoLeaves) = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+                    linesToApply = ciscoCommands;
+                    reportedLines = ciscoLeaves;
                 }
 
                 _logger.LogInformation("ApplyToDevice.Run: {Device} ({Host}) applying {Count} lines (run {RunId})",
-                    configType, host, linesToApply.Count, runId);
+                    configType, host, reportedLines.Count, runId);
 
                 var (applySuccess, transcript, _) =
                     await _sshService.RunConfigSessionAsync(host, 22, linesToApply, platform);
@@ -239,13 +243,13 @@ public class DeviceActionsController : BaseController
                 if (!applySuccess)
                 {
                     _logger.LogWarning("ApplyToDevice.Run: {Device} config session failed (run {RunId})", configType, runId);
-                    await CompleteRunAsync(run, false, "Apply Failed", transcript, transcript: transcript, appliedLines: linesToApply);
+                    await CompleteRunAsync(run, false, "Apply Failed", transcript, transcript: transcript, appliedLines: reportedLines);
                     return;
                 }
 
                 _logger.LogInformation("ApplyToDevice.Run: {Device} successfully applied {Count} lines (run {RunId})",
-                    configType, linesToApply.Count, runId);
-                await CompleteRunAsync(run, true, "Applied", transcript, transcript: transcript, appliedLines: linesToApply, appliedCount: linesToApply.Count);
+                    configType, reportedLines.Count, runId);
+                await CompleteRunAsync(run, true, "Applied", transcript, transcript: transcript, appliedLines: reportedLines, appliedCount: reportedLines.Count);
             }
             catch (Exception ex)
             {
@@ -352,12 +356,9 @@ public class DeviceActionsController : BaseController
                 }
                 else
                 {
-                    var ciscoAdds = BuildCiscoAddLines(storedConfig, missingKeys, platform);
-                    foreach (var line in ciscoAdds)
-                    {
-                        configLines.Add(line);
-                        addedLines.Add(line);
-                    }
+                    var (ciscoAdds, ciscoAddLeaves) = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+                    configLines.AddRange(ciscoAdds);
+                    addedLines.AddRange(ciscoAddLeaves);
                 }
 
                 if (platform == "Juniper")
@@ -367,13 +368,9 @@ public class DeviceActionsController : BaseController
                 }
                 else
                 {
-                    foreach (var key in extraKeys)
-                    {
-                        var line = deviceOriginals.TryGetValue(key, out var orig) ? orig : key;
-                        var removeLine = "no " + line;
-                        configLines.Add(removeLine);
-                        removedLines.Add(removeLine);
-                    }
+                    var (ciscoRemoves, ciscoRemoveLeaves) = BuildCiscoRemoveLines(sshOutput, extraKeys, platform);
+                    configLines.AddRange(ciscoRemoves);
+                    removedLines.AddRange(ciscoRemoveLeaves);
                 }
 
                 _logger.LogInformation("PatchDevice.Run: {Device} ({Host}) patching +{AddCount}/-{RemoveCount} lines (run {RunId})",
@@ -560,6 +557,9 @@ public class DeviceActionsController : BaseController
         if (!ok)
             return (false, initial);
 
+        if (platform == "NX-OS" || platform == "IOS-XE")
+            return await ExpandCiscoStanzasAsync(host, platform, searchPattern, initial);
+
         if (platform != "Juniper")
             return (true, initial);
 
@@ -598,6 +598,101 @@ public class DeviceActionsController : BaseController
         }
 
         return (true, sb.ToString());
+    }
+
+    /// <summary>
+    /// Second-pass fetch for Cisco (NX-OS/IOS-XE) that expands each `vlan {id}` and
+    /// `interface Vlan{id}` line seen in the initial include-filtered output into the full
+    /// stanza via `show running-config vlan {id}` / `show running-config interface Vlan{id}`.
+    /// This surfaces sibling lines like `shutdown`, `state active`, or nested interface options
+    /// that would otherwise be dropped by the initial `include` grep because they don't contain
+    /// the `Cust{id}` marker themselves. Without this, a diff would miss added/removed
+    /// attribute lines inside a matching stanza.
+    /// </summary>
+    private async Task<(bool Success, string Output)> ExpandCiscoStanzasAsync(
+        string host, string platform, string searchPattern, string initial)
+    {
+        var tenantId = ExtractTenantIdFromPattern(searchPattern);
+        if (tenantId == null)
+            return (true, initial);
+
+        var vlanRegex = new System.Text.RegularExpressions.Regex(
+            @"^\s*vlan\s+(\d+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var svIntfRegex = new System.Text.RegularExpressions.Regex(
+            @"^\s*interface\s+Vlan(\d+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var vlanIds = new HashSet<string>();
+        var svIntfIds = new HashSet<string>();
+
+        foreach (var raw in initial.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var vm = vlanRegex.Match(raw);
+            if (vm.Success) vlanIds.Add(vm.Groups[1].Value);
+            var im = svIntfRegex.Match(raw);
+            if (im.Success) svIntfIds.Add(im.Groups[1].Value);
+        }
+
+        if (vlanIds.Count == 0 && svIntfIds.Count == 0)
+            return (true, initial);
+
+        var sb = new System.Text.StringBuilder(initial);
+        if (!initial.EndsWith('\n')) sb.Append('\n');
+
+        foreach (var id in vlanIds)
+        {
+            var cmd = $"show running-config vlan {id}";
+            var (subOk, subOut) = await _sshService.RunCommandAsync(host, 22, cmd);
+            if (!subOk)
+            {
+                _logger.LogWarning("Cisco vlan-stanza pull failed for vlan {Id} on {Host}: {Err}", id, host, subOut);
+                continue;
+            }
+            sb.Append(StripCiscoStanzaHeader(subOut));
+        }
+
+        foreach (var id in svIntfIds)
+        {
+            var cmd = $"show running-config interface Vlan{id}";
+            var (subOk, subOut) = await _sshService.RunCommandAsync(host, 22, cmd);
+            if (!subOk)
+            {
+                _logger.LogWarning("Cisco svi-stanza pull failed for interface Vlan{Id} on {Host}: {Err}", id, host, subOut);
+                continue;
+            }
+            sb.Append(StripCiscoStanzaHeader(subOut));
+        }
+
+        return (true, sb.ToString());
+    }
+
+    /// <summary>
+    /// Strips the noise header that Cisco returns from `show running-config &lt;section&gt;`:
+    /// the `!Command:` / `!Running configuration...` / `!Time:` banner and the `version ...`
+    /// line that follows. These would otherwise leak into the diff as "extra on device"
+    /// lines even though they are not part of any tenant config. Also drops `!` comments.
+    /// </summary>
+    private static string StripCiscoStanzaHeader(string text)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var raw in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = raw.TrimStart();
+            if (trimmed.StartsWith("!"))
+                continue;
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed,
+                @"^version\s+\S", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                continue;
+            sb.Append(raw);
+            sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    private static string? ExtractTenantIdFromPattern(string searchPattern)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(searchPattern, @"Cust(\d+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value : null;
     }
 
     private static HashSet<string> NormalizeConfigLines(string text, string platform)
@@ -658,9 +753,10 @@ public class DeviceActionsController : BaseController
     /// parent once. Top-level missing lines (e.g., a brand-new `vlan 50` stanza) are emitted
     /// directly with no parent prefix.
     /// </summary>
-    private static List<string> BuildCiscoAddLines(string storedConfig, HashSet<string> missingKeys, string platform)
+    private static (List<string> Commands, List<string> LeafLines) BuildCiscoAddLines(string storedConfig, HashSet<string> missingKeys, string platform)
     {
         var result = new List<string>();
+        var leaves = new List<string>();
         var stack = new Stack<(int indent, string line)>();
         var lastChain = new List<string>();
 
@@ -692,6 +788,7 @@ public class DeviceActionsController : BaseController
                 for (var i = common; i < newChain.Count; i++)
                     result.Add(newChain[i]);
                 result.Add(line);
+                leaves.Add(line);
 
                 lastChain = newChain;
                 lastChain.Add(line);
@@ -700,11 +797,67 @@ public class DeviceActionsController : BaseController
             stack.Push((indent, line));
         }
 
-        return result;
+        return (result, leaves);
     }
 
     /// <summary>
-    /// Builds Junos `delete` lines for extras. Where every device line we know about under a
+    /// Walks the pulled device config in source order and emits `no &lt;line&gt;` for each line
+    /// whose normalized form is in <paramref name="extraKeys"/>, prepending the full ancestor
+    /// stanza chain when crossing into a new context. NX-OS / IOS-XE require child removals
+    /// like `no shutdown` to be issued inside their `vlan 50` parent context, not at the
+    /// global `(config)#` prompt where they are rejected. Parent lines that are themselves
+    /// being removed are emitted as `no &lt;parent&gt;` (which recursively removes children on
+    /// Cisco); child-only removals re-enter the parent context first, then issue the `no`.
+    /// </summary>
+    private static (List<string> Commands, List<string> LeafLines) BuildCiscoRemoveLines(string deviceConfig, HashSet<string> extraKeys, string platform)
+    {
+        var result = new List<string>();
+        var leaves = new List<string>();
+        var stack = new Stack<(int indent, string line)>();
+        var lastChain = new List<string>();
+
+        foreach (var rawLine in deviceConfig.Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(rawLine))
+                continue;
+
+            var trimmed = rawLine.TrimStart();
+            if (trimmed.StartsWith('#') || trimmed.StartsWith('!'))
+                continue;
+
+            var indent = rawLine.Length - trimmed.Length;
+            var line = trimmed.TrimEnd();
+            var key = NormalizeLineForCompare(line, platform);
+
+            while (stack.Count > 0 && stack.Peek().indent >= indent)
+                stack.Pop();
+
+            if (extraKeys.Contains(key))
+            {
+                var newChain = stack.Reverse().Select(a => a.line).ToList();
+                var common = 0;
+                while (common < lastChain.Count && common < newChain.Count &&
+                       string.Equals(lastChain[common], newChain[common], StringComparison.OrdinalIgnoreCase))
+                {
+                    common++;
+                }
+                for (var i = common; i < newChain.Count; i++)
+                    result.Add(newChain[i]);
+                result.Add("no " + line);
+                leaves.Add("no " + line);
+
+                lastChain = newChain;
+                lastChain.Add(line);
+            }
+
+            stack.Push((indent, line));
+        }
+
+        return (result, leaves);
+    }
+
+    /// <summary>
+    /// Builds Junos `delete` lines for extras.
     /// tenant-specific parent (`Cust{id}` variants or `unit {id}`) is being removed, emits a
     /// single `delete <parent>` rather than per-leaf deletes. This avoids commit-check failures
     /// like "Missing mandatory statement: 'match'" that occur when Junos sees a parent stanza

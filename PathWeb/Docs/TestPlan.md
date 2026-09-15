@@ -76,12 +76,12 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 4.7 | Approve a request 🔒8 | Approve a pending request | Status changes; tenant created; admin redirected to tenant Edit page; pending count decreases by 1 | ✅ | |
 | 4.8 | Reject a request 🔒8 | Reject a pending request | Status changes to rejected; item no longer in pending queue | ✅ | |
 | 4.9 | Approve creates ADO work item 🔒8 | Approve a request when Logic App is configured | ADO work item created; `WorkItemId` shown on tenant; TempData shows success with work item number | ✅ | |
-| 4.10 | Approve — ADO failure is non-blocking 🔒8 | Approve a request when ADO Logic App is down/misconfigured | Tenant still created successfully; TempData shows warning (yellow) with ADO error note | | |
-| 4.11 | Approve — already processed request 🔒8 | Use devtools to POST approve on an already-approved request | "Invalid or already processed request" error; no duplicate tenant | | |
+| 4.10 | Approve — ADO failure is non-blocking 🔒8 | Approve a request when ADO Logic App is down/misconfigured | Tenant still created successfully; TempData shows warning (yellow) with ADO error note | ⏭️ | |
+| 4.11 | Approve — already processed request 🔒8 | Use devtools to POST approve on an already-approved request | "Invalid or already processed request" error; no duplicate tenant | ⏭️ | |
 | 4.12 | Approve — server preference parameter 🔒8 | Approve with a specific `serverPreference` value | TenantId assigned in the matching range (e.g., preference=2 → TenantId 2x) | ✅ | |
 | 4.13 | Non-admin sees only own requests | Log in as non-admin; create a request; check Index | Only requests where you are the requestor or listed in Contacts are visible | ✅ | |
-| 4.14 | Contacts-based visibility | Log in as a user listed in another request's Contacts field (not the requestor) | That request is visible in your list | | |
-| 4.15 | Request pagination | Create >25 requests (or verify in DB) → check Index | Pagination controls appear; page 2 loads correctly | | |
+| 4.14 | Contacts-based visibility | Log in as a user listed in another request's Contacts field (not the requestor) | That request is visible in your list | ⏭️ | |
+| 4.15 | Request pagination | Create >25 requests (or verify in DB) → check Index | Pagination controls appear; page 2 loads correctly | ⏭️ | |
 
 ---
 
@@ -123,7 +123,7 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6A.5 | Copy large config | Copy a multi-KB config (e.g., CreateAzurePowerShell) | Full content copied without truncation | ✅ | |
 | 6A.6 | Per-device `-out` cards hidden | After config generation | Individual `{DeviceName}-out` cards do NOT appear; only combined BackoutConfig (if any) | ✅ | |
 | 6A.7 | Inactive tenant — read-only | Open Config page for a released tenant | No Create/Regenerate button; no action dropdowns; copy still works | ✅ | |
-| 6A.8 | Inactive tenant — direct POST blocked | Use browser devtools to POST a config action on a released tenant | Server rejects the action (not just UI hiding) | | |
+| 6A.8 | Inactive tenant — direct POST blocked | Use browser devtools to POST a config action on a released tenant | Server rejects the action (not just UI hiding) | ⏭️ | |
 | 6A.9 | Server Preference (ConfigVersion 0) | Create tenant with ConfigVersion=0 | UI label shows "Server Preference" (not "0" or "ConfigVersion 0") | ⏭️ | Test doesn't seem valid |
 | 6A.10 | Config page with no configs yet | Open Config page before ever generating | No config cards; "Create Config" button visible (for admin); no JS errors | ✅ | |
 | 6A.11 | Config card ordering | Check card layout after generation | Cards appear in a consistent, logical order across tenants | ✅ | |
@@ -140,13 +140,13 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6B.5 | Apply Juniper — nothing to apply | Run Apply when Juniper device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
 | 6B.6 | Patch Juniper Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Juniper | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
 | 6B.7 | Patch Juniper — additions only | Patch Juniper when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
-| 6B.8 | Patch Juniper — removals only | Patch Juniper when device has extra lines but nothing missing | Only removals shown; no addition section | | |
+| 6B.8 | Patch Juniper — removals only | Patch Juniper when device has extra lines but nothing missing | Only removals shown; no addition section | ✅ | |
 | 6B.9 | Remove from Juniper Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Juniper (`-MX`/`-SRX`) | Per-device `-out` backout config pushed via SSH; `commit` applied; success badge | ✅ | |
 | 6B.10 | Verify Off Juniper Device 🔒8 | Select "Verify Off Device" → Run on Juniper (`-MX`/`-SRX`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
 | 6B.11 | Verify — clean Juniper device | Run Verify on Juniper device with no tenant references | "No references found" or equivalent clean result | ✅ | |
 | 6B.12 | Apply Juniper — commit failure | Apply invalid config to Juniper device | `commit check` fails; error shown in modal; no partial commit left | ✅ | |
-| 6B.13 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | | |
-| 6B.14 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | | |
+| 6B.13 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | ✅ | |
+| 6B.14 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | ⏭️ | |
 | **Cisco Device Actions** | | | | | |
 | 6B.15 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
 | 6B.16 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge | ✅ | |
@@ -154,13 +154,13 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6B.18 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
 | 6B.19 | Patch Cisco Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Cisco | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
 | 6B.20 | Patch Cisco — additions only | Patch Cisco when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
-| 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section | | |
+| 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section | ✅ | |
 | 6B.22 | Remove from Cisco Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Cisco (`-NX`/`-ASR`/`-ISR`) | Per-device `-out` backout config pushed via SSH; `wr` applied; success badge | ✅ | |
 | 6B.23 | Verify Off Cisco Device 🔒8 | Select "Verify Off Device" → Run on Cisco (`-NX`/`-ASR`/`-ISR`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
 | 6B.24 | Verify — clean Cisco device | Run Verify on Cisco device with no tenant references | "No references found" or equivalent clean result | ✅ | |
 | 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ✅ | |
-| 6B.26 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | | |
-| 6B.27 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | | |
+| 6B.26 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | ✅ | |
+| 6B.27 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | ⏭️ | |
 | **UI Behavior & General** | | | | | |
 | 6B.28 | Remove — no backout config | Run Remove when no `-out` record exists in SQL | Appropriate error message ("no backout config found"); no crash | ✅ | |
 | 6B.29 | Device status badge — clickable | Click a device status badge (✅/❌) | Reopens the last apply result in modal | ✅ | |
@@ -174,11 +174,11 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | **Submit & Execute** | | | | | |
-| 6C.1 | Deploy ER to Azure 🔒8 | `CreateERPowerShell` card → "Deploy to Azure" → Run | Automation modal opens; runbook created via REST API; job submitted; status polls to completion | ✅ Pass | |
-| 6C.2 | Deploy Azure PS to Azure 🔒8 | `CreateAzurePowerShell` card → "Deploy to Azure" → Run | Same automation flow; runbook type matches `Settings.AutomationRunbookType` (`PowerShell72`) | ✅ Pass | |
-| 6C.3 | Script preparation — Managed Identity | Open automation modal → check "Prepared Script" tab/section | Interactive `Connect-AzAccount` stripped; replaced with Managed Identity auth | ✅ Pass | |
-| 6C.4 | Script preparation — no double-encoding | Check prepared script for encoding artifacts | No double-escaped characters or corrupted strings | ✅ Pass | |
-| 6C.5 | Runbook type from Settings | Change `AutomationRunbookType` in Settings to a different value → Deploy | Runbook created with the new type (verify via Azure portal or `/diag`) | ✅ Pass | |
+| 6C.1 | Deploy ER to Azure 🔒8 | `CreateERPowerShell` card → "Deploy to Azure" → Run | Automation modal opens; runbook created via REST API; job submitted; status polls to completion | ✅ | |
+| 6C.2 | Deploy Azure PS to Azure 🔒8 | `CreateAzurePowerShell` card → "Deploy to Azure" → Run | Same automation flow; runbook type matches `Settings.AutomationRunbookType` (`PowerShell72`) | ✅ | |
+| 6C.3 | Script preparation — Managed Identity | Open automation modal → check "Prepared Script" tab/section | Interactive `Connect-AzAccount` stripped; replaced with Managed Identity auth | ✅ | |
+| 6C.4 | Script preparation — no double-encoding | Check prepared script for encoding artifacts | No double-escaped characters or corrupted strings | ✅ | |
+| 6C.5 | Runbook type from Settings | Change `AutomationRunbookType` in Settings to a different value → Deploy | Runbook created with the new type (verify via Azure portal or `/diag`) | ✅ | |
 | **Remove from Azure** | | | | | |
 | 6C.6 | Remove from Azure 🔒8 | `CreateAzurePowerShell` card → "Remove from Azure" → Run | Fetches `-out` backout script from SQL; opens in automation modal | | |
 | 6C.7 | Remove — `Write-Status` dual output | Check automation modal output during backout run | Both colored console output AND captured runbook output visible | | |
@@ -207,19 +207,19 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6C.27 | Multiple config types simultaneously | Start Deploy on `CreateERPowerShell` AND `CreateAzurePowerShell` at same time | Both jobs tracked independently; both modals work; both badges update | | |
 | **Negative / Edge Cases** | | | | | |
 | 6C.28 | Submit with empty config | Delete config from SQL → try Deploy | "No stored config found" error message | | |
-| 6C.29 | Submit with invalid config type | Use devtools to POST `configType=FakeType` | "Config type 'FakeType' is not enabled for Azure Automation yet" | | |
-| 6C.30 | Submit with invalid TenantGuid | Use devtools to POST `tenantGuid=00000000-...` | "Missing tenant or config type" error | | |
+| 6C.29 | Submit with invalid config type | Use devtools to POST `configType=FakeType` | "Config type 'FakeType' is not enabled for Azure Automation yet" | ⏭️ | |
+| 6C.30 | Submit with invalid TenantGuid | Use devtools to POST `tenantGuid=00000000-...` | "Missing tenant or config type" error | ⏭️ | |
 | 6C.31 | Azure Automation service unavailable | Revoke Managed Identity permissions or block network | Graceful error in modal ("Automation submit failed"); no unhandled exception | | |
 | 6C.32 | Stale job ID in URL/memory | Poll status for a deleted job ID | Automation API returns error; PathWeb handles gracefully | | |
 | **Generated Script Quality (recent regressions)** | | | | | |
-| 6C.33 | Fresh deploy modal uses current DB script | Deploy to Azure once → close modal → regenerate config (so SQL content differs from the prior run) → click `Deploy to Azure` again (no `jobId` in URL) | Modal's `Prepared Script` reflects the **current** SQL config, not the previous run's `PreparedScript` | ✅ Pass | Regression covered by commit `3bac9c8` |
+| 6C.33 | Fresh deploy modal uses current DB script | Deploy to Azure once → close modal → regenerate config (so SQL content differs from the prior run) → click `Deploy to Azure` again (no `jobId` in URL) | Modal's `Prepared Script` reflects the **current** SQL config, not the previous run's `PreparedScript` | ✅ | Regression covered by commit `3bac9c8` |
 | 6C.34 | History-link modal uses prior run's script | From the recent-run history list, click a specific prior run | Modal opens with `jobId` and shows that run's stored `PreparedScript` (not current SQL) | | |
-| 6C.35 | ER script — no bare `Write-Output` | Inspect generated `CreateERPowerShell` script | All `Write-Output` calls have an explicit message argument; no `Write-Output: missing InputObject` error when run | ✅ Pass | Regression covered by commit `7012918` |
-| 6C.36 | Generated script ordering | Open any generated PS script in the config page | `# Initialize` variable block appears **before** `# PathWeb output helpers`; helpers appear before the banner/login-check | ✅ Pass | Covers ER, Azure, and Azure backout scripts |
+| 6C.35 | ER script — no bare `Write-Output` | Inspect generated `CreateERPowerShell` script | All `Write-Output` calls have an explicit message argument; no `Write-Output: missing InputObject` error when run | ✅ | Regression covered by commit `7012918` |
+| 6C.36 | Generated script ordering | Open any generated PS script in the config page | `# Initialize` variable block appears **before** `# PathWeb output helpers`; helpers appear before the banner/login-check | ✅ | Covers ER, Azure, and Azure backout scripts |
 | 6C.37 | `Write-Status` helper — manual console run | Copy a generated script → run interactively in `pwsh.exe` | Output is color-coded (cyan `Write-Step`, green `[ OK ]`, dark-gray `[SKIP]`, red `[FAIL]`); banner and final summary `[pscustomobject]` visible | | |
 | 6C.38 | `Write-Status` helper — Automation capture | Deploy via Azure Automation → open job in Azure portal → check `Output` stream | Same step/detail messages captured in Automation's Output stream (not just Verbose); final summary object visible as structured output | | |
-| 6C.39 | Login-check block stripped for Automation | Deploy to Azure → inspect `Prepared Script` in PathWeb modal | The `Try { Get-AzContext ... }` login block is removed; replaced by `Connect-AzAccount -Identity` for managed identity | ✅ Pass | Same prepared-script tab as 6C.3 |
-| 6C.40 | Backout script ordering | Open `-out` backout script (e.g., `CreateAzurePowerShell-out`) on the config page | Same ordering as live scripts: `# Initialize` first, helpers second, banner/login-check third | ✅ Pass | |
+| 6C.39 | Login-check block stripped for Automation | Deploy to Azure → inspect `Prepared Script` in PathWeb modal | The `Try { Get-AzContext ... }` login block is removed; replaced by `Connect-AzAccount -Identity` for managed identity | ✅ | Same prepared-script tab as 6C.3 |
+| 6C.40 | Backout script ordering | Open `-out` backout script (e.g., `CreateAzurePowerShell-out`) on the config page | Same ordering as live scripts: `# Initialize` first, helpers second, banner/login-check third | ✅ | |
 
 ### 6D. Lab VM Actions (Create / Remove)
 
@@ -265,7 +265,7 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6E.2 | Send Email — verify recipient | Check received email | Correct recipient, subject ("Your PathLab Environment is Ready!"), HTML body with logo | | |
 | 6E.3 | Send Email — logo renders | Check email body in recipient's inbox | Logo image loads from public `email-assets` path (not broken image) | | |
 | 6E.4 | Send Email — no eMailHTML config | Try Send before generating configs (or delete config) | Error: "No stored notification email found" | | |
-| 6E.5 | Send Email — wrong configType | Use devtools to POST with `configType=FakeEmail` | Error: "Config type 'FakeEmail' is not enabled for email sending" | | |
+| 6E.5 | Send Email — wrong configType | Use devtools to POST with `configType=FakeEmail` | Error: "Config type 'FakeEmail' is not enabled for email sending" | ⏭️ | |
 | 6E.6 | Send Email — Logic App down | Disconnect Logic App or use wrong webhook URL | Error message in UI; failure badge persisted in SQL | | |
 | 6E.7 | Email status badge | After send, hard refresh page | Badge + timestamp on card header (persisted from `EmailSendRun`) | | |
 | 6E.8 | Send Email twice | Send → wait for badge → Send again | Second send succeeds; badge updates to new timestamp | | |
@@ -532,12 +532,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 136 | 44.0% |
+| ✅ Pass | 150 | 48.5% |
 | ❌ Fail | 9 | 2.9% |
-| ⏭️ Skipped | 4 | 1.3% |
-| Not tested | 160 | 51.8% |
+| ⏭️ Skipped | 12 | 3.9% |
+| Not tested | 138 | 44.7% |
 
-- **Tested:** 149 / 309 (48.2%)
-- **Pass rate (of tested):** 136 / 149 (91.3%)
+- **Tested:** 171 / 309 (55.3%)
+- **Pass rate (of tested):** 150 / 171 (87.7%)
 
-_Last updated: 2026-06-17_
+_Last updated: 2026-07-31_
