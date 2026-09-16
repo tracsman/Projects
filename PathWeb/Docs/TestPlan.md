@@ -148,17 +148,17 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6B.13 | Compare Juniper — device unreachable | Run Compare against an offline Juniper device | Error message in modal (timeout or connection refused); no hung spinner | ✅ | |
 | 6B.14 | Apply Juniper — SSH session drops mid-push | Kill SSH connectivity during apply on Juniper | Error reported; no partial config orphaned on device (Juniper rollback) | ⏭️ | |
 | **Cisco Device Actions** | | | | | |
-| 6B.15 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped | ✅ | |
-| 6B.16 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge | ✅ | |
-| 6B.17 | Compare Cisco — device in sync | Run Compare when Cisco device already matches config | "No differences" or empty diff message; no false positives | ✅ | |
-| 6B.18 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent | ✅ | |
-| 6B.19 | Patch Cisco Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Cisco | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge | ✅ | |
-| 6B.20 | Patch Cisco — additions only | Patch Cisco when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | |
-| 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section | ✅ | |
+| 6B.15 | Compare to Cisco Device | Select "Compare to Device" → Run on a Cisco (`-NX`/`-ASR`/`-ISR`) card | Modal opens showing set-based diff (additions/removals); order-agnostic; comments/blanks stripped |  | Re-test after stanza-expansion changes |
+| 6B.16 | Apply to Cisco Device 🔒8 | Select "Apply to Device" → Run → review diff → Confirm on Cisco | Delta pushed via SSH; uses `wr` (write memory) after config push; success badge |  | Re-test after BuildCiscoAddLines tuple change |
+| 6B.17 | Compare Cisco — device in sync | Run Compare when Cisco device already matches config | "No differences" or empty diff message; no false positives |  | Re-test after stanza-expansion changes |
+| 6B.18 | Apply Cisco — nothing to apply | Run Apply when Cisco device already matches config | "No changes needed" message; no SSH write commands sent |  | Re-test after stanza-expansion changes |
+| 6B.19 | Patch Cisco Device 🔒8 | Select "Patch Device" → Run → review add/remove buckets → Confirm on Cisco | Both additions (new lines) and removals (delete/no-prefix) pushed; success badge |  | Re-test after BuildCiscoAddLines + new BuildCiscoRemoveLines |
+| 6B.20 | Patch Cisco — additions only | Patch Cisco when device has missing lines but nothing extra | Only additions shown; no removal section |  | Re-test after BuildCiscoAddLines tuple change |
+| 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section |  | Re-test after new BuildCiscoRemoveLines (context-aware `no` with stanza re-entry) |
 | 6B.22 | Remove from Cisco Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Cisco (`-NX`/`-ASR`/`-ISR`) | Per-device `-out` backout config pushed via SSH; `wr` applied; success badge | ✅ | |
 | 6B.23 | Verify Off Cisco Device 🔒8 | Select "Verify Off Device" → Run on Cisco (`-NX`/`-ASR`/`-ISR`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
 | 6B.24 | Verify — clean Cisco device | Run Verify on Cisco device with no tenant references | "No references found" or equivalent clean result | ✅ | |
-| 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ✅ | |
+| 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left |  | Re-test after BuildCiscoAddLines tuple change |
 | 6B.26 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | ✅ | |
 | 6B.27 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | ⏭️ | |
 | **UI Behavior & General** | | | | | |
