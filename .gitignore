@@ -1,0 +1,36 @@
+# Visual Studio / Rider / VS Code IDE state
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Local dev secrets / env
+*.env
+*.env.local
+appsettings.*.Development.json
+secrets.json
+
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
