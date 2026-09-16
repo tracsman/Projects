@@ -532,12 +532,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 150 | 48.5% |
-| ❌ Fail | 9 | 2.9% |
+| ✅ Pass | 142 | 46.0% |
+| ❌ Fail | 8 | 2.6% |
 | ⏭️ Skipped | 12 | 3.9% |
-| Not tested | 138 | 44.7% |
+| Not tested | 147 | 47.6% |
 
-- **Tested:** 171 / 309 (55.3%)
-- **Pass rate (of tested):** 150 / 171 (87.7%)
+- **Tested:** 150 / 309 (48.5%)
+- **Pass rate (of tested):** 142 / 150 (94.7%)
 
-_Last updated: 2026-07-31_
+_Last updated: 2026-09-15_
