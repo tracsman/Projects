@@ -70,6 +70,9 @@
 - [x] **Remove hardcoded Logic App trigger URL from `deploy-to-azure.ps1`** — Corporate security flagged exposed SAS `sig=` in the hardcoded trigger URL; refactored to an optional `-LogicAppTriggerUrl` parameter (no default); existing App Service setting is preserved unless explicitly overridden
 - [x] **Rotate Logic App access key & scrub git history** — Old `sig=` scrubbed from all 155 commits via `git filter-branch` + force-push; Logic App key regenerated; new trigger URL set on App Service via `Set-AzWebApp`
 - [x] **Restore auth cache TTL to 5 minutes** — `AuthLevelService.cs` restored to `TimeSpan.FromMinutes(5)` after manual auth-level testing was complete
+- [x] **Fix Cisco Patch attribute replacement order** — Remove stale values before adding desired values, resetting to global config mode between phases so `no name customer10` cannot clear the newly applied `name cust10`; real-device re-test remains pending under test 6B.19
+- [x] **Patch cryptography dependency security warnings** — Directly reference `System.Security.Cryptography.Pkcs` 10.0.13 to override vulnerable 10.0.0 pulled in by SQL Client and Identity.Web (GHSA-846f-f764-76mx and GHSA-2fmv-rv2c-59x7)
+strips the `Building configuration`/`Current configuration`/`end` banner, drops the shared parent interfaces (e.g., `TenGigabitEthernet0/1/0`, `Port-channel1`) that `show run vrf` prints for context by keeping only `interface` stanzas with `vrf forwarding {id}`, and ignores `no shutdown` (never rendered by IOS-XE).
 
 ---
 

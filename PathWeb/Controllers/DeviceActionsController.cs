@@ -59,6 +59,20 @@ public class DeviceActionsController : BaseController
         if (!sshSuccess)
             return Json(new { success = false, output = $"SSH failed: {output}" });
 
+        if (platform == "IOS-XE")
+        {
+            var (refOk, refOut) = await _sshService.RunCommandAsync(
+                device.MgmtIpv4, 22, PlatformDetector.GetIosXeReferenceCommand(searchPattern));
+            if (!refOk)
+                return Json(new { success = false, output = $"SSH failed: {refOut}" });
+            var known = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var stray = StripIosXeNoise(refOut)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(l => !known.Contains(l));
+            output = string.Join('\n', output.TrimEnd('\n').Split('\n').Concat(stray).Where(l => l.Length > 0));
+        }
+
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var matchCount = lines.Length;
 
@@ -353,24 +367,16 @@ public class DeviceActionsController : BaseController
                         configLines.Add(line);
                         addedLines.Add(line);
                     }
-                }
-                else
-                {
-                    var (ciscoAdds, ciscoAddLeaves) = BuildCiscoAddLines(storedConfig, missingKeys, platform);
-                    configLines.AddRange(ciscoAdds);
-                    addedLines.AddRange(ciscoAddLeaves);
-                }
-
-                if (platform == "Juniper")
-                {
                     AppendJuniperDeletes(extraKeys, deviceSet, deviceOriginals, tenantId,
                         configLines, removedLines);
                 }
                 else
                 {
-                    var (ciscoRemoves, ciscoRemoveLeaves) = BuildCiscoRemoveLines(sshOutput, extraKeys, platform);
-                    configLines.AddRange(ciscoRemoves);
-                    removedLines.AddRange(ciscoRemoveLeaves);
+                    var (commands, additions, removals) =
+                        BuildCiscoPatchLines(storedConfig, sshOutput, missingKeys, extraKeys, platform);
+                    configLines.AddRange(commands);
+                    addedLines.AddRange(additions);
+                    removedLines.AddRange(removals);
                 }
 
                 _logger.LogInformation("PatchDevice.Run: {Device} ({Host}) patching +{AddCount}/-{RemoveCount} lines (run {RunId})",
@@ -557,7 +563,24 @@ public class DeviceActionsController : BaseController
         if (!ok)
             return (false, initial);
 
-        if (platform == "NX-OS" || platform == "IOS-XE")
+        if (platform == "IOS-XE")
+        {
+            var tenantId = ExtractTenantIdFromPattern(searchPattern);
+            var vrfConfig = StripIosXeNoise(initial);
+            if (tenantId != null)
+                vrfConfig = DropIosXeNonVrfInterfaces(vrfConfig, tenantId);
+            var sbIos = new System.Text.StringBuilder(vrfConfig);
+            foreach (var cmd in PlatformDetector.GetIosXeSupplementalCommands(searchPattern))
+            {
+                var (subOk, subOut) = await _sshService.RunCommandAsync(host, 22, cmd);
+                if (!subOk)
+                    return (false, subOut);
+                sbIos.Append(StripIosXeNoise(subOut));
+            }
+            return (true, sbIos.ToString());
+        }
+
+        if (platform == "NX-OS")
             return await ExpandCiscoStanzasAsync(host, platform, searchPattern, initial);
 
         if (platform != "Juniper")
@@ -695,6 +718,64 @@ public class DeviceActionsController : BaseController
         return m.Success ? m.Groups[1].Value : null;
     }
 
+    /// <summary>
+    /// Removes IOS-XE `show running-config` framing that is not tenant config:
+    /// `Building configuration...`, `Current configuration : N bytes`, the trailing `end`,
+    /// `!` separators, and `%` CLI messages (e.g., when the VRF does not exist).
+    /// </summary>
+    private static string StripIosXeNoise(string text)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r', ' ', '\t');
+            var trimmed = line.TrimStart();
+            if (trimmed.Length == 0 ||
+                trimmed.StartsWith('!') ||
+                trimmed.StartsWith('%') ||
+                trimmed.StartsWith("Building configuration", StringComparison.OrdinalIgnoreCase) ||
+                trimmed.StartsWith("Current configuration", StringComparison.OrdinalIgnoreCase) ||
+                (trimmed.Equals("end", StringComparison.OrdinalIgnoreCase) && line.Length == trimmed.Length))
+                continue;
+            sb.Append(line);
+            sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// `show running-config vrf {id}` on IOS-XE also prints the parent interface of each VRF
+    /// sub-interface (e.g., `interface TenGigabitEthernet0/1/0`, `interface Port-channel1`) for
+    /// context. Those parents are shared infrastructure, not tenant config, so drop any top-level
+    /// `interface` stanza that is not itself bound to the tenant VRF via `vrf forwarding {id}`.
+    /// </summary>
+    private static string DropIosXeNonVrfInterfaces(string text, string tenantId)
+    {
+        var vrfLine = new System.Text.RegularExpressions.Regex(
+            $@"^\s+vrf\s+forwarding\s+{System.Text.RegularExpressions.Regex.Escape(tenantId)}\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var sb = new System.Text.StringBuilder();
+        var block = new List<string>();
+
+        void Flush()
+        {
+            if (block.Count == 0) return;
+            var isInterface = block[0].StartsWith("interface ", StringComparison.OrdinalIgnoreCase);
+            if (!isInterface || block.Skip(1).Any(l => vrfLine.IsMatch(l)))
+                foreach (var l in block) sb.Append(l).Append('\n');
+            block.Clear();
+        }
+
+        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!char.IsWhiteSpace(line[0]))
+                Flush();
+            block.Add(line);
+        }
+        Flush();
+        return sb.ToString();
+    }
+
     private static HashSet<string> NormalizeConfigLines(string text, string platform)
     {
         var commentPrefixes = platform == "Juniper"
@@ -705,6 +786,8 @@ public class DeviceActionsController : BaseController
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(line => !commentPrefixes.Any(p => line.StartsWith(p)))
             .Select(line => NormalizeLineForCompare(line, platform))
+            // IOS-XE never renders the default `no shutdown` in running-config.
+            .Where(key => !(platform == "IOS-XE" && key == "no shutdown"))
             .ToHashSet();
     }
 
@@ -741,6 +824,23 @@ public class DeviceActionsController : BaseController
             line = System.Text.RegularExpressions.Regex.Replace(line, @"([0-9a-f:]*:+[0-9a-f:]*)/128\b", "$1");
         }
         return line;
+    }
+
+    private static (List<string> Commands, List<string> AddedLines, List<string> RemovedLines) BuildCiscoPatchLines(
+        string storedConfig, string deviceConfig, HashSet<string> missingKeys, HashSet<string> extraKeys, string platform)
+    {
+        var (commands, removals) = BuildCiscoRemoveLines(deviceConfig, extraKeys, platform);
+        var (addCommands, additions) = BuildCiscoAddLines(storedConfig, missingKeys, platform);
+
+        // Cisco "no" commands can clear an attribute regardless of its current value.
+        // Remove first, then leave any removal submode before applying the desired config.
+        if (commands.Count > 0 && addCommands.Count > 0)
+        {
+            commands.Add("end");
+            commands.Add("configure terminal");
+        }
+        commands.AddRange(addCommands);
+        return (commands, additions, removals);
     }
 
     /// <summary>
