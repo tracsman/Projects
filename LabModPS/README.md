@@ -1,3 +1,51 @@
+# ECX Provider Output (LabMod 1.5.1.0)
+
+`New-LabECX` and `Remove-LabECX` display a banner, timestamped steps, indented
+details, `[ OK ]` / `[SKIP]` / `[FAIL]` markers, and a final formatted summary.
+Interactive progress is colored; Azure Automation receives plain-text progress
+on the Output stream without requiring `-Verbose`. Other module commands keep
+their existing logging behavior.
+
+The summary reports `Script`, `Tenant`, `Started`, `Finished`, `Duration`,
+`Result`, `CircuitsExamined`, `ConnectionsSubmitted`, `CircuitsSkipped`, and
+`Failures`. `Submitted` means the provider accepted requests, not that remote
+provisioning/deprovisioning has finished. `PartialFailure` means some requests
+were accepted but another operation failed, including saving UUID tags.
+`NoChanges` means no requests were submitted and no failures were recorded.
+`Failures` counts reported problems, not unique circuits. Known warning/return
+paths retain their behavior; the summary is not a replacement for the Automation
+job status. Fatal exceptions still propagate after the summary is emitted.
+The summary is formatted text, not a new machine-readable pipeline contract.
+
+Run the offline regression checks from the repository root:
+
+```powershell
+.\LabModPS\Tests\ProviderOutput.Tests.ps1
+```
+
+These checks mock Azure, Equinix, prompts, and filesystem logging. They perform
+no provisioning or removal.
+
+## Publishing and rollout
+
+The checked-in `LabMod.zip` contains the `LabMod` folder, including its manifest,
+public commands, and private helpers. Rebuild it after changing module files:
+
+```powershell
+Compress-Archive -Path .\LabModPS\LabMod -DestinationPath .\LabModPS\LabMod.zip -Force
+```
+
+Publish/import this package as **LabMod 1.5.1.0** in the **runtime environment
+configured by PathWeb**, and verify the installed package version before using
+the updated app. Do not rely on updating a different/classic Automation runtime.
+Publishing, PathWeb deployment, and live provider runs require separate approval.
+Then deploy PathWeb and re-test 6C.10/6C.13. No tenant config regeneration is needed;
+previously completed jobs retain their previously saved output.
+
+For rollback, retain the previous module package and app build and restore both:
+the previous provider implementation relies on PathWeb enabling verbose output.
+The local installer/updater file lists include the new private helpers.
+
 # Building a PathLab Base VM VHDX
 
 This README instructs in the creation of a new base VHDX for the following OS:

@@ -446,6 +446,7 @@ else
         var _automationConfigType = null;
         var _automationJobId = null;
         var _automationPollTimer = null;
+        var _automationPollFailures = 0;
         var _automationRuns = @Html.Raw(automationRunsJson);
         var _automationHistory = @Html.Raw(automationHistoryJson);
         var _deviceApplyRuns = @Html.Raw(deviceApplyRunsJson);
@@ -557,6 +558,7 @@ else
                 clearTimeout(_automationPollTimer);
                 _automationPollTimer = null;
             }
+            _automationPollFailures = 0;
         }
 
         function resetAutomationModal() {
@@ -925,6 +927,12 @@ else
             renderAutomationHistory('CreateAzurePowerShell');
         }
 
+        function filterAutomationOutput(text) {
+            return text.split(/\r?\n/).filter(function (line) {
+                return !/^\[Verbose\] (?:Loading module from path\s+['"]|(?:Importing|Exporting) (?:cmdlet|function|alias|variable)\s+['"]|Populating RepositorySourceLocation property for module \S+\.\s*$)/i.test(line);
+            }).join('\n');
+        }
+
         function renderAutomationRun(run, fallbackOutput) {
             if (!run) return;
 
@@ -933,7 +941,7 @@ else
             var runbookText = run.runbookName ? 'Runbook <strong>' + run.runbookName + '</strong> — ' : '';
             setAutomationStatus('<div class="alert ' + presentation.alertClass + ' mb-0"><i class="bi ' + presentation.icon + '"></i> ' + runbookText + 'job <code>' + run.jobId + '</code> status: <strong>' + (run.status || 'Unknown') + '</strong>' + submittedText + '</div>');
 
-            var text = run.output || fallbackOutput || '';
+            var text = filterAutomationOutput(run.output || fallbackOutput || '');
             if (run.exception) {
                 text += (text ? '\n\n' : '') + 'EXCEPTION:\n' + run.exception;
             }
@@ -991,7 +999,7 @@ else
             var scriptText = useExistingScript
                 ? existingRun.preparedScript
                 : (scriptOverride || source.value);
-            if (isDeprovision && !existingRun) {
+            if (isDeprovision && !useExistingScript) {
                 scriptText = scriptText.replace(/New-LabECX/g, 'Remove-LabECX');
             }
             document.getElementById('automationScriptEditor').value = scriptText;
@@ -1065,10 +1073,30 @@ else
 
         async function pollAutomationJob() {
             if (!_automationJobId) return;
+            var jobId = _automationJobId;
 
             try {
-                var response = await fetch('@Url.Action("Status", "Automation")?jobId=' + encodeURIComponent(_automationJobId));
-                var data = await response.json();
+                var response = await fetch('@Url.Action("Status", "Automation")?jobId=' + encodeURIComponent(jobId));
+                if (_automationJobId !== jobId || !document.getElementById('automationModal').classList.contains('show')) return;
+
+                if ([429, 502, 503, 504].includes(response.status)) {
+                    retryAutomationPoll(jobId, 'HTTP ' + response.status);
+                    return;
+                }
+                if (!response.ok) {
+                    setAutomationStatus('<div class="alert alert-danger mb-0">Could not check the runbook status (HTTP ' + response.status + '). The runbook may still be running; reopen this run to check it.</div>');
+                    return;
+                }
+
+                var data;
+                try {
+                    data = await response.json();
+                } catch (err) {
+                    setAutomationStatus('<div class="alert alert-danger mb-0">The status service returned an invalid response. The runbook may still be running; reopen this run to check it.</div>');
+                    console.error('Invalid automation status response', err);
+                    return;
+                }
+                if (_automationJobId !== jobId || !document.getElementById('automationModal').classList.contains('show')) return;
 
                 if (!data.success) {
                     setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Poll failed: ' + data.output + '</div>');
@@ -1076,6 +1104,7 @@ else
                 }
 
                 if (data.run) {
+                    _automationPollFailures = 0;
                     setAutomationRun(data.run);
                     renderAutomationRun(data.run, '');
                     _automationJobId = data.run.jobId;
@@ -1085,8 +1114,20 @@ else
                     }
                 }
             } catch (err) {
-                setAutomationStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> Poll failed: ' + err + '</div>');
+                console.warn('Automation status request failed', err);
+                retryAutomationPoll(jobId, 'network error');
             }
+        }
+
+        function retryAutomationPoll(jobId, reason) {
+            if (_automationJobId !== jobId || !document.getElementById('automationModal').classList.contains('show')) return;
+            _automationPollFailures++;
+            if (_automationPollFailures > 3) {
+                setAutomationStatus('<div class="alert alert-danger mb-0">Could not check the runbook status (' + reason + '). The runbook may still be running; reopen this run to check it.</div>');
+                return;
+            }
+            setAutomationStatus('<div class="alert alert-warning mb-0">Status temporarily unavailable (' + reason + '). Retrying; the runbook has not been resubmitted.</div>');
+            _automationPollTimer = setTimeout(pollAutomationJob, 3000 * _automationPollFailures);
         }
 
         // --- Lab VM Modal ---

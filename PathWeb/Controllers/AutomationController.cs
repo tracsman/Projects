@@ -130,7 +130,7 @@ public class AutomationController : BaseController
             });
         }
 
-        var result = await _automationService.GetJobStatusAsync(jobId);
+        var result = await _automationService.GetJobStatusAsync(jobId, HttpContext.RequestAborted);
         if (!result.Success)
             return Json(new { success = false, output = result.Error ?? "Failed to read job status." });
 
@@ -190,7 +190,7 @@ public class AutomationController : BaseController
         var runbooksToCleanup = new List<string>();
         foreach (var run in runsByConfig.Where(r => !IsTerminalStatus(r.Status)))
         {
-            var statusResult = await _automationService.GetJobStatusAsync(run.JobId);
+            var statusResult = await _automationService.GetJobStatusAsync(run.JobId, HttpContext.RequestAborted);
             if (!statusResult.Success)
             {
                 _logger.LogWarning("Failed to refresh automation job {JobId} for latest run lookup: {Error}", run.JobId, statusResult.Error);

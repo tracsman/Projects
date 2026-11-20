@@ -23,6 +23,8 @@ function Install-LabMod {
     $FileName += 'Private/Assert-LabAdminContext.ps1'
     $FileName += 'Private/Write-LabLogEntry.ps1'
     $FileName += 'Private/Write-LabRunStatus.ps1'
+    $FileName += 'Private/Write-LabProviderStatus.ps1'
+    $FileName += 'Private/Write-LabProviderSummary.ps1'
     $FileName += 'Private/New-LabVMDrive.ps1'
     $FileName += 'Public/Build-LabBaseVHDX.ps1'
     $FileName += 'Public/Build-LabBaseVM.ps1'

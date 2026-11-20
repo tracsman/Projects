@@ -155,10 +155,10 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6B.19 | Patch Cisco Device 🔒8 | Change VLAN `name cust10` to `name customer10` on device → Compare → Patch Device → review add/remove buckets → Confirm → Compare again; repeat on NX-OS and IOS-XE | Transcript removes `name customer10` before adding `name cust10`, returning to global config mode between phases; final VLAN name is `cust10`; follow-up Compare shows no differences; success badge | ✅ | Passed on NX-OS and IOS-XE after removal-before-addition fix |
 | 6B.20 | Patch Cisco — additions only | Patch Cisco when device has missing lines but nothing extra | Only additions shown; no removal section | ✅ | Passed on NX-OS and IOS-XE; ASR test removed a neighbor, Compare detected it, and Patch restored it |
 | 6B.21 | Patch Cisco — removals only | Patch Cisco when device has extra lines but nothing missing | Only removals shown; no addition section | ✅ | Extra line removed successfully by Patch; follow-up Compare clean |
-| 6B.22 | Remove from Cisco Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Cisco (`-NX`/`-ASR`/`-ISR`) | Per-device `-out` backout config pushed via SSH; `wr` applied; success badge | ✅ | |
-| 6B.23 | Verify Off Cisco Device 🔒8 | Select "Verify Off Device" → Run on Cisco (`-NX`/`-ASR`/`-ISR`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | |
-| 6B.24 | Verify — clean Cisco device | Run Verify on Cisco device with no tenant references | "No references found" or equivalent clean result | ✅ | |
-| 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left |  | Re-test after BuildCiscoAddLines tuple change |
+| 6B.22 | Remove from Cisco Device 🔒8 | Select "Remove from Device" → Run → review backout config → Confirm on Cisco (`-NX`/`-ASR`/`-ISR`) | Per-device `-out` backout config pushed via SSH; `wr` applied; success badge | ✅ | Passed on ASR/IOS-XE |
+| 6B.23 | Verify Off Cisco Device 🔒8 | Select "Verify Off Device" → Run on Cisco (`-NX`/`-ASR`/`-ISR`) | SSH grep for `Cust{TenantId}` references; results shown in modal | ✅ | Passed on ASR/IOS-XE |
+| 6B.24 | Verify — clean Cisco device | Run Verify on Cisco device with no tenant references | "No references found" or equivalent clean result | ✅ | Passed on ASR/IOS-XE |
+| 6B.25 | Apply Cisco — write failure | Apply invalid config to Cisco device | Error shown in modal; no partial config left | ⏭️ | |
 | 6B.26 | Compare Cisco — device unreachable | Run Compare against an offline Cisco device | Error message in modal (timeout or connection refused); no hung spinner | ✅ | |
 | 6B.27 | Apply Cisco — SSH session drops mid-push | Kill SSH connectivity during apply on Cisco | Error reported; partial config risk noted (no automatic rollback on Cisco) | ⏭️ | |
 | **UI Behavior & General** | | | | | |
@@ -180,26 +180,26 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6C.4 | Script preparation — no double-encoding | Check prepared script for encoding artifacts | No double-escaped characters or corrupted strings | ✅ | |
 | 6C.5 | Runbook type from Settings | Change `AutomationRunbookType` in Settings to a different value → Deploy | Runbook created with the new type (verify via Azure portal or `/diag`) | ✅ | |
 | **Remove from Azure** | | | | | |
-| 6C.6 | Remove from Azure 🔒8 | `CreateAzurePowerShell` card → "Remove from Azure" → Run | Fetches `-out` backout script from SQL; opens in automation modal | | |
-| 6C.7 | Remove — `Write-Status` dual output | Check automation modal output during backout run | Both colored console output AND captured runbook output visible | | |
-| 6C.8 | Remove — no backout script | Run Remove on a tenant that was never deployed (no `-out` config) | Error message "No backout config found for 'CreateAzurePowerShell'" | | |
-| 6C.9 | ER Remove redirects to Azure card | `CreateERPowerShell` card → "Remove from Azure" | Info message directing user to `CreateAzurePowerShell` card | | |
+| 6C.6 | Remove from Azure 🔒8 | `CreateAzurePowerShell` card → "Remove from Azure" → Run | Fetches `-out` backout script from SQL; opens in automation modal | ✅ | |
+| 6C.7 | Remove — `Write-Status` runbook output | Check automation modal output during backout run | `Write-Status` messages are captured and visible in the runbook output; monochrome output is expected in Azure Automation | ✅ | Color is available only in interactive PowerShell output |
+| 6C.8 | Remove — no backout script | Deliberately remove a tenant's `CreateAzurePowerShell-out` config row → run Remove from Azure | Error message "No backout config found for 'CreateAzurePowerShell'" | ✅ | Tested with controlled missing backout config |
+| 6C.9 | ER Remove redirects to Azure card | `CreateERPowerShell` card → "Remove from Azure" | Info message directing user to `CreateAzurePowerShell` card | ✅ | |
 | **Provider Provisioning** | | | | | |
-| 6C.10 | Provision Provider 🔒8 | `ServiceProviderInstructions` card → "Provision at Provider" → Run | `New-LabECX` submitted via Automation; status tracked in SQL | | |
+| 6C.10 | Provision Provider 🔒8 | With LabMod 1.5.1.0 installed in the configured Automation runtime, `ServiceProviderInstructions` card → "Provision at Provider" → Run → inspect output → reopen completed run | `New-LabECX` submitted via Automation; formatted banner, timestamped steps, indented details, OK/SKIP/FAIL markers, and final outcome/count/duration summary persist in SQL and on reopen; no forced verbose progress or duplicate routine messages; accepted requests say submitted, not fully provisioned | ✅ | Provisioning, formatted output, and stream capture passed |
 | 6C.11 | Provision — non-ECX tenant (Direct) | Run Provision on tenant with `EruplinkPort` ≠ "ECX" | "This tenant uses ExpressRoute Direct" message; no runbook created | | |
-| 6C.12 | Provision — no ER circuit | Run Provision on tenant with `Ersku` = "None" | "No ExpressRoute circuit is configured" message | | |
-| 6C.13 | Deprovision Provider 🔒8 | `ServiceProviderInstructions` card → "Deprovision at Provider" → Run | `Remove-LabECX` submitted (not `New-LabECX`); verify cmdlet name in prepared script | | |
+| 6C.12 | Provision — no ER circuit | Run Provision on tenant with `Ersku` = "None" | "No ExpressRoute circuit is configured" message | ✅ | |
+| 6C.13 | Deprovision Provider 🔒8 | After a previous provider run exists, select "Deprovision at Provider" → Run; inspect the script before submitting, then reopen the previous run separately | Fresh deprovision script uses `Remove-LabECX`, never `New-LabECX`; reopening the previous run retains its original script; after confirmation, formatted progress and summary are visible | ✅ | Deprovision correctly used `Remove-LabECX`; previous run retained its original script |
 | **Runbook Lifecycle & Cleanup** | | | | | |
 | 6C.14 | Runbook auto-delete on success | Complete a runbook run with `AutoDeleteRunbook=true` | Runbook deleted from Azure Automation after terminal status persisted | | |
 | 6C.15 | Runbook auto-delete on failure | Runbook run fails with `AutoDeleteRunbook=true` | Runbook still deleted (cleanup applies to all terminal states) | | |
 | 6C.16 | Runbook auto-delete disabled | Set `AutoDeleteRunbook=false`; complete a run | Runbook remains in Azure Automation account | | |
 | 6C.17 | Job status — Completed | Run a simple script to completion | Status shows "Completed" ✅; output captured | | |
 | 6C.18 | Job status — Failed | Run a script that throws an error | Status shows "Failed" ❌; exception text captured and displayed | | |
-| 6C.19 | Job status — long-running | Submit a script that runs > 60 seconds | Polling continues; modal stays responsive; no timeout on PathWeb side | | |
+| 6C.19 | Job status — long-running | Run a long script producing many verbose records; check status repeatedly and reopen the run. Separately simulate a transient 502/503/504 response | Polling remains responsive, output stays ordered and complete; transient gateway errors retry status checks without resubmitting the run; failures clearly indicate the job may still be running | | Provider action previously completed despite a JSON parse error while polling; re-test after deployment |
 | 6C.20 | Job status — Suspended/Stopped | Manually suspend or stop a running job in Azure portal | PathWeb picks up terminal status on next poll; badge updates | | |
 | **Modal & History** | | | | | |
 | 6C.21 | Automation modal — reopen running | Close modal during a running job → reopen same card action | Modal resumes with current status/output from last poll | | |
-| 6C.22 | Automation modal — reopen completed | Reopen modal after job completed (page not refreshed) | Shows completed status with full output | | |
+| 6C.22 | Automation modal — reopen completed | Reopen a completed run with module-import verbose messages; refresh and reopen it again | Status and useful output remain visible; verbose module loading, importing/exporting cmdlet/function/alias/variable, and RepositorySourceLocation population lines are hidden; warnings, errors, other verbose messages and exceptions remain visible | | Raw output remains saved; re-test after deployment |
 | 6C.23 | Page refresh during running job | Refresh the Config page while a job is running | `Latest` endpoint refreshes status; job continues; badge reflects current state | | |
 | 6C.24 | Recent run history | After completing 2+ runs for same config type | Recent-run history section shows multiple entries, most recent first | | |
 | 6C.25 | Recent run history — collapsed | Check PS card recent-run section on page load | Section defaults to collapsed; expandable on click | | |
@@ -532,12 +532,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 149 | 48.2% |
+| ✅ Pass | 156 | 50.5% |
 | ❌ Fail | 8 | 2.6% |
-| ⏭️ Skipped | 12 | 3.9% |
-| Not tested | 140 | 45.3% |
+| ⏭️ Skipped | 13 | 4.2% |
+| Not tested | 132 | 42.7% |
 
-- **Tested:** 157 / 309 (50.8%)
-- **Pass rate (of tested):** 149 / 157 (94.9%)
+- **Tested:** 164 / 309 (53.1%)
+- **Pass rate (of tested):** 156 / 164 (95.1%)
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-11-20_

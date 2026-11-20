@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace PathWeb.Services;
@@ -56,18 +57,21 @@ public class AutomationService
     private readonly ILogger<AutomationService> _logger;
     private readonly AutomationOptions _options;
     private readonly SettingsService _settingsService;
+    private readonly IMemoryCache _cache;
     private readonly TokenCredential _credential;
 
     public AutomationService(
         IHttpClientFactory httpClientFactory,
         IOptions<AutomationOptions> options,
         SettingsService settingsService,
+        IMemoryCache cache,
         ILogger<AutomationService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _options = options.Value;
         _settingsService = settingsService;
+        _cache = cache;
         _credential = new DefaultAzureCredential();
     }
 
@@ -313,7 +317,7 @@ public class AutomationService
                 cancellationToken: cancellationToken);
 
             var status = job?.Properties?.Status ?? "Unknown";
-            var output = await TryGetJobOutputAsync(jobId, cancellationToken) ?? string.Empty;
+            var output = await GetJobOutputAsync(jobId, cancellationToken);
             var exception = job?.Properties?.Exception ?? string.Empty;
 
             return new AutomationJobStatusResult
@@ -423,11 +427,89 @@ public class AutomationService
         await SendAsync(HttpMethod.Put, BuildAccountUrl($"jobs/{Uri.EscapeDataString(jobId)}"), body, cancellationToken);
     }
 
-    private async Task<string?> TryGetJobOutputAsync(string jobId, CancellationToken cancellationToken)
+    private async Task<string> GetJobOutputAsync(string jobId, CancellationToken cancellationToken)
     {
-        var response = await SendRawAsync(HttpMethod.Get, BuildAccountUrl($"jobs/{Uri.EscapeDataString(jobId)}/output"), null, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return null;
+        var output = await GetJobSuccessOutputAsync(jobId, cancellationToken) ?? string.Empty;
+        var streamsPath = $"jobs/{Uri.EscapeDataString(jobId)}/streams";
+        var firstPage = new Uri(BuildAccountUrl(streamsPath));
+        string? nextPage = firstPage.AbsoluteUri;
+        var visitedPages = new HashSet<string>(StringComparer.Ordinal);
+        var streams = new Dictionary<string, JobStreamProperties>(StringComparer.Ordinal);
+
+        while (!string.IsNullOrWhiteSpace(nextPage))
+        {
+            // Pagination URLs receive our ARM token; only follow this job's stream-list URL.
+            if (!Uri.TryCreate(nextPage, UriKind.Absolute, out var pageUri) ||
+                pageUri.Scheme != firstPage.Scheme ||
+                pageUri.Authority != firstPage.Authority ||
+                !pageUri.AbsolutePath.Equals(firstPage.AbsolutePath, StringComparison.OrdinalIgnoreCase) ||
+                !visitedPages.Add(nextPage))
+                throw new InvalidOperationException("Azure Automation returned an invalid job-stream pagination link.");
+
+            var page = await SendAndReadJsonAsync<JobStreamListResponse>(
+                HttpMethod.Get, nextPage, cancellationToken: cancellationToken);
+            if (page?.Value == null)
+                throw new InvalidOperationException("Azure Automation returned an invalid job-stream list.");
+
+            foreach (var stream in page.Value)
+            {
+                var properties = stream.Properties
+                    ?? throw new InvalidOperationException("Azure Automation returned a job stream without properties.");
+                // The output endpoint already provides the complete, formatted success stream.
+                if (string.Equals(properties.StreamType, "Output", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (string.IsNullOrWhiteSpace(properties.JobStreamId) || string.IsNullOrWhiteSpace(properties.StreamType))
+                    throw new InvalidOperationException("Azure Automation returned a job stream without an ID or type.");
+                streams.TryAdd(properties.JobStreamId, properties);
+            }
+            nextPage = page.NextLink;
+        }
+
+        var orderedStreams = streams.Values.OrderBy(s => s.Time)
+            .ThenBy(s => s.JobStreamId, StringComparer.Ordinal).ToArray();
+        var messages = new string?[orderedStreams.Length];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, orderedStreams.Length),
+            new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken },
+            async (index, token) =>
+        {
+            var stream = orderedStreams[index];
+            var properties = stream;
+            if (string.IsNullOrEmpty(properties.StreamText))
+            {
+                var detailUrl = BuildAccountUrl($"{streamsPath}/{Uri.EscapeDataString(stream.JobStreamId!)}");
+                if (!_cache.TryGetValue(detailUrl, out JobStreamProperties? cachedProperties))
+                {
+                    var detail = await SendAndReadJsonAsync<JobStreamResponse>(
+                        HttpMethod.Get, detailUrl, cancellationToken: token);
+                    cachedProperties = detail?.Properties
+                        ?? throw new InvalidOperationException("Azure Automation returned an invalid job-stream detail.");
+                    if (!string.IsNullOrWhiteSpace(cachedProperties.StreamText))
+                        _cache.Set(detailUrl, cachedProperties, TimeSpan.FromMinutes(10));
+                }
+                properties = cachedProperties
+                    ?? throw new InvalidOperationException("Azure Automation returned an invalid cached job-stream detail.");
+            }
+
+            var text = string.IsNullOrWhiteSpace(properties.StreamText) ? properties.Summary : properties.StreamText;
+            if (!string.IsNullOrWhiteSpace(text))
+                messages[index] = $"[{stream.StreamType}] {text.TrimEnd()}";
+        });
+
+        var visibleMessages = messages.Where(message => message != null);
+        var messageText = string.Join(Environment.NewLine, visibleMessages);
+        if (messageText.Length == 0)
+            return output;
+
+        return string.IsNullOrWhiteSpace(output)
+            ? messageText
+            : output + Environment.NewLine + Environment.NewLine + messageText;
+    }
+
+    private async Task<string?> GetJobSuccessOutputAsync(string jobId, CancellationToken cancellationToken)
+    {
+        using var response = await SendRawAsync(HttpMethod.Get, BuildAccountUrl($"jobs/{Uri.EscapeDataString(jobId)}/output"), null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
 
         var text = (await response.Content.ReadAsStringAsync(cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(text))
@@ -548,6 +630,26 @@ public class AutomationService
     {
         public string? Status { get; set; }
         public string? Exception { get; set; }
+    }
+
+    private sealed class JobStreamListResponse
+    {
+        public List<JobStreamResponse>? Value { get; set; }
+        public string? NextLink { get; set; }
+    }
+
+    private sealed class JobStreamResponse
+    {
+        public JobStreamProperties? Properties { get; set; }
+    }
+
+    private sealed class JobStreamProperties
+    {
+        public string? JobStreamId { get; set; }
+        public string? StreamType { get; set; }
+        public DateTimeOffset? Time { get; set; }
+        public string? StreamText { get; set; }
+        public string? Summary { get; set; }
     }
 
     private sealed class RuntimeEnvironmentListResponse
