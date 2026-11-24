@@ -28,6 +28,16 @@ host. Rebuild the package as described below; installation and deployment requir
 separate approval. Existing stored configs work in the modal without regeneration;
 regenerate configs to obtain explicitly numbered manual scripts.
 
+Older installed updaters request the obsolete `master` branch. In an elevated
+PowerShell 7 session on each host, load the corrected updater from `main` once:
+
+```powershell
+Invoke-RestMethod 'https://raw.githubusercontent.com/tracsman/Projects/main/LabModPS/LabMod/Public/Update-LabMod.ps1' | Invoke-Expression
+Update-LabMod -Force
+```
+
+Reopen PowerShell sessions after updating. Future updates use `main` automatically.
+
 Before re-testing a tenant affected by old host-local numbering, stop and remove
 or reconcile its existing VMs and disks on all involved hosts. The fix does not
 rename existing VMs or repair their guest IP addresses. Re-test 6D.4/6D.6/6D.29.

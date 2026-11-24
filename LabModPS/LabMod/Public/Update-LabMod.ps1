@@ -47,7 +47,7 @@
     
     If (!$Force) {
         # Get Online Version
-        [net.httpwebrequest]$httpwebrequest = [net.webrequest]::create('https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/LabMod.psd1')
+        [net.httpwebrequest]$httpwebrequest = [net.webrequest]::create('https://raw.githubusercontent.com/tracsman/Projects/main/LabModPS/LabMod/LabMod.psd1')
         $httpwebresponse = $null
         $reader = $null
         try {
@@ -73,7 +73,7 @@
     # Version Compare
     If ($OnlineVersion -gt $CurrentVersion -or $Force) {
 
-        $uri = 'https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/'
+        $uri = 'https://raw.githubusercontent.com/tracsman/Projects/main/LabModPS/LabMod/'
 
         $FileName = @()
         $FileName += 'LabMod.psd1'

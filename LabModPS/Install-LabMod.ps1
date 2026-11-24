@@ -1,6 +1,6 @@
 ﻿# Install-LabMod Module
 # To kick me off from a URL run the following:
-# (new-object Net.WebClient).DownloadString("https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/Install-LabMod.ps1") | Invoke-Expression
+# (new-object Net.WebClient).DownloadString("https://raw.githubusercontent.com/tracsman/Projects/main/LabModPS/Install-LabMod.ps1") | Invoke-Expression
 
 function Install-LabMod {
     # Admin Session Check
@@ -15,7 +15,7 @@ function Install-LabMod {
         Return
     }
 
-    $uri = 'https://raw.githubusercontent.com/tracsman/Projects/master/LabModPS/LabMod/'
+    $uri = 'https://raw.githubusercontent.com/tracsman/Projects/main/LabModPS/LabMod/'
 
     $FileName = @()
     $FileName += 'LabMod.psd1'
