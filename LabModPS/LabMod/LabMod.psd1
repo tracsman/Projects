@@ -13,7 +13,7 @@ RootModule = 'LabMod.psm1'
 
 # Version number of this module.
 # https://msdn.microsoft.com/en-us/library/system.version(v=vs.110).aspx Remarks section
-ModuleVersion = '1.5.1.0'
+ModuleVersion = '1.5.1.1'
 
 # ID used to uniquely identify this module
 GUID = '60052e85-08ba-4495-bd55-f8d3ef1339ff'

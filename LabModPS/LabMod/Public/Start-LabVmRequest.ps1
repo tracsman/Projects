@@ -15,6 +15,10 @@ function Start-LabVmRequest {
         The operating system for the VM. Valid values are "Server2025" and "Ubuntu".
         Defaults to "Server2025".
 
+    .PARAMETER VMNumber
+        Optional tenant-wide VM sequence number (1 to 99). PathWeb supplies the request row
+        number so naming and guest IP addresses do not depend on the physical server or OS.
+
     .PARAMETER RunId
         An optional run identifier for correlating logs. If omitted, one is generated
         automatically.
@@ -48,6 +52,9 @@ function Start-LabVmRequest {
         [ValidateSet('Server2025', 'Ubuntu')]
         [string]$OS = 'Server2025',
 
+        [ValidateRange(1, 99)]
+        [int]$VMNumber,
+
         [string]$RunId,
 
         [Parameter(Mandatory = $false, HelpMessage = 'Optional server admin credential. If omitted, prompt interactively.')]
@@ -68,6 +75,11 @@ function Start-LabVmRequest {
     $statusPath = Join-Path $script:LabLogDirectory ("LabMod-Status-{0}.json" -f $runId)
     $action = 'Start-LabVmRequest'
     $vmPattern = '{0}-ER-{1}-VM*' -f $lab, $TenantID
+    $vmParameters = @{}
+    if ($PSBoundParameters.ContainsKey('VMNumber')) {
+        $vmPattern = '{0}-ER-{1}-VM{2:00}' -f $lab, $TenantID, $VMNumber
+        $vmParameters.VMNumber = $VMNumber
+    }
 
     $result = [ordered]@{
         RunId = $runId
@@ -104,7 +116,7 @@ function Start-LabVmRequest {
     try {
         Write-LabRunStatus -RunId $runId -TenantId $TenantID -Action $action -Status 'Running' -Message "Creating Lab VM for tenant $TenantID ($OS)." -StartedAt $startedAt -StatusPath $statusPath
 
-        New-LabVM -TenantID $TenantID -OS $OS -AdminCred $AdminCred -UserCred $UserCred
+        New-LabVM -TenantID $TenantID -OS $OS -AdminCred $AdminCred -UserCred $UserCred @vmParameters
 
         $currentVmNames = @(Get-VM -Name $vmPattern -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
         $createdVmNames = @($currentVmNames | Where-Object { $_ -notin $existingVmNames })

@@ -1,4 +1,38 @@
-# ECX Provider Output (LabMod 1.5.1.0)
+# Tenant-wide VM Naming (LabMod 1.5.1.1)
+
+PathWeb supplies `-VMNumber` from the tenant's ordered VM requests to
+`Start-LabVmRequest`, which forwards it to `New-LabVM`. For SEA-Cust12:
+
+| Row | OS | Target server | VM name |
+|-----|----|---------------|---------|
+| 1 | Server2025 | SEA-ER-01 | SEA-ER-12-VM01 |
+| 2 | Ubuntu | SEA-ER-01 | SEA-ER-12-VM02 |
+| 3 | Ubuntu | SEA-ER-02 | SEA-ER-12-VM03 |
+
+The same suffix drives the existing guest IP configuration, independent of host,
+OS, and execution order. Generated manual scripts also include `-VMNumber`.
+Commands without this optional parameter retain next-free numbering on the local
+host. Explicit creation rejects an existing VM on the target host or a disk that
+would be overwritten; it does not silently allocate a different number.
+
+Run the offline naming checks (no real VMs, disk copies, or guest changes):
+
+```powershell
+.\LabModPS\Tests\LabVmNaming.Tests.ps1
+```
+
+Install **LabMod 1.5.1.1 on every target Hyper-V host before deploying PathWeb**.
+Updating only Azure Automation is not sufficient for on-prem VM actions. Verify
+with `Get-Module -ListAvailable LabMod | Select-Object Name, Version, Path` on each
+host. Rebuild the package as described below; installation and deployment require
+separate approval. Existing stored configs work in the modal without regeneration;
+regenerate configs to obtain explicitly numbered manual scripts.
+
+Before re-testing a tenant affected by old host-local numbering, stop and remove
+or reconcile its existing VMs and disks on all involved hosts. The fix does not
+rename existing VMs or repair their guest IP addresses. Re-test 6D.4/6D.6/6D.29.
+
+# ECX Provider Output
 
 `New-LabECX` and `Remove-LabECX` display a banner, timestamped steps, indented
 details, `[ OK ]` / `[SKIP]` / `[FAIL]` markers, and a final formatted summary.
@@ -35,7 +69,7 @@ public commands, and private helpers. Rebuild it after changing module files:
 Compress-Archive -Path .\LabModPS\LabMod -DestinationPath .\LabModPS\LabMod.zip -Force
 ```
 
-Publish/import this package as **LabMod 1.5.1.0** in the **runtime environment
+Publish/import this package as **LabMod 1.5.1.1** in the **runtime environment
 configured by PathWeb**, and verify the installed package version before using
 the updated app. Do not rely on updating a different/classic Automation runtime.
 Publishing, PathWeb deployment, and live provider runs require separate approval.

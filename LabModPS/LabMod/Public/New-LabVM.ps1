@@ -19,6 +19,10 @@ function New-LabVM {
         This optional parameter signifies the requested operating system for the VM. Valid values are "Server2025"
         and "Ubuntu", the default value is "Server2025".
 
+    .PARAMETER VMNumber
+        Optional tenant-wide VM sequence number (1 to 99), independent of the target server and OS.
+        If omitted, the next available VM number on this server is used.
+
     .PARAMETER CopyOnly
         This optional parameter instructs this command to only create the new VM VHDX, and doesn't configure it for use or
         start the VM.
@@ -51,10 +55,9 @@ function New-LabVM {
         https://github.com/tracsman/ERPath/tree/master/Team/Jon/LabPSModule
 
     .NOTES
-        If this is the first VM tenant on this server the VM name will be suffixed with "01", if this command is run
-        multiple times for the same tenant the suffix is automatically incremented by 1, ie 01, 02, 03, etc. The
-        parameters of each machine can be different as needed. For instance the 01 VM may be Server2025 and the 02
-        VM be Ubuntu if required for the tenant.
+        With VMNumber, the suffix follows the tenant's requested VM order across all physical servers and OS types.
+        Creating an explicitly numbered VM fails if that VM exists on the target host, or copying its disk would
+        overwrite an existing disk. Without VMNumber, numbering retains the next-free behavior on this server.
 
     #>
 
@@ -65,6 +68,8 @@ function New-LabVM {
         [int]$TenantID,
         [ValidateSet("Server2025", "Ubuntu")]
         [string]$OS="Server2025",
+        [ValidateRange(1, 99)]
+        [int]$VMNumber,
         [switch]$CopyOnly = $false,
         [switch]$VMCreateOnly = $false,
         [switch]$PostBuildOnly = $false,
@@ -92,11 +97,16 @@ function New-LabVM {
 
     # Lab Environment Variables
     $Lab = ($env:COMPUTERNAME.Split("-"))[0]
-    [int]$VMInstance = 0
-    Do {
-        $VMInstance++
-        $VMName = $Lab + "-ER-" + $TenantID + "-VM" + $VMInstance.ToString("00")
-    } Until ((Get-VM -Name "$VMName*").Count -eq 0)
+    if ($PSBoundParameters.ContainsKey('VMNumber')) {
+        $VMName = '{0}-ER-{1}-VM{2:00}' -f $Lab, $TenantID, $VMNumber
+    }
+    else {
+        [int]$VMInstance = 0
+        Do {
+            $VMInstance++
+            $VMName = $Lab + "-ER-" + $TenantID + "-VM" + $VMInstance.ToString("00")
+        } Until ((Get-VM -Name "$VMName*").Count -eq 0)
+    }
     Switch ($OS) {
         'Server2025' {$BaseVHDName = "Base2025.vhdx"}
         'Ubuntu' {$BaseVHDName = "BaseUbuntu.vhdx"}
@@ -123,6 +133,15 @@ function New-LabVM {
     # Admin Session Check
     if (-not (Assert-LabAdminContext -WarnOnly)) {
         Return
+    }
+
+    if ($PSBoundParameters.ContainsKey('VMNumber')) {
+        if ($VMCreateOnly -and @(Get-VM -ErrorAction Stop | Where-Object Name -eq $VMName).Count -gt 0) {
+            throw "VM '$VMName' already exists on $env:COMPUTERNAME. Remove or reconcile the existing tenant deployment before retrying."
+        }
+        if ($CopyOnly -and (Test-Path -LiteralPath $VMDisk -ErrorAction Stop)) {
+            throw "Disk '$VMDisk' already exists. Refusing to overwrite an existing tenant VM disk."
+        }
     }
 
     If (-not (Test-Path $VHDSource)) { Write-Host; Write-Warning "Base .VHDX file ($BaseVHDName) not found"; Write-Host; Return }
