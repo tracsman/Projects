@@ -1,3 +1,18 @@
+# Windows Post-build Fix (LabMod 1.5.1.2)
+
+LabMod 1.5.0.0–1.5.1.1 could fail Windows VM post-build with `Cannot bind argument
+to parameter 'String' because it is null.` IP settings were applied, but
+PathLabUser was not created and the guest was not renamed. Ubuntu was unaffected.
+Offline check: `.\LabModPS\Tests\LabVmPostBuild.Tests.ps1`.
+
+To finish an affected VM after updating, run this in elevated PowerShell 7 on its
+host (for example, SEA-Cust12 VM01 on SEA-ER-01). Enter the `Server-Admin`
+password and the tenant vault `PathLabUser` password when prompted:
+
+```powershell
+New-LabVM -TenantID 12 -VMNumber 1 -OS Server2025 -PostBuildOnly
+```
+
 # Tenant-wide VM Naming (LabMod 1.5.1.1)
 
 PathWeb supplies `-VMNumber` from the tenant's ordered VM requests to

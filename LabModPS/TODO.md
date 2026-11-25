@@ -16,6 +16,9 @@
 
 ## Completed
 
+4. [x] **Fix Windows post-build credential binding (LabMod 1.5.1.2)**
+   v1.5.0.0 wrapped `$Users` as `(,$Users)` in a three-argument `-ArgumentList`, so inside the VM `$Users[1]` was null and `ConvertTo-SecureString` failed after IP setup, skipping PathLabUser creation and rename. Ubuntu and `-PwdUpdateOnly` were unaffected. Offline check: `.\Tests\LabVmPostBuild.Tests.ps1`.
+
 3. [x] **Tenant-wide VM numbering (LabMod 1.5.1.1)**
    Add optional `VMNumber` to `Start-LabVmRequest` and `New-LabVM`; PathWeb passes the tenant row index so names and guest IP suffixes stay consistent across hosts and OS types. Explicit creation rejects local VM/disk collisions; omitted numbering preserves legacy behavior. Offline checks: `.\Tests\LabVmNaming.Tests.ps1`. Install on every target Hyper-V host before PathWeb deployment; reconcile existing duplicates and re-test 6D.4/6D.6/6D.29.
 

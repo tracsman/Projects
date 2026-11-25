@@ -252,7 +252,7 @@ function New-LabVM {
                     # Rename and restart
                     Rename-Computer -NewName "$VMName" -Restart
 
-                } -ArgumentList $VMName, $TenantID, (,$Users)
+                } -ArgumentList $VMName, $TenantID, $Users
             }
             "Ubuntu" {
                 If (($VMName.Split("-"))[0] -eq "SEA") { $SecondOctet = 1 } Else { $SecondOctet = 2 }
