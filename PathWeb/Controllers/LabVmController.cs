@@ -578,7 +578,7 @@ public class LabVmController : BaseController
             sb.AppendLine($"$up = ConvertTo-SecureString '{Escape(tenantUserPassword)}' -AsPlainText -Force");
             sb.AppendLine($"$uc = [pscredential]::new('{Escape(TenantUserName)}', $up)");
             sb.AppendLine("try {");
-            sb.AppendLine($"  $r = Start-LabVmRequest -TenantID {tenantId} -OS '{Escape(req.Os)}' -RunId '{Escape(req.RequestId)}' -AdminCred $ac -UserCred $uc -Confirm:$false 3>$null 6>$null");
+            sb.AppendLine($"  $r = Start-LabVmRequest -TenantID {tenantId} -OS '{Escape(req.Os)}' -VMNumber {req.Index} -RunId '{Escape(req.RequestId)}' -AdminCred $ac -UserCred $uc -Confirm:$false 3>$null 6>$null");
             sb.AppendLine("} catch {");
             sb.AppendLine($"  $r = [pscustomobject]@{{ RunId='{Escape(req.RequestId)}'; Status='Failed'; Success=$false; Message=$_.Exception.Message; CreatedVmNames=@() }}");
             sb.AppendLine("}");

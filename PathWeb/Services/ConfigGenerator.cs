@@ -1797,11 +1797,11 @@ public class ConfigGenerator
                 {
                     if (vm == "Ubuntu")
                     {
-                        strDB += $"New-LabVM {tenant.TenantId} -OS Ubuntu\r\n";
+                        strDB += $"New-LabVM {tenant.TenantId} -OS Ubuntu -VMNumber {intVMCount + 1}\r\n";
                     }
                     else if (vm == "Windows")
                     {
-                        strDB += $"New-LabVM {tenant.TenantId}\r\n";
+                        strDB += $"New-LabVM {tenant.TenantId} -VMNumber {intVMCount + 1}\r\n";
                     }
                     if (vm != "None") { intVMCount++; }
                 }

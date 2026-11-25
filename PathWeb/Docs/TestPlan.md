@@ -186,38 +186,38 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6C.9 | ER Remove redirects to Azure card | `CreateERPowerShell` card → "Remove from Azure" | Info message directing user to `CreateAzurePowerShell` card | ✅ | |
 | **Provider Provisioning** | | | | | |
 | 6C.10 | Provision Provider 🔒8 | With LabMod 1.5.1.0 installed in the configured Automation runtime, `ServiceProviderInstructions` card → "Provision at Provider" → Run → inspect output → reopen completed run | `New-LabECX` submitted via Automation; formatted banner, timestamped steps, indented details, OK/SKIP/FAIL markers, and final outcome/count/duration summary persist in SQL and on reopen; no forced verbose progress or duplicate routine messages; accepted requests say submitted, not fully provisioned | ✅ | Provisioning, formatted output, and stream capture passed |
-| 6C.11 | Provision — non-ECX tenant (Direct) | Run Provision on tenant with `EruplinkPort` ≠ "ECX" | "This tenant uses ExpressRoute Direct" message; no runbook created | | |
+| 6C.11 | Provision — non-ECX tenant (Direct) | Run Provision on tenant with `EruplinkPort` ≠ "ECX" | "This tenant uses ExpressRoute Direct" message; no runbook created | ✅ | |
 | 6C.12 | Provision — no ER circuit | Run Provision on tenant with `Ersku` = "None" | "No ExpressRoute circuit is configured" message | ✅ | |
 | 6C.13 | Deprovision Provider 🔒8 | After a previous provider run exists, select "Deprovision at Provider" → Run; inspect the script before submitting, then reopen the previous run separately | Fresh deprovision script uses `Remove-LabECX`, never `New-LabECX`; reopening the previous run retains its original script; after confirmation, formatted progress and summary are visible | ✅ | Deprovision correctly used `Remove-LabECX`; previous run retained its original script |
 | **Runbook Lifecycle & Cleanup** | | | | | |
-| 6C.14 | Runbook auto-delete on success | Complete a runbook run with `AutoDeleteRunbook=true` | Runbook deleted from Azure Automation after terminal status persisted | | |
-| 6C.15 | Runbook auto-delete on failure | Runbook run fails with `AutoDeleteRunbook=true` | Runbook still deleted (cleanup applies to all terminal states) | | |
-| 6C.16 | Runbook auto-delete disabled | Set `AutoDeleteRunbook=false`; complete a run | Runbook remains in Azure Automation account | | |
-| 6C.17 | Job status — Completed | Run a simple script to completion | Status shows "Completed" ✅; output captured | | |
-| 6C.18 | Job status — Failed | Run a script that throws an error | Status shows "Failed" ❌; exception text captured and displayed | | |
-| 6C.19 | Job status — long-running | Run a long script producing many verbose records; check status repeatedly and reopen the run. Separately simulate a transient 502/503/504 response | Polling remains responsive, output stays ordered and complete; transient gateway errors retry status checks without resubmitting the run; failures clearly indicate the job may still be running | | Provider action previously completed despite a JSON parse error while polling; re-test after deployment |
-| 6C.20 | Job status — Suspended/Stopped | Manually suspend or stop a running job in Azure portal | PathWeb picks up terminal status on next poll; badge updates | | |
+| 6C.14 | Runbook auto-delete on success | Complete a runbook run with `AutoDeleteRunbook=true` | Runbook deleted from Azure Automation after terminal status persisted | ✅ | |
+| 6C.15 | Runbook auto-delete on failure | Runbook run fails with `AutoDeleteRunbook=true` | Runbook still deleted (cleanup applies to all terminal states) | ✅ | |
+| 6C.16 | Runbook auto-delete disabled | Set `AutoDeleteRunbook=false`; complete a run | Runbook remains in Azure Automation account | ✅ | |
+| 6C.17 | Job status — Completed | Run a simple script to completion | Status shows "Completed" ✅; output captured | ✅ | |
+| 6C.18 | Job status — Failed | Run a script that throws an error | Status shows "Failed" ❌; exception text captured and displayed | ✅ | |
+| 6C.19 | Job status — long-running | Run a long script producing many verbose records; check status repeatedly and reopen the run. Separately simulate a transient 502/503/504 response | Polling remains responsive, output stays ordered and complete; transient gateway errors retry status checks without resubmitting the run; failures clearly indicate the job may still be running | ⏭️ | Skipped per user; provider action previously completed despite a JSON parse error while polling; re-test after deployment |
+| 6C.20 | Job status — Suspended/Stopped | Manually suspend or stop a running job in Azure portal | PathWeb picks up terminal status on next poll; badge updates | ✅ | |
 | **Modal & History** | | | | | |
-| 6C.21 | Automation modal — reopen running | Close modal during a running job → reopen same card action | Modal resumes with current status/output from last poll | | |
-| 6C.22 | Automation modal — reopen completed | Reopen a completed run with module-import verbose messages; refresh and reopen it again | Status and useful output remain visible; verbose module loading, importing/exporting cmdlet/function/alias/variable, and RepositorySourceLocation population lines are hidden; warnings, errors, other verbose messages and exceptions remain visible | | Raw output remains saved; re-test after deployment |
-| 6C.23 | Page refresh during running job | Refresh the Config page while a job is running | `Latest` endpoint refreshes status; job continues; badge reflects current state | | |
-| 6C.24 | Recent run history | After completing 2+ runs for same config type | Recent-run history section shows multiple entries, most recent first | | |
-| 6C.25 | Recent run history — collapsed | Check PS card recent-run section on page load | Section defaults to collapsed; expandable on click | | |
-| 6C.26 | Status badge persistence | Complete a Deploy → hard refresh page (Ctrl+F5) | Status badge + timestamp visible on card header (from SQL, not memory) | | |
-| 6C.27 | Multiple config types simultaneously | Start Deploy on `CreateERPowerShell` AND `CreateAzurePowerShell` at same time | Both jobs tracked independently; both modals work; both badges update | | |
+| 6C.21 | Automation modal — reopen running | Close modal during a running job → reopen same card action | Modal resumes with current status/output from last poll | ✅ | |
+| 6C.22 | Automation modal — reopen completed | Reopen a completed run with module-import verbose messages; refresh and reopen it again | Status and useful output remain visible; verbose module loading, importing/exporting cmdlet/function/alias/variable, and RepositorySourceLocation population lines are hidden; warnings, errors, other verbose messages and exceptions remain visible | ✅ | Raw output remains saved; re-test passed |
+| 6C.23 | Page refresh during running job | Refresh the Config page while a job is running | `Latest` endpoint refreshes status; job continues; badge reflects current state | ✅ | |
+| 6C.24 | Recent run history | After completing 2+ runs for same config type | Recent-run history section shows multiple entries, most recent first | ✅ | |
+| 6C.25 | Recent run history — collapsed | Check PS card recent-run section on page load | Section defaults to collapsed; expandable on click | ✅ | |
+| 6C.26 | Status badge persistence | Use a completed Deploy to Azure run → note the card's status badge and timestamp → hard refresh page (Ctrl+F5) | Status badge + timestamp visible on card header (from SQL, not memory) | ✅ | |
+| 6C.27 | Multiple config types simultaneously | Start Deploy on `CreateERPowerShell` AND `CreateAzurePowerShell` at same time | Both jobs tracked independently; both modals work; both badges update | ✅ | |
 | **Negative / Edge Cases** | | | | | |
-| 6C.28 | Submit with empty config | Delete config from SQL → try Deploy | "No stored config found" error message | | |
+| 6C.28 | Submit with empty config | Delete config from SQL → try Deploy | "No stored config found" error message | ⏭️ | Skipped per user |
 | 6C.29 | Submit with invalid config type | Use devtools to POST `configType=FakeType` | "Config type 'FakeType' is not enabled for Azure Automation yet" | ⏭️ | |
 | 6C.30 | Submit with invalid TenantGuid | Use devtools to POST `tenantGuid=00000000-...` | "Missing tenant or config type" error | ⏭️ | |
-| 6C.31 | Azure Automation service unavailable | Revoke Managed Identity permissions or block network | Graceful error in modal ("Automation submit failed"); no unhandled exception | | |
-| 6C.32 | Stale job ID in URL/memory | Poll status for a deleted job ID | Automation API returns error; PathWeb handles gracefully | | |
+| 6C.31 | Azure Automation service unavailable | Revoke Managed Identity permissions or block network | Graceful error in modal ("Automation submit failed"); no unhandled exception | ⏭️ | Skipped per user |
+| 6C.32 | Stale job ID in URL/memory | Poll status for a deleted or nonexistent job GUID | Automation API returns error; PathWeb handles gracefully | ✅ | Nonexistent job GUID returned success=false with Azure Automation 404 Not Found / Job not found; no unhandled exception |
 | **Generated Script Quality (recent regressions)** | | | | | |
 | 6C.33 | Fresh deploy modal uses current DB script | Deploy to Azure once → close modal → regenerate config (so SQL content differs from the prior run) → click `Deploy to Azure` again (no `jobId` in URL) | Modal's `Prepared Script` reflects the **current** SQL config, not the previous run's `PreparedScript` | ✅ | Regression covered by commit `3bac9c8` |
-| 6C.34 | History-link modal uses prior run's script | From the recent-run history list, click a specific prior run | Modal opens with `jobId` and shows that run's stored `PreparedScript` (not current SQL) | | |
+| 6C.34 | History-link modal uses prior run's script | From the recent-run history list, click a specific prior run | Modal opens with `jobId` and shows that run's stored `PreparedScript` (not current SQL) | ✅ | |
 | 6C.35 | ER script — no bare `Write-Output` | Inspect generated `CreateERPowerShell` script | All `Write-Output` calls have an explicit message argument; no `Write-Output: missing InputObject` error when run | ✅ | Regression covered by commit `7012918` |
 | 6C.36 | Generated script ordering | Open any generated PS script in the config page | `# Initialize` variable block appears **before** `# PathWeb output helpers`; helpers appear before the banner/login-check | ✅ | Covers ER, Azure, and Azure backout scripts |
-| 6C.37 | `Write-Status` helper — manual console run | Copy a generated script → run interactively in `pwsh.exe` | Output is color-coded (cyan `Write-Step`, green `[ OK ]`, dark-gray `[SKIP]`, red `[FAIL]`); banner and final summary `[pscustomobject]` visible | | |
-| 6C.38 | `Write-Status` helper — Automation capture | Deploy via Azure Automation → open job in Azure portal → check `Output` stream | Same step/detail messages captured in Automation's Output stream (not just Verbose); final summary object visible as structured output | | |
+| 6C.37 | `Write-Status` helper — manual console run | Copy a generated script → run interactively in `pwsh.exe` | Output is color-coded (cyan `Write-Step`, green `[ OK ]`, dark-gray `[SKIP]`, red `[FAIL]`); banner and final summary `[pscustomobject]` visible | ✅ | Color-coded console output confirmed |
+| 6C.38 | `Write-Status` helper — Automation capture | Deploy via Azure Automation → open job in Azure portal → check `Output` stream | Same step/detail messages captured in Automation's Output stream (not just Verbose); final summary object visible as structured output | ✅ | |
 | 6C.39 | Login-check block stripped for Automation | Deploy to Azure → inspect `Prepared Script` in PathWeb modal | The `Try { Get-AzContext ... }` login block is removed; replaced by `Connect-AzAccount -Identity` for managed identity | ✅ | Same prepared-script tab as 6C.3 |
 | 6C.40 | Backout script ordering | Open `-out` backout script (e.g., `CreateAzurePowerShell-out`) on the config page | Same ordering as live scripts: `# Initialize` first, helpers second, banner/login-check third | ✅ | |
 
@@ -226,19 +226,19 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
 | **Create Lab VMs** | | | | | |
-| 6D.1 | Create Lab VMs 🔒8 | `LabVMPowerShell` card → "Create Lab VMs" → Run | Modal shows VM table with `#`, `OS`, `Target Server` (dropdown), `Status` columns | | |
-| 6D.2 | Server dropdown defaults | Check Target Server column | Default server derived from first digit of TenantId (e.g., tenant 18 → `SEA-ER-01`) | | |
+| 6D.1 | Create Lab VMs 🔒8 | `LabVMPowerShell` card → "Create Lab VMs" → Run; check light/dark themes and reopen during a run | Modal shows VM table with `#`, `OS`, `Target Server` (dropdown), `Status` columns; OS labels use normal theme-aware text color, not red, including after reopening | ✅ | |
+| 6D.2 | Server dropdown defaults | Check Target Server column | Default server derived from first digit of TenantId (e.g., tenant 18 → `SEA-ER-01`) | ✅ | |
 | 6D.3 | Server resolution — various TenantIds | Check defaults: TenantId 10→Server01, 22→Server02, 81→Server08 | Each maps to correct server based on first digit | | |
-| 6D.4 | Override target server | Change a VM's target server dropdown → Submit | VM created on the overridden server (not the default) | | |
-| 6D.5 | Per-VM progress indicators | Watch modal during creation | ⏳ while running, ✅ on success with VM name, ❌ on failure with error | | |
-| 6D.6 | Parallel server execution | Submit VMs targeting 2+ different servers | VMs on different servers run in parallel (`Task.WhenAll`); check timestamps are close | | |
-| 6D.7 | Sequential on same server | Submit 2+ VMs targeting the same server | VMs on same server run sequentially; tracker updates after each VM completes | | |
-| 6D.8 | Structured JSON output | Check that `---LABVM-JSON---` marker is parsed correctly | VM names, statuses extracted from JSON; no raw marker text shown in UI | | |
-| 6D.9 | Resume on reopen | Close modal during creation → reopen | Current state restored from in-memory tracker; completed VMs show status | | |
-| 6D.10 | VM run persists to SQL | After completion, refresh page | Status badge + timestamp on `LabVMPowerShell` card header; `LabVmRun` row in DB | | |
-| 6D.11 | Badge updates without refresh | Watch card header while run completes in background | Badge appears/updates live via JS polling | | |
-| 6D.12 | No credentials on disk | Check Hyper-V server filesystem after VM creation | No password files, wrapper scripts, or credential artifacts on disk | | |
-| 6D.13 | SSH keepalive prevents timeout | Create a VM that takes > 2 minutes | SSH connection stays alive; no dropped connection errors | | |
+| 6D.4 | Override target server | Change a VM's target server dropdown → Submit | VM created on the overridden server (not the default), retaining its tenant row number in the VM name and guest IP suffix | ✅ | |
+| 6D.5 | Per-VM progress indicators | Watch modal during creation | ⏳ while running, ✅ on success with VM name, ❌ on failure with error | ✅ | |
+| 6D.6 | Parallel server execution and tenant-wide naming | On a clean Cust12 deployment, submit row 1 Windows and row 2 Ubuntu to SEA-ER-01, row 3 Ubuntu to SEA-ER-02; verify both hosts have LabMod 1.5.1.1+ | VMs on different servers run in parallel (`Task.WhenAll`); names are SEA-ER-12-VM01/VM02/VM03 in tenant row order regardless of host, OS, or completion order; IPv4 addresses are 10.1.12.10/.11/.12 with corresponding unique IPv6 suffixes | ✅ | |
+| 6D.7 | Sequential on same server | Submit 2+ VMs targeting the same server | VMs on same server run sequentially; tracker updates after each VM completes | ✅ | |
+| 6D.8 | Structured JSON output | Check that `---LABVM-JSON---` marker is parsed correctly | VM names, statuses extracted from JSON; no raw marker text shown in UI | ✅ | |
+| 6D.9 | Resume on reopen | Close modal during creation → reopen | Current state restored from in-memory tracker; completed VMs show status | ✅ | |
+| 6D.10 | VM run persists to SQL | After completion, refresh page | Status badge + timestamp on `LabVMPowerShell` card header; `LabVmRun` row in DB | ✅ | |
+| 6D.11 | Badge updates without refresh | Watch card header while run completes in background | Badge appears/updates live via JS polling | ✅ | |
+| 6D.12 | No credentials on disk | Check Hyper-V server filesystem after VM creation | No password files, wrapper scripts, or credential artifacts on disk | ✅ | |
+| 6D.13 | SSH keepalive prevents timeout | Create a VM that takes > 2 minutes | SSH connection stays alive; no dropped connection errors | ✅ | |
 | **Remove Lab VMs** | | | | | |
 | 6D.14 | Remove — Scan phase 🔒8 | `LabVMPowerShell` card → "Remove Lab VMs" → Run | Scan SSHs to all candidate `-ER-` servers in parallel; returns per-server VM list | | |
 | 6D.15 | Scan — shows VM names and states | Check scan results in modal | Each server section shows VM names (e.g., `SEA-ER-18-VM01`) and states (Running/Off) | | |
@@ -256,6 +256,7 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6D.26 | Create → immediate Remove | Create VMs → immediately run Remove scan | Scan finds the just-created VMs; removal works | | |
 | 6D.27 | Double-submit prevention | Click Submit twice rapidly in Create modal | Only one background task launched; no duplicate VMs | | |
 | 6D.28 | App Service restart mid-run | Restart App Service while a Lab VM run is in progress | In-memory tracker lost; polling returns "not found"; no data corruption; SQL reflects last known state | | |
+| 6D.29 | Explicit VM number collision | Retry a row whose VM already exists on its target host; separately retry with only its destination VHDX present | Clear failure naming the existing VM/disk; no overwrite and no automatic renumbering; reconcile old duplicates across all hosts before re-testing | | |
 
 ### 6E. Email Actions
 
@@ -532,12 +533,12 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 156 | 50.5% |
+| ✅ Pass | 186 | 60.2% |
 | ❌ Fail | 8 | 2.6% |
-| ⏭️ Skipped | 13 | 4.2% |
-| Not tested | 132 | 42.7% |
+| ⏭️ Skipped | 16 | 5.2% |
+| Not tested | 99 | 32.0% |
 
-- **Tested:** 164 / 309 (53.1%)
-- **Pass rate (of tested):** 156 / 164 (95.1%)
+- **Tested:** 194 / 309 (62.8%)
+- **Pass rate (of tested):** 186 / 194 (95.9%)
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-24_

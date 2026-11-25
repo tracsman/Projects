@@ -1182,7 +1182,7 @@ else
                 var req = _labVmRequests[i];
                 html += '<tr id="labVmRow-' + req.index + '">'
                     + '<td>' + req.index + '</td>'
-                    + '<td><code>' + req.os + '</code></td>'
+                    + '<td><code class="text-body">' + req.os + '</code></td>'
                     + '<td>' + buildServerSelect(req.index, _labVmDefaultServer) + '</td>'
                     + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Ready</span></td>'
                     + '</tr>';
@@ -1322,7 +1322,7 @@ else
                 var req = requests[i];
                 html += '<tr id="labVmRow-' + req.index + '">'
                     + '<td>' + req.index + '</td>'
-                    + '<td><code>' + req.os + '</code></td>'
+                    + '<td><code class="text-body">' + req.os + '</code></td>'
                     + '<td><code>' + (req.targetServer || '') + '</code></td>'
                     + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Pending</span></td>'
                     + '</tr>';
