@@ -812,7 +812,7 @@ else
             badge.className = 'badge border-0 ' + (run.success ? 'text-bg-success' : 'text-bg-danger');
             badge.textContent = run.status || (run.success ? 'Sent' : 'Send Failed');
             badge.title = 'Click to view the last email send result';
-            text.textContent = (run.success ? 'Sent ' : 'Failed ') + formatAutomationDate(run.submittedDate);
+            text.textContent = (run.success ? 'Sent ' : run.status === 'Send Unconfirmed' ? 'Unconfirmed ' : 'Failed ') + formatAutomationDate(run.submittedDate);
             text.classList.remove('d-none');
         }
 
@@ -2125,7 +2125,8 @@ else
 
                 showModal('Send Notification Email');
                 if (!data.success) {
-                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-envelope-x-fill"></i> Email send failed</div>');
+                    var unconfirmed = data.emailRun && data.emailRun.status === 'Send Unconfirmed';
+                    setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-envelope-x-fill"></i> ' + (unconfirmed ? 'Email delivery could not be confirmed' : 'Email send failed') + '</div>');
                     setOutputError(data.output || 'Notification email send failed.');
                 } else {
                     setStatus('<div class="alert alert-success mb-0"><i class="bi bi-envelope-check-fill"></i> Notification email sent successfully.</div>');
@@ -2140,7 +2141,11 @@ else
                     outputEl.style.display = '';
                 }
             })
-            .catch(function (err) { alert('Email send request failed: ' + err); })
+            .catch(function (err) {
+                showModal('Send Notification Email');
+                setStatus('<div class="alert alert-danger mb-0"><i class="bi bi-envelope-x-fill"></i> Email delivery could not be confirmed</div>');
+                setOutputError('The request failed: ' + err + '. Check the recipient and sent mailbox before retrying.');
+            })
             .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
         }
 

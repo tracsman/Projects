@@ -31,6 +31,7 @@ builder.Services.AddScoped<ConfigGenerator>();
 // Register Logic App service for ADO work item integration
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<LogicAppConnectionDiagnostics>();
 builder.Services.AddScoped<LogicAppService>();
 builder.Services.Configure<AutomationOptions>(builder.Configuration.GetSection("Automation"));
 builder.Services.AddScoped<SettingsService>();

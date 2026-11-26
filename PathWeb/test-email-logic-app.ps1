@@ -49,6 +49,7 @@ $payload = @{
     htmlBody = $HtmlBody
     tenantName = $TenantName
     requestedBy = $RequestedBy
+    inlineAttachments = @()
 } | ConvertTo-Json -Depth 10
 
 Write-Step "Posting test email payload to Logic App..."

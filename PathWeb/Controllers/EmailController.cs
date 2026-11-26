@@ -45,7 +45,7 @@ public class EmailController : BaseController
         var subject = "Your PathLab Environment is Ready!";
 
         var result = await _logicAppService.SendNotificationEmailAsync(tenant, subject, htmlBody, GetUserEmail());
-        var status = result.Success ? "Sent" : "Send Failed";
+        var status = result.Success ? "Sent" : result.DeliveryUnconfirmed ? "Send Unconfirmed" : "Send Failed";
         var output = result.Error ?? result.ResponseBody ?? string.Empty;
 
         var run = new EmailSendRun

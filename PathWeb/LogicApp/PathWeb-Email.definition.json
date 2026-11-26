@@ -79,7 +79,7 @@
           "To": "@triggerBody()?['to']",
           "Subject": "@triggerBody()?['subject']",
           "Body": "@triggerBody()?['htmlBody']",
-          "Attachments": "@triggerBody()?['inlineAttachments']",
+          "Attachments": "@coalesce(triggerBody()?['inlineAttachments'], json('[]'))",
           "Importance": "Normal"
         }
       }

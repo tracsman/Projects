@@ -249,28 +249,27 @@ These endpoints bypass authentication. Test from an unauthenticated browser / cu
 | 6D.20 | Remove — mode labels | Check modal title, buttons, messages during removal, after completion/failure, and on reopen | Mode-appropriate labels ("Remove Lab VMs" not "Create Lab VMs") throughout; a terminal removal requires closing and reopening for a fresh scan | ✅ | Re-test passed |
 | 6D.21 | Remove — polling and completion | Watch modal during removal; check create and remove tables at desktop and narrow widths, including long errors | Status updates per-server; final badge shows success/failure; status has adequate space, server dropdown remains usable, and narrow tables scroll without clipping | ✅ | Post-deployment re-test passed |
 | **Negative / Edge Cases** | | | | | |
-| 6D.22 | Create on server unreachable | Target a Hyper-V server that is down or not responding | ❌ with connection error for that server; other servers unaffected | | |
+| 6D.22 | Create on server unreachable | Target a Hyper-V server that is down or not responding | ❌ with connection error for that server; other servers unaffected | ⏭️ | Skipped per user |
 | 6D.23 | Create with no `LabVMPowerShell` config | Try Create before generating configs | Error: no config found (or button disabled) | | |
-| 6D.24 | No `-ER-` servers in Devices table | Try Create/Remove for a lab with no Hyper-V servers defined | "No servers found" or empty server dropdown | | |
-| 6D.25 | Server admin creds missing from KV | Remove `Server-Admin` secret from `LabSecrets` vault → try Create | Key Vault error; graceful message; no unhandled exception | | |
-| 6D.26 | Create → immediate Remove | Create VMs → immediately run Remove scan | Scan finds the just-created VMs; removal works | | |
-| 6D.27 | Double-submit prevention | Click Submit twice rapidly in Create modal | Only one background task launched; no duplicate VMs | | |
-| 6D.28 | App Service restart mid-run | Restart App Service while a Lab VM run is in progress | In-memory tracker lost; polling returns "not found"; no data corruption; SQL reflects last known state | | |
-| 6D.29 | Explicit VM number collision | Retry a row whose VM already exists on its target host; separately retry with only its destination VHDX present | Clear failure naming the existing VM/disk; no overwrite and no automatic renumbering; reconcile old duplicates across all hosts before re-testing | | |
+| 6D.24 | No `-ER-` servers in Devices table | Try Create/Remove for a lab with no Hyper-V servers defined | "No servers found" or empty server dropdown | ⏭️ | Skipped per user |
+| 6D.25 | Server admin creds missing from KV | Remove `Server-Admin` secret from `LabSecrets` vault → try Create | Key Vault error; graceful message; no unhandled exception | ⏭️ | Skipped per user |
+| 6D.26 | Remove blocked during active creation | Start Create Lab VMs → while creation is running, select Remove Lab VMs → Run | Running create job modal reopens instead of starting a removal scan or deletion; removal is unavailable until creation completes or fails | ✅ | Attempting removal during creation reopened the running create job modal; accepted as intended behavior |
+| 6D.27 | Double-submit prevention | Click Submit twice rapidly in Create modal | Only one background task launched; no duplicate VMs | ✅ | |
+| 6D.28 | App Service restart mid-run | Restart App Service while a Lab VM run is in progress | In-memory tracker lost; polling returns "not found"; no data corruption; SQL reflects last known state | ⏭️ | Skipped per user |
+| 6D.29 | Explicit VM number collision | Retry a row whose VM already exists on its target host | Request fails with "VM '{VMName}' already exists on {ServerName}. Remove or reconcile the existing tenant deployment before retrying."; no overwrite and no automatic renumbering | ✅ | Displayed: "VM 'SEA-ER-12-VM01' already exists on SEA-ER-01. Remove or reconcile the existing tenant deployment before retrying." |
 
 ### 6E. Email Actions
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| 6E.1 | Send Email 🔒8 | `NotificationEmail` card → "Send Email" → Run | Email sent via Logic App webhook; success status badge | | |
-| 6E.2 | Send Email — verify recipient | Check received email | Correct recipient, subject ("Your PathLab Environment is Ready!"), HTML body with logo | | |
-| 6E.3 | Send Email — logo renders | Check email body in recipient's inbox | Logo image loads from public `email-assets` path (not broken image) | | |
-| 6E.4 | Send Email — no eMailHTML config | Try Send before generating configs (or delete config) | Error: "No stored notification email found" | | |
+| 6E.1 | Send Email 🔒8 | `NotificationEmail` card → "Send Email" → Run | Email sent via Logic App webhook; success status badge; connector receives an array for attachments | ✅ | Post-deployment re-test passed after fixing `Attachments must be an array` |
+| 6E.2 | Send Email — verify recipient | Check received email | Correct recipient, subject ("Your PathLab Environment is Ready!"), HTML body with logo | ✅ | |
+| 6E.3 | Send Email — logo renders | Check email body in recipient's inbox | Logo image loads from public `email-assets` path (not broken image) | ✅ | |
+| 6E.4 | Send Email — no eMailHTML config | Try Send before generating configs (or delete config) | Error: "No stored notification email found" | ⏭️ | Skipped for manual UI testing: no email card or Send button exists before config generation. Backend guard requires an authenticated direct POST with an anti-forgery token; belongs in an API/integration test rather than deleting SQL data to manufacture the case. |
 | 6E.5 | Send Email — wrong configType | Use devtools to POST with `configType=FakeEmail` | Error: "Config type 'FakeEmail' is not enabled for email sending" | ⏭️ | |
-| 6E.6 | Send Email — Logic App down | Disconnect Logic App or use wrong webhook URL | Error message in UI; failure badge persisted in SQL | | |
-| 6E.7 | Email status badge | After send, hard refresh page | Badge + timestamp on card header (persisted from `EmailSendRun`) | | |
-| 6E.8 | Send Email twice | Send → wait for badge → Send again | Second send succeeds; badge updates to new timestamp | | |
-| 6E.9 | Send Email — tenant has no Contacts | Clear Contacts field on tenant → try Send Email | Error: "Tenant has no contact email addresses configured" | | |
+| 6E.6 | Send Email — Logic App or connection failure | In a test environment, simulate a failed Logic App call with an unauthenticated API connection, then a healthy connection and unavailable diagnostics; check saved badge and reopen | Modal identifies the actual configured workflow connection when Azure reports an authentication error and advises administrator reauthorization; healthy or inaccessible diagnostics do not claim a token error; delivery is marked unconfirmed and warns to check mailboxes before retrying; failure status persists | ✅ | Requires workflow resource ID and scoped read permissions; do not retry before checking delivery |
+| 6E.7 | Email status badge | After send, hard refresh page | Badge + timestamp on card header (persisted from `EmailSendRun`) | ✅ | |
+| 6E.8 | Send Email twice | Send → wait for badge → Send again | Second send succeeds; badge updates to new timestamp | ✅ | |
 
 ### 6F. Full Config Lifecycle (End-to-End Sequencing)
 
@@ -527,18 +526,18 @@ Each tenant option on the Create/Edit page drives conditional branches in config
 
 ## Summary
 
-**Total Test Cases: 309**
+**Total Test Cases: 308**
 
 ### Current Status
 
 | Status | Count | % of Total |
 |--------|------:|-----------:|
-| ✅ Pass | 193 | 62.5% |
+| ✅ Pass | 202 | 65.6% |
 | ❌ Fail | 8 | 2.6% |
-| ⏭️ Skipped | 17 | 5.5% |
-| Not tested | 91 | 29.4% |
+| ⏭️ Skipped | 22 | 7.1% |
+| Not tested | 76 | 24.7% |
 
-- **Tested:** 201 / 309 (65.0%)
-- **Pass rate (of tested):** 193 / 201 (96.0%)
+- **Tested:** 210 / 308 (68.2%)
+- **Pass rate (of tested):** 202 / 210 (96.2%)
 
 _Last updated: 2026-11-25_

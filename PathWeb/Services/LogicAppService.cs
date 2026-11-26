@@ -9,12 +9,14 @@ public class LogicAppService
     private readonly IConfiguration _config;
     private readonly ILogger<LogicAppService> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly LogicAppConnectionDiagnostics _diagnostics;
 
-    public LogicAppService(IConfiguration config, ILogger<LogicAppService> logger, IHttpClientFactory httpClientFactory)
+    public LogicAppService(IConfiguration config, ILogger<LogicAppService> logger, IHttpClientFactory httpClientFactory, LogicAppConnectionDiagnostics diagnostics)
     {
         _config = config;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _diagnostics = diagnostics;
     }
 
     /// <summary>
@@ -40,9 +42,9 @@ public class LogicAppService
                 tags = "Lab Request; PathWeb"
             };
 
-            var (body, error) = await PostToLogicApp(triggerUrl, payload);
+            var (body, error) = await PostToLogicApp(triggerUrl, payload, "LogicApp:WorkflowResourceId");
             if (error != null)
-                return (0, error);
+                return (0, error + " A work item may have been created; check Azure DevOps before retrying.");
 
             using var doc = JsonDocument.Parse(body!);
             var workItemId = doc.RootElement.GetProperty("workItemId").GetInt32();
@@ -57,17 +59,17 @@ public class LogicAppService
         }
     }
 
-    public async Task<(bool Success, string? Error, string? ResponseBody)> SendNotificationEmailAsync(Tenant tenant, string subject, string htmlBody, string requestedBy)
+    public async Task<(bool Success, bool DeliveryUnconfirmed, string? Error, string? ResponseBody)> SendNotificationEmailAsync(Tenant tenant, string subject, string htmlBody, string requestedBy)
     {
         var triggerUrl = _config["LogicApp:EmailTriggerUrl"];
         if (string.IsNullOrEmpty(triggerUrl))
-            return (false, "LogicApp:EmailTriggerUrl not configured. Notification email integration is disabled.", null);
+            return (false, false, "LogicApp:EmailTriggerUrl not configured. Notification email integration is disabled.", null);
 
         if (string.IsNullOrWhiteSpace(tenant.Contacts))
-            return (false, "Tenant has no contact email addresses configured.", null);
+            return (false, false, "Tenant has no contact email addresses configured.", null);
 
         if (string.IsNullOrWhiteSpace(htmlBody))
-            return (false, "Notification email HTML is empty.", null);
+            return (false, false, "Notification email HTML is empty.", null);
 
         try
         {
@@ -79,20 +81,21 @@ public class LogicAppService
                 subject,
                 htmlBody,
                 tenantName = tenant.TenantName,
-                requestedBy
+                requestedBy,
+                inlineAttachments = Array.Empty<object>()
             };
 
-            var (body, error) = await PostToLogicApp(triggerUrl, payload);
+            var (body, error) = await PostToLogicApp(triggerUrl, payload, "LogicApp:EmailWorkflowResourceId");
             if (error != null)
-                return (false, error, body);
+                return (false, true, error + " Email delivery is unconfirmed; check the recipient and sent mailbox before retrying.", body);
 
             _logger.LogInformation("Notification email sent for {TenantName} via Logic App to {Recipient}", tenant.TenantName, tenant.Contacts);
-            return (true, null, body);
+            return (true, false, null, body);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send notification email for {TenantName}", tenant.TenantName);
-            return (false, $"{ex.GetType().Name}: {ex.Message}", null);
+            return (false, true, $"{ex.GetType().Name}: {ex.Message}. Email delivery is unconfirmed; check the recipient and sent mailbox before retrying.", null);
         }
     }
 
@@ -122,9 +125,9 @@ public class LogicAppService
                 tags = "Lab Request; PathWeb"
             };
 
-            var (_, error) = await PostToLogicApp(triggerUrl, payload);
+            var (_, error) = await PostToLogicApp(triggerUrl, payload, "LogicApp:WorkflowResourceId");
             if (error != null)
-                return error;
+                return error + " The update may have partially completed; check Azure DevOps before retrying.";
 
             _logger.LogInformation("ADO work item {WorkItemId} updated for {TenantName} via Logic App", tenant.WorkItemId, tenant.TenantName);
             return null;
@@ -136,22 +139,32 @@ public class LogicAppService
         }
     }
 
-    private async Task<(string? Body, string? Error)> PostToLogicApp(string url, object payload)
+    private async Task<(string? Body, string? Error)> PostToLogicApp(string url, object payload, string workflowSetting)
     {
         var http = _httpClientFactory.CreateClient();
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await http.PostAsync(url, content);
-        var body = await response.Content.ReadAsStringAsync();
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            _logger.LogError("Logic App call failed: {StatusCode} {Body}", response.StatusCode, body);
-            return (null, $"Logic App returned {response.StatusCode}: {(body.Length > 200 ? body[..200] : body)}");
-        }
+            using var response = await http.PostAsync(url, content);
+            var body = await response.Content.ReadAsStringAsync();
 
-        return (body, null);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Logic App call failed: {StatusCode} {Body}", response.StatusCode, body);
+                var guidance = await _diagnostics.CheckAsync(workflowSetting);
+                return (null, $"Logic App returned {response.StatusCode}: {(body.Length > 200 ? body[..200] : body)}\n\n{guidance}");
+            }
+
+            return (body, null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            _logger.LogWarning("Logic App request did not complete: {ErrorType}", ex.GetType().Name);
+            var guidance = await _diagnostics.CheckAsync(workflowSetting);
+            return (null, $"The Logic App request did not complete ({ex.GetType().Name}).\n\n{guidance}");
+        }
     }
 
     private static string BuildDescription(Tenant tenant, TenantRequest request)

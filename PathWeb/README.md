@@ -1,4 +1,4 @@
-# PathWeb
+LogicApp__WorkflowResourceId# PathWeb
 
 Internal lab management application for the Pathfinders team. Manages tenant environments, network device configuration, IP address allocation, and user administration across the Seattle and Ashburn labs.
 
@@ -37,3 +37,16 @@ Local dev uses a fake identity from the `DevUser` setting in `appsettings.Develo
 ```
 
 Builds, packages, and pushes to the existing Azure App Service. The full `deploy-to-azure.ps1` script handles resource provisioning if needed.
+
+## Logic App connection diagnostics
+
+When an email or Azure DevOps Logic App request fails, PathWeb can read the current status of that workflow's API connections and suggest reauthorization when Azure reports an authentication error. The email result appears in the existing send modal and saved status; Azure DevOps errors appear in the existing approval or tenant-edit warning. This checks Logic Apps API connections, not every external service the application uses. A connection's current status is diagnostic evidence, not proof it caused the request failure.
+
+Configure the following App Service settings to the **resource IDs of the exact workflows behind the corresponding trigger URLs** (copy each Resource ID from the workflow's Azure Portal Properties page):
+
+- `LogicApp__EmailWorkflowResourceId` for `LogicApp__EmailTriggerUrl`.
+- `LogicApp__WorkflowResourceId` for `LogicApp__TriggerUrl` (Azure DevOps).
+
+Grant the App Service managed identity read access to each configured `Microsoft.Logic/workflows` resource and each API connection it uses (`Microsoft.Web/connections`). A scoped Reader role on those resources is one option. Do not grant write or reauthorization permissions for this feature. If configuration, permissions, or the check itself is unavailable, the original error remains visible with instructions to inspect run history; the app does not guess that authentication failed. Changing workflow connections or trigger URLs requires updating these settings and access as needed.
+
+The check does not send emails, retry requests, reset credentials, or change resources. A failed or interrupted request can have partially completed: check the inbox and sent mailbox, or the Azure DevOps work item, before retrying. Workflow run history remains the source for the specific failure. Existing Logic App definitions need no changes.
