@@ -333,7 +333,7 @@ public class LabVmController : BaseController
         {
             try
             {
-                var script = $"Get-VM -Name '{Escape(vmPattern)}' -ErrorAction SilentlyContinue | Select-Object Name, State | ConvertTo-Json -Compress";
+                var script = $"Get-VM -Name '{Escape(vmPattern)}' -ErrorAction SilentlyContinue | Select-Object Name, @{{Name='State';Expression={{[string]$_.State}}}} | ConvertTo-Json -Compress";
                 var (success, output) = await _sshService.RunPowerShellCommandWithCredentialsAsync(
                     server.MgmtIpv4!, 22, AdminUserName, adminSecret.Value, script, keepAlive: TimeSpan.FromSeconds(10));
 
@@ -505,11 +505,11 @@ public class LabVmController : BaseController
 
         var sb = new StringBuilder();
         sb.AppendLine("$ErrorActionPreference = 'Stop'");
-        sb.AppendLine($"$ap = ConvertTo-SecureString '{Escape(adminPassword)}' -AsPlainText -Force");
-        sb.AppendLine($"$ac = [pscredential]::new('{Escape(AdminUserName)}', $ap)");
+        sb.AppendLine("$ConfirmPreference = 'None'");
         sb.AppendLine("try {");
-        sb.AppendLine($"  Assert-LabAdminContext | Out-Null");
-        sb.AppendLine($"  Remove-LabVM -TenantID {tenantId}");
+        sb.AppendLine("  $removeCommand = Get-Command 'LabMod\\Remove-LabVM' -CommandType Function -ErrorAction Stop");
+        sb.AppendLine("  if (-not $removeCommand.Module) { throw 'Remove-LabVM is not associated with the LabMod module.' }");
+        sb.AppendLine($"  & $removeCommand.Module {{ param($id) Assert-LabAdminContext | Out-Null; Remove-LabVM -TenantID $id -ErrorAction Stop }} {tenantId}");
         sb.AppendLine($"  $result = [pscustomobject]@{{ Status='Completed'; Success=$true; Message='VMs removed successfully' }}");
         sb.AppendLine("} catch {");
         sb.AppendLine($"  $result = [pscustomobject]@{{ Status='Failed'; Success=$false; Message=$_.Exception.Message }}");
@@ -530,24 +530,27 @@ public class LabVmController : BaseController
                 return;
             }
 
-            // Parse structured result
             var markerIndex = output.LastIndexOf(JsonMarker, StringComparison.Ordinal);
-            if (markerIndex >= 0)
-            {
-                var jsonText = output[(markerIndex + JsonMarker.Length)..].Trim();
-                try
-                {
-                    var item = JsonSerializer.Deserialize<JsonElement>(jsonText);
-                    req.Status = item.TryGetProperty("Status", out var s) ? s.GetString() ?? "Unknown" : "Unknown";
-                    req.Message = item.TryGetProperty("Message", out var m) ? m.GetString() : null;
-                    return;
-                }
-                catch (JsonException) { /* fall through */ }
-            }
+            if (markerIndex < 0)
+                throw new InvalidOperationException("Removal returned no structured result. Check the host before retrying.");
 
-            // If no marker, treat non-empty output as success with raw message
-            req.Status = "Completed";
-            req.Message = string.IsNullOrWhiteSpace(output) ? "VMs removed" : output.Trim()[..Math.Min(output.Trim().Length, 200)];
+            var jsonText = output[(markerIndex + JsonMarker.Length)..].Trim();
+            var item = JsonSerializer.Deserialize<JsonElement>(jsonText);
+            if (item.ValueKind != JsonValueKind.Object ||
+                !item.TryGetProperty("Status", out var status) || status.ValueKind != JsonValueKind.String ||
+                !item.TryGetProperty("Success", out var resultSuccess) ||
+                (resultSuccess.ValueKind != JsonValueKind.True && resultSuccess.ValueKind != JsonValueKind.False))
+                throw new InvalidOperationException("Removal returned an invalid structured result. Check the host before retrying.");
+
+            var resultStatus = status.GetString();
+            if ((resultStatus == "Completed" && !resultSuccess.GetBoolean()) ||
+                (resultStatus == "Failed" && resultSuccess.GetBoolean()) ||
+                (resultStatus != "Completed" && resultStatus != "Failed"))
+                throw new InvalidOperationException("Removal returned an inconsistent structured result. Check the host before retrying.");
+
+            req.Status = resultStatus;
+            req.Message = item.TryGetProperty("Message", out var message) && message.ValueKind == JsonValueKind.String
+                ? message.GetString() : null;
         }
         catch (Exception ex)
         {
@@ -696,8 +699,11 @@ public class LabVmController : BaseController
                 .ToList();
 
             var outputLines = run.Requests
-                .Select(r => $"[{r.Index}] {r.Os} → {r.TargetServer}: {r.Status}" + (r.Message != null ? $" — {r.Message}" : ""))
+                .Select(r => $"[{r.Index}] {r.Os} → {r.TargetServer}: {r.Status}" +
+                    (r.CreatedVmName != null ? $" — {r.CreatedVmName}" : "") +
+                    (r.Message != null ? $" — {r.Message}" : ""))
                 .ToList();
+            if (!string.IsNullOrEmpty(run.Error)) outputLines.Insert(0, run.Error);
 
             db.LabVmRuns.Add(new Models.LabVmRun
             {

@@ -20,5 +20,5 @@ public sealed class TenantConfigViewModel
 
     public IReadOnlyDictionary<string, EmailSendRun> EmailSendRuns { get; set; } = new Dictionary<string, EmailSendRun>();
 
-    public LabVmRun? LatestLabVmRun { get; set; }
+    public IReadOnlyList<LabVmRun> LabVmRunHistory { get; set; } = Array.Empty<LabVmRun>();
 }

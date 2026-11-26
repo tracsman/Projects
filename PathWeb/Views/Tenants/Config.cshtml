@@ -7,6 +7,7 @@
         configType = run.ConfigType,
         jobId = run.JobId,
         runbookName = run.RunbookName,
+        action = PathWeb.Services.AutomationRunAction.GetAction(run.PreparedScript),
         status = run.Status,
         isTerminal = run.CompletedDate != null || run.Status is "Completed" or "Failed" or "Stopped" or "Suspended",
         output = run.LastOutput ?? string.Empty,
@@ -53,18 +54,18 @@
     var automationHistoryJson = System.Text.Json.JsonSerializer.Serialize(automationHistory);
     var deviceApplyRunsJson = System.Text.Json.JsonSerializer.Serialize(deviceApplyRuns);
     var emailSendRunsJson = System.Text.Json.JsonSerializer.Serialize(emailSendRuns);
-    var labVmRunJson = Model.LatestLabVmRun != null
-        ? System.Text.Json.JsonSerializer.Serialize(new
-        {
-            success = Model.LatestLabVmRun.Success,
-            status = Model.LatestLabVmRun.Status,
-            requestCount = Model.LatestLabVmRun.RequestCount,
-            createdVmNames = Model.LatestLabVmRun.CreatedVmNames,
-            submittedBy = Model.LatestLabVmRun.SubmittedBy,
-            submittedDate = Model.LatestLabVmRun.SubmittedDate,
-            completedDate = Model.LatestLabVmRun.CompletedDate
-        })
-        : "null";
+    var labVmHistoryJson = System.Text.Json.JsonSerializer.Serialize(Model.LabVmRunHistory.Select(run => new
+    {
+        runId = run.RunId,
+        success = run.Success,
+        status = run.Status,
+        requestCount = run.RequestCount,
+        createdVmNames = run.CreatedVmNames,
+        submittedBy = run.SubmittedBy,
+        submittedDate = run.SubmittedDate,
+        completedDate = run.CompletedDate,
+        output = run.Output ?? string.Empty
+    }));
 }
 
 <div class="container bg-body-tertiary rounded p-4 mb-4">
@@ -258,6 +259,17 @@ else
                     </div>
                 </div>
             }
+            @if (configType == "LabVMPowerShell")
+            {
+                <div class="border-top px-3 py-2 bg-body-tertiary">
+                    <button class="btn btn-sm btn-link text-decoration-none px-0" type="button" data-bs-toggle="collapse" data-bs-target="#labVmHistoryCollapse" aria-expanded="false" aria-controls="labVmHistoryCollapse">
+                        <i class="bi bi-clock-history"></i> Recent runs
+                    </button>
+                    <div class="collapse mt-2" id="labVmHistoryCollapse">
+                        <div id="labVmHistory" class="small"></div>
+                    </div>
+                </div>
+            }
         </div>
     }
 
@@ -339,6 +351,22 @@ else
     </div>
 </div>
 
+<div class="modal fade" id="labVmHistoryModal" tabindex="-1" aria-labelledby="labVmHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="labVmHistoryModalLabel">Lab VM run details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="labVmHistoryDetails" class="mb-2"></div>
+                <pre id="labVmHistoryOutput" class="bg-dark text-light p-3 rounded mb-0" style="white-space:pre-wrap; overflow-wrap:anywhere;"></pre>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="labVmModal" tabindex="-1" aria-labelledby="labVmModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -348,17 +376,25 @@ else
             </div>
             <div class="modal-body">
                 <div id="labVmStatus" class="mb-2"></div>
-                <table class="table table-sm mb-0" id="labVmTable">
-                    <thead>
-                        <tr>
-                            <th style="width:50px">#</th>
-                            <th style="width:130px">OS</th>
-                            <th>Target Server</th>
-                            <th style="width:200px">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="labVmTableBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0" id="labVmTable" style="table-layout:fixed; min-width:640px; overflow-wrap:anywhere;">
+                        <colgroup>
+                            <col style="width:3rem">
+                            <col style="width:9rem">
+                            <col style="width:12rem">
+                            <col>
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th scope="col">#</th>
+                                <th scope="col">OS</th>
+                                <th scope="col">Target Server</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="labVmTableBody"></tbody>
+                    </table>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" id="labVmRunBtn" onclick="submitLabVmRun()">
@@ -445,13 +481,15 @@ else
         var _pendingConfigType = null;
         var _automationConfigType = null;
         var _automationJobId = null;
+        var _automationAction = null;
         var _automationPollTimer = null;
         var _automationPollFailures = 0;
         var _automationRuns = @Html.Raw(automationRunsJson);
         var _automationHistory = @Html.Raw(automationHistoryJson);
         var _deviceApplyRuns = @Html.Raw(deviceApplyRunsJson);
         var _emailSendRuns = @Html.Raw(emailSendRunsJson);
-        var _labVmRun = @Html.Raw(labVmRunJson);
+        var _labVmHistory = @Html.Raw(labVmHistoryJson);
+        var _labVmRun = _labVmHistory.length ? _labVmHistory[0] : null;
         var _canRunAutomation = @(authLevel >= 8 ? "true" : "false");
 
         // Per-configType device run state for async Apply/Patch/Remove. Keyed by configType so
@@ -666,7 +704,7 @@ else
             var badge = document.getElementById('automationStatusBadge-' + configType);
             var text = document.getElementById('automationStatusText-' + configType);
             var reopenBtn = document.getElementById('automationReopenBtn-' + configType);
-            if (!badge || !text || !reopenBtn) return;
+            if (!badge || !text) return;
 
             var run = getAutomationRun(configType);
             if (!run) {
@@ -674,14 +712,17 @@ else
                 badge.textContent = '';
                 text.classList.add('d-none');
                 text.textContent = '';
-                reopenBtn.classList.add('d-none');
-                reopenBtn.textContent = 'Re-open';
+                if (reopenBtn) {
+                    reopenBtn.classList.add('d-none');
+                    reopenBtn.textContent = 'Re-open';
+                }
                 return;
             }
 
             var presentation = getAutomationPresentation(run.status);
             badge.className = 'badge ' + presentation.badgeClass;
-            badge.textContent = run.status || 'Unknown';
+            badge.textContent = getAutomationActionLabel(run.action) + ' · ' + (run.status || 'Unknown');
+            badge.title = 'Selected action; edited scripts may differ';
 
             var summaryText = '';
             if (run.completedDate) {
@@ -700,13 +741,21 @@ else
                 text.classList.add('d-none');
             }
 
-            reopenBtn.textContent = run.isTerminal ? 'View run' : 'Re-open';
-            reopenBtn.classList.remove('d-none');
+            if (reopenBtn) {
+                reopenBtn.textContent = run.isTerminal ? 'View run' : 'Re-open';
+                reopenBtn.onclick = function () { openAutomationModal(configType, run.jobId); };
+                reopenBtn.classList.remove('d-none');
+            }
+        }
+
+        function getAutomationActionLabel(action) {
+            return ({ deploy: 'Deploy to Azure', remove: 'Remove from Azure', provision: 'Provision at Provider', deprovision: 'Deprovision at Provider' })[action] || 'Unknown action';
         }
 
         function renderAllAutomationSummaries() {
             renderAutomationSummary('CreateERPowerShell');
             renderAutomationSummary('CreateAzurePowerShell');
+            renderAutomationSummary('ServiceProviderInstructions');
         }
 
         function renderDeviceApplySummary(configType) {
@@ -771,6 +820,18 @@ else
             Object.keys(_emailSendRuns).forEach(renderEmailSendSummary);
         }
 
+        function getLabVmAction(run) {
+            if (run && (run.action === 'create' || run.action === 'remove')) return run.action;
+            var id = run && run.runId || '';
+            if (/^labvm-rm-.+-cust\d+-\d{14}-[a-f0-9]{32}$/i.test(id)) return 'remove';
+            if (/^labvm-(?!rm-).+-cust\d+-\d{14}-[a-f0-9]{32}$/i.test(id)) return 'create';
+            return 'unknown';
+        }
+
+        function getLabVmActionLabel(run) {
+            return ({ create: 'Create', remove: 'Remove', unknown: 'Unknown action' })[getLabVmAction(run)];
+        }
+
         function renderLabVmSummary() {
             var badge = document.getElementById('labVmStatusBadge');
             var text = document.getElementById('labVmStatusText');
@@ -786,7 +847,7 @@ else
 
             if (_labVmRun.status === 'Running') {
                 badge.className = 'badge border-0 text-bg-warning';
-                badge.textContent = 'Running';
+                badge.textContent = getLabVmActionLabel(_labVmRun) + ' · Running';
                 badge.classList.remove('d-none');
                 text.textContent = 'Started ' + formatAutomationDate(_labVmRun.submittedDate);
                 text.classList.remove('d-none');
@@ -794,7 +855,7 @@ else
             }
 
             badge.className = 'badge border-0 ' + (_labVmRun.success ? 'text-bg-success' : 'text-bg-danger');
-            badge.textContent = _labVmRun.status || (_labVmRun.success ? 'Completed' : 'Failed');
+            badge.textContent = getLabVmActionLabel(_labVmRun) + ' · ' + (_labVmRun.status || (_labVmRun.success ? 'Completed' : 'Failed'));
             badge.classList.remove('d-none');
 
             var dateText = _labVmRun.completedDate
@@ -811,15 +872,67 @@ else
                 .map(function (r) { return r.createdVmName; })
                 .join(', ');
 
+            var output = (data.requests || []).map(function (r) {
+                return '[' + r.index + '] ' + (r.os || '') + ' → ' + (r.targetServer || '') + ': ' + (r.status || 'Unknown')
+                    + (r.createdVmName ? ' — ' + r.createdVmName : '') + (r.message ? ' — ' + r.message : '');
+            });
+            if (data.error) output.unshift(data.error);
             _labVmRun = {
+                runId: data.runId,
+                action: _labVmRemoveMode ? 'remove' : 'create',
                 success: data.status === 'Completed',
                 status: data.status,
                 createdVmNames: vmNames || null,
                 submittedBy: data.submittedBy,
                 submittedDate: data.startedAt,
-                completedDate: data.completedAt
+                completedDate: data.completedAt,
+                output: output.join('\n')
             };
+            _labVmHistory = [_labVmRun].concat(_labVmHistory.filter(function (run) { return run.runId !== data.runId; }));
+            _labVmHistory.sort(function (a, b) { return new Date(b.submittedDate) - new Date(a.submittedDate); });
+            _labVmHistory = _labVmHistory.slice(0, 5);
             renderLabVmSummary();
+            renderLabVmHistory();
+        }
+
+        function renderLabVmHistory() {
+            var container = document.getElementById('labVmHistory');
+            if (!container) return;
+            container.replaceChildren();
+            if (!_labVmHistory.length) {
+                container.textContent = 'No recent runs.';
+                container.className = 'small text-body-secondary';
+                return;
+            }
+            container.className = 'small';
+            _labVmHistory.forEach(function (run, index) {
+                var row = document.createElement('div');
+                row.className = 'd-flex justify-content-between align-items-start gap-2 flex-wrap py-2 border-bottom';
+                var details = document.createElement('div');
+                var badge = document.createElement('span');
+                badge.className = 'badge ' + (run.success ? 'text-bg-success' : 'text-bg-danger');
+                badge.textContent = getLabVmActionLabel(run) + ' · ' + (run.status || 'Unknown');
+                var info = document.createElement('div');
+                info.className = 'text-body-secondary small';
+                info.textContent = (formatAutomationDate(run.submittedDate) || 'Unknown time') + ' · ' + (run.submittedBy || 'Unknown user');
+                details.append(badge, info);
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-sm btn-outline-secondary';
+                button.textContent = 'View';
+                button.addEventListener('click', function () { openLabVmHistoryRun(index); });
+                row.append(details, button);
+                container.append(row);
+            });
+        }
+
+        function openLabVmHistoryRun(index) {
+            var run = _labVmHistory[index];
+            if (!run) return;
+            document.getElementById('labVmHistoryModalLabel').textContent = getLabVmActionLabel(run) + ' Lab VMs · ' + (run.status || 'Unknown');
+            document.getElementById('labVmHistoryDetails').textContent = 'Submitted ' + (formatAutomationDate(run.submittedDate) || 'at an unknown time') + ' by ' + (run.submittedBy || 'unknown') + (run.runId ? ' · Run ' + run.runId : '');
+            document.getElementById('labVmHistoryOutput').textContent = run.output || 'No per-server output was saved for this run.';
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('labVmHistoryModal')).show();
         }
 
         function openDeviceApplyRunModal(configType) {
@@ -908,7 +1021,7 @@ else
                     + '<div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">'
                     + '<div>'
                     + '<div class="d-flex align-items-center flex-wrap gap-2">'
-                    + '<span class="badge ' + presentation.badgeClass + '">' + (run.status || 'Unknown') + '</span>'
+                    + '<span class="badge ' + presentation.badgeClass + '">' + getAutomationActionLabel(run.action) + ' · ' + (run.status || 'Unknown') + '</span>'
                     + '<span class="fw-semibold">' + runLabel + '</span>'
                     + latestBadge
                     + '</div>'
@@ -925,6 +1038,7 @@ else
         function renderAllAutomationHistory() {
             renderAutomationHistory('CreateERPowerShell');
             renderAutomationHistory('CreateAzurePowerShell');
+            renderAutomationHistory('ServiceProviderInstructions');
         }
 
         function filterAutomationOutput(text) {
@@ -992,6 +1106,13 @@ else
             }
 
             var existingRun = findAutomationRun(configType, jobId);
+            _automationAction = jobId && existingRun
+                ? existingRun.action || null
+                : (isDeprovision ? 'deprovision' : isRemove ? 'remove' : configType === 'ServiceProviderInstructions' ? 'provision' : 'deploy');
+            if (_automationAction === 'unknown') _automationAction = null;
+            if (jobId && existingRun) {
+                document.getElementById('automationModalLabel').textContent = getAutomationActionLabel(_automationAction) + ': ' + configType;
+            }
             // Only show the prior run's prepared script when the user explicitly opened a specific run
             // (jobId provided via View/Open/Re-open). For a fresh Deploy/Remove/Deprovision, always
             // start from the current DB content (or an explicit scriptOverride).
@@ -1036,6 +1157,7 @@ else
                     body: JSON.stringify({
                         tenantGuid: _tenantGuid,
                         configType: _automationConfigType,
+                        action: _automationAction,
                         scriptContent: editor.value
                     })
                 });
@@ -1197,7 +1319,7 @@ else
                 if (!cell) continue;
 
                 if (req.status === 'Completed') {
-                    cell.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + (req.createdVmName || 'Created') + '</span>';
+                    cell.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> ' + (_labVmRemoveMode ? (req.message || 'Removed') : (req.createdVmName || 'Created')) + '</span>';
                 } else if (req.status === 'Failed') {
                     cell.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill"></i> ' + (req.message || 'Failed') + '</span>';
                 } else if (req.status === 'Running') {
@@ -1226,10 +1348,11 @@ else
                 return;
             }
 
-            // Warn if VMs have already been deployed for this tenant
+            // Even a completed removal may not have covered every host.
             if (_labVmRun && (_labVmRun.status === 'Completed' || _labVmRun.status === 'Failed')) {
-                var prevStatus = _labVmRun.status === 'Completed' ? 'successfully deployed' : 'attempted (with failures)';
-                if (!confirm('Lab VMs were previously ' + prevStatus + '.\n\nAre you sure you want to create VMs again?')) {
+                var lastAction = getLabVmAction(_labVmRun);
+                var prevStatus = lastAction === 'unknown' ? 'last run has an unknown action' : 'last ' + lastAction + ' ' + _labVmRun.status.toLowerCase();
+                if (!confirm('The ' + prevStatus + '. VMs may already exist.\n\nAre you sure you want to create VMs?')) {
                     return;
                 }
             }
@@ -1292,15 +1415,16 @@ else
                 var isTerminal = data.status === 'Completed' || data.status === 'Failed';
                 var btn = document.getElementById('labVmRunBtn');
                 var doneBtn = isRemove ? '<i class="bi bi-trash"></i> Remove All' : '<i class="bi bi-play-fill"></i> Create VMs';
+                if (isTerminal) updateLabVmBadge(data);
 
                 if (data.status === 'Completed') {
                     setLabVmStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + (isRemove ? 'All VMs removed successfully.' : 'All VMs created successfully.') + '</div>');
-                    btn.disabled = false;
+                    btn.disabled = isRemove;
                     btn.innerHTML = doneBtn;
                     _labVmRunId = null;
                 } else if (data.status === 'Failed') {
-                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || (isRemove ? 'One or more servers failed.' : 'One or more VM requests failed.')) + '</div>');
-                    btn.disabled = false;
+                    setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || (isRemove ? 'One or more servers failed.' : 'One or more VM requests failed.')) + (isRemove ? ' Close and reopen to scan before retrying.' : '') + '</div>');
+                    btn.disabled = isRemove;
                     btn.innerHTML = doneBtn;
                     _labVmRunId = null;
                 } else {
@@ -1323,7 +1447,7 @@ else
                 html += '<tr id="labVmRow-' + req.index + '">'
                     + '<td>' + req.index + '</td>'
                     + '<td><code class="text-body">' + req.os + '</code></td>'
-                    + '<td><code>' + (req.targetServer || '') + '</code></td>'
+                    + '<td><code class="text-body">' + (req.targetServer || '') + '</code></td>'
                     + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Pending</span></td>'
                     + '</tr>';
             }
@@ -1370,7 +1494,7 @@ else
                 btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Running...';
 
                 // Show running badge on the card header immediately
-                _labVmRun = { status: 'Running', submittedDate: new Date().toISOString() };
+                _labVmRun = { action: 'create', runId: data.runId, status: 'Running', submittedDate: new Date().toISOString() };
                 renderLabVmSummary();
 
                 // Lock all server dropdowns
@@ -1393,10 +1517,7 @@ else
         var _labVmRemoveServers = [];
 
         async function openLabVmRemoveModal() {
-            _labVmRemoveMode = true;
-            _labVmRemoveServers = [];
-
-            // If a remove run is already in progress, resume it
+            // If a run is already in progress, restore its existing mode.
             if (_labVmRunId) {
                 stopLabVmPolling();
                 var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('labVmModal'));
@@ -1407,6 +1528,7 @@ else
             }
 
             resetLabVmModal(true);
+            _labVmRemoveMode = true;
             var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('labVmModal'));
             document.getElementById('labVmModalLabel').textContent = 'Remove Lab VMs';
             setLabVmStatus('<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split"></i> Scanning servers for tenant VMs...</div>');
@@ -1440,7 +1562,7 @@ else
                     var srv = data.servers[si];
                     if (srv.error) {
                         rowIndex++;
-                        html += '<tr><td>' + rowIndex + '</td><td colspan="2"><code>' + srv.server + '</code></td>'
+                        html += '<tr><td>' + rowIndex + '</td><td colspan="2"><code class="text-body">' + srv.server + '</code></td>'
                             + '<td><span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> Scan failed: ' + srv.error + '</span></td></tr>';
                         continue;
                     }
@@ -1451,8 +1573,8 @@ else
                         var vm = srv.vms[vi];
                         html += '<tr id="labVmRow-' + rowIndex + '">'
                             + '<td>' + rowIndex + '</td>'
-                            + '<td><code>' + vm.name + '</code></td>'
-                            + '<td><code>' + srv.server + '</code></td>'
+                            + '<td><code class="text-body">' + vm.name + '</code></td>'
+                            + '<td><code class="text-body">' + srv.server + '</code></td>'
                             + '<td id="labVmRowStatus-' + rowIndex + '"><span class="text-body-secondary">Found (State: ' + (vm.state || 'Unknown') + ')</span></td>'
                             + '</tr>';
                     }
@@ -1514,15 +1636,15 @@ else
                         var req = data.requests[i];
                         html += '<tr id="labVmRow-' + req.index + '">'
                             + '<td>' + req.index + '</td>'
-                            + '<td><code>Remove all</code></td>'
-                            + '<td><code>' + req.targetServer + '</code></td>'
+                            + '<td><code class="text-body">Remove all</code></td>'
+                            + '<td><code class="text-body">' + req.targetServer + '</code></td>'
                             + '<td id="labVmRowStatus-' + req.index + '"><span class="text-body-secondary">Pending</span></td>'
                             + '</tr>';
                     }
                     tbody.innerHTML = html;
                 }
 
-                _labVmRun = { status: 'Running', submittedDate: new Date().toISOString() };
+                _labVmRun = { action: 'remove', runId: data.runId, status: 'Running', submittedDate: new Date().toISOString() };
                 renderLabVmSummary();
                 pollLabVmStatus();
             } catch (err) {
@@ -1554,16 +1676,16 @@ else
                     if (modalOpen) {
                         setLabVmStatus('<div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill"></i> ' + (isRemove ? 'All VMs removed successfully.' : 'All VMs created successfully.') + '</div>');
                         var btn = document.getElementById('labVmRunBtn');
-                        btn.disabled = false;
+                        btn.disabled = isRemove;
                         btn.innerHTML = isRemove ? '<i class="bi bi-trash"></i> Remove All' : '<i class="bi bi-play-fill"></i> Create VMs';
                     }
                     updateLabVmBadge(data);
                     _labVmRunId = null;
                 } else if (data.status === 'Failed') {
                     if (modalOpen) {
-                        setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || (isRemove ? 'One or more servers failed.' : 'One or more VM requests failed.')) + '</div>');
+                        setLabVmStatus('<div class="alert alert-danger mb-0"><i class="bi bi-x-circle-fill"></i> ' + (data.error || (isRemove ? 'One or more servers failed.' : 'One or more VM requests failed.')) + (isRemove ? ' Close and reopen to scan before retrying.' : '') + '</div>');
                         var btn = document.getElementById('labVmRunBtn');
-                        btn.disabled = false;
+                        btn.disabled = isRemove;
                         btn.innerHTML = isRemove ? '<i class="bi bi-trash"></i> Remove All' : '<i class="bi bi-play-fill"></i> Create VMs';
                     }
                     updateLabVmBadge(data);
@@ -1583,6 +1705,7 @@ else
             renderAllDeviceApplySummaries();
             renderAllEmailSendSummaries();
             renderLabVmSummary();
+            renderLabVmHistory();
             refreshAutomationSummaries();
 
             document.getElementById('automationModal').addEventListener('hidden.bs.modal', function () {

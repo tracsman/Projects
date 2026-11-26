@@ -50,6 +50,9 @@ public class AutomationController : BaseController
         if (!AllowedConfigTypes.Contains(request.ConfigType))
             return Json(new { success = false, output = $"Config type '{request.ConfigType}' is not enabled for Azure Automation yet." });
 
+        if (!AutomationRunAction.IsValid(request.ConfigType, request.Action))
+            return Json(new { success = false, output = "Invalid automation action for this config type." });
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.TenantGuid == request.TenantGuid);
         if (tenant == null)
             return Json(new { success = false, output = "Tenant not found." });
@@ -94,7 +97,7 @@ public class AutomationController : BaseController
             Status = "Queued",
             LastStatusDate = DateTime.UtcNow,
             LastOutput = $"Automation runbook '{result.RunbookName}' submitted as job '{result.JobId}'.",
-            PreparedScript = result.PreparedScript
+            PreparedScript = AutomationRunAction.AddMarker(result.PreparedScript, request.Action)
         };
 
         _context.AutomationRuns.Add(run);
@@ -222,6 +225,7 @@ public class AutomationController : BaseController
         public Guid TenantGuid { get; set; }
         public string ConfigType { get; set; } = string.Empty;
         public string? ScriptContent { get; set; }
+        public string? Action { get; set; }
     }
 
     [HttpGet]
@@ -278,6 +282,7 @@ public class AutomationController : BaseController
         configType = run.ConfigType,
         jobId = run.JobId,
         runbookName = run.RunbookName,
+        action = AutomationRunAction.GetAction(run.PreparedScript),
         status = run.Status,
         isTerminal = run.CompletedDate != null || IsTerminalStatus(run.Status),
         output = run.LastOutput ?? string.Empty,
